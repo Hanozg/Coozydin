@@ -14,7 +14,7 @@ import {
   SculptedHumanRig,
 } from './sculptedHumans';
 import { SPARROW_PALETTE } from './sculptor';
-import { getSurfaceHeightAt } from './terrain';
+import { getWalkableSurfaceHeightAt } from './terrain';
 
 function hexToNum(hex: string | number): number {
   if (typeof hex === 'number') return hex;
@@ -346,7 +346,7 @@ export function createBuildingNpcSystem(
 
   BUILDING_NPCS.forEach((def) => {
     const [nx, nz] = def.position;
-    const ny = getSurfaceHeightAt(nx, nz);
+    const ny = getWalkableSurfaceHeightAt(nx, nz);
 
     const npcGroup = new THREE.Group();
     npcGroup.position.set(nx, ny, nz);
@@ -361,6 +361,8 @@ export function createBuildingNpcSystem(
         emissiveIntensity: 0.65,
         side: THREE.DoubleSide,
         roughness: 0.45,
+        polygonOffset: true,
+        polygonOffsetFactor: -3,
       })
     );
     ringMesh.rotation.x = -Math.PI / 2;

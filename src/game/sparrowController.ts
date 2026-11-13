@@ -1,10 +1,14 @@
 import * as THREE from 'three';
-import { ColliderBox } from '../types/game';
+import { ColliderBox, RoofColliderMeta } from '../types/game';
 import { audioEngine } from './audioEngine';
 import { createPerchQueryResult, PerchSegment, PerchSystem } from './perchSystem';
 import { SparrowFX } from './sparrowFx';
 import { BirdMode, SparrowMesh } from './sparrowMesh';
-import { getSurfaceHeightAt, getTabakhaneCenterX, getTabakhaneWaterY } from './terrain';
+import {
+  getTabakhaneCenterX,
+  getTabakhaneWaterY,
+  getWalkableSurfaceHeightAt,
+} from './terrain';
 
 export interface SparrowInputState {
   forward: boolean;
@@ -86,9 +90,36 @@ export class SparrowController {
     private readonly fx: SparrowFX
   ) {}
 
+  private getStandOffset(): number {
+    return 0.36 * Math.max(0.5, this.sparrowMesh.root.scale.y || 1);
+  }
+
+  private getPerchOffset(seg?: PerchSegment | null): number {
+    const scale = Math.max(0.5, this.sparrowMesh.root.scale.y || 1);
+    const radiusLift = seg ? Math.min(0.06, seg.radius * 0.25) : 0;
+    return 0.345 * scale + radiusLift;
+  }
+
+  private getRoofSurfaceY(roof: RoofColliderMeta, x: number, z: number): number | null {
+    const dx = x - roof.cx;
+    const dz = z - roof.cz;
+    const rot = -(roof.rotY ?? 0);
+    const cosR = Math.cos(rot);
+    const sinR = Math.sin(rot);
+    const lx = dx * cosR - dz * sinR;
+    const lz = dx * sinR + dz * cosR;
+    if (Math.abs(lx) > roof.halfW + 0.14 || Math.abs(lz) > roof.halfD + 0.14) {
+      return null;
+    }
+    const frac = roof.ridgeAlongZ
+      ? Math.min(1, Math.abs(lx) / Math.max(0.1, roof.halfW))
+      : Math.min(1, Math.abs(lz) / Math.max(0.1, roof.halfD));
+    return roof.wallTopY + roof.peakH * (1 - frac);
+  }
+
   public resetAt(x: number, z: number, yaw = 0): void {
-    const floor = this.getStandableFloorY(x, z, getSurfaceHeightAt(x, z) + 0.5);
-    this.position.set(x, floor + 0.34, z);
+    const floor = this.getStandableFloorY(x, z, getWalkableSurfaceHeightAt(x, z) + 0.5);
+    this.position.set(x, floor + this.getStandOffset(), z);
     this.velocity.set(0, 0, 0);
     this.yaw = yaw;
     this.mode = 'grounded';
@@ -127,12 +158,20 @@ export class SparrowController {
   }
 
   private getStandableFloorY(x: number, z: number, currentY: number): number {
-    let floorY = getSurfaceHeightAt(x, z);
+    let floorY = getWalkableSurfaceHeightAt(x, z);
+    const birdFeetY = currentY - this.getStandOffset();
     for (let i = 0; i < this.colliders.length; i++) {
       const b = this.colliders[i];
+      if (b.roof) {
+        const roofY = this.getRoofSurfaceY(b.roof, x, z);
+        if (roofY !== null && birdFeetY >= roofY - 0.55 && roofY > floorY) {
+          floorY = roofY;
+          continue;
+        }
+      }
       if (b.maxY === undefined) continue;
       if (x >= b.minX - 0.12 && x <= b.maxX + 0.12 && z >= b.minZ - 0.12 && z <= b.maxZ + 0.12) {
-        if (currentY >= b.maxY - 0.38 && b.maxY > floorY) {
+        if (!b.roof && birdFeetY >= b.maxY - 0.45 && b.maxY > floorY) {
           floorY = b.maxY;
         }
       }
@@ -144,13 +183,23 @@ export class SparrowController {
     let nx = THREE.MathUtils.clamp(x, -99, 105);
     let nz = THREE.MathUtils.clamp(z, -108, 74);
     const radius = 0.36;
+    const birdFeetY = y - this.getStandOffset() * 0.65;
 
     for (let i = 0; i < this.colliders.length; i++) {
       const b = this.colliders[i];
-      if (b.maxY !== undefined && y >= b.maxY - 0.22) continue;
-      if (b.maxY === undefined) {
-        const approxBase = getSurfaceHeightAt((b.minX + b.maxX) * 0.5, (b.minZ + b.maxZ) * 0.5);
-        if (y >= approxBase + 9.2) continue;
+      if (b.roof) {
+        const localRoofY = this.getRoofSurfaceY(b.roof, nx, nz);
+        const topCutoff = localRoofY !== null ? localRoofY : b.roof.wallTopY;
+        if (birdFeetY >= topCutoff - 0.14) continue;
+      } else if (b.maxY !== undefined && birdFeetY >= b.maxY - 0.18) {
+        continue;
+      }
+      if (b.maxY === undefined && !b.roof) {
+        const approxBase = getWalkableSurfaceHeightAt(
+          (b.minX + b.maxX) * 0.5,
+          (b.minZ + b.maxZ) * 0.5
+        );
+        if (birdFeetY >= approxBase + 9.2) continue;
       }
       const cx = Math.max(b.minX, Math.min(nx, b.maxX));
       const cz = Math.max(b.minZ, Math.min(nz, b.maxZ));
@@ -202,7 +251,7 @@ export class SparrowController {
 
     seg.getEndpoints(_perchA, _perchB);
     _perchTarget.copy(_perchA).lerp(_perchB, t);
-    _perchTarget.y += 0.36;
+    _perchTarget.y += this.getPerchOffset(seg);
 
     this.perchTransActive = true;
     this.perchTransElapsed = 0;
@@ -306,7 +355,7 @@ export class SparrowController {
       const sx = getTabakhaneCenterX(this.position.z);
       if (Math.abs(this.position.x - sx) < 2.8) {
         const wy = getTabakhaneWaterY(this.position.z);
-        if (this.position.y <= wy + 0.38 && this.waterBounceCooldown <= 0) {
+        if (this.position.y <= wy + this.getStandOffset() * 0.9 && this.waterBounceCooldown <= 0) {
           this.waterBounceCooldown = 0.45;
           _emitPos.set(this.position.x, wy + 0.05, this.position.z);
           this.fx.spawnWaterSplash(_emitPos, 0.85);
@@ -323,12 +372,13 @@ export class SparrowController {
       const segLen = Math.max(0.2, _perchAB.length());
       _perchTan.copy(_perchAB).divideScalar(segLen);
 
+      const perchOffset = this.getPerchOffset(this.activePerch);
       if (this.perchTransActive) {
         this.perchTransElapsed += safeDt;
         const u = Math.min(1, this.perchTransElapsed / this.perchTransDuration);
         const s = u * u * (3 - 2 * u);
         _perchTarget.copy(_perchA).lerp(_perchB, this.perchT);
-        _perchTarget.y += 0.36;
+        _perchTarget.y += perchOffset;
         this.position.copy(_perchTarget).addScaledVector(this.perchTransStartOffset, 1 - s);
         this.yaw = this.perchTransStartYaw + this.perchTransYawDelta * s;
         this.bankAngle = this.perchTransStartBank * (1 - s);
@@ -346,7 +396,7 @@ export class SparrowController {
           this.yaw += dy * Math.min(1, safeDt * 12);
         }
         _perchTarget.copy(_perchA).lerp(_perchB, this.perchT);
-        this.position.set(_perchTarget.x, _perchTarget.y + 0.36, _perchTarget.z);
+        this.position.set(_perchTarget.x, _perchTarget.y + perchOffset, _perchTarget.z);
       }
 
       if (isPlaying && this.jumpBufferTimer > 0) {
@@ -364,7 +414,7 @@ export class SparrowController {
       this.flightStamina = Math.min(1.0, this.flightStamina + safeDt * 0.48);
 
       const floorY = this.getStandableFloorY(this.position.x, this.position.z, this.position.y);
-      const standY = floorY + 0.34;
+      const standY = floorY + this.getStandOffset();
       const onFloor = this.position.y <= standY + 0.08 && this.velocity.y <= 0.35;
 
       if (onFloor) {
@@ -424,7 +474,9 @@ export class SparrowController {
       this.position.z = rz;
       this.position.y += this.velocity.y * safeDt;
 
-      const nextStandY = this.getStandableFloorY(this.position.x, this.position.z, this.position.y) + 0.34;
+      const nextStandY =
+        this.getStandableFloorY(this.position.x, this.position.z, this.position.y) +
+        this.getStandOffset();
       if (this.position.y <= nextStandY) {
         this.position.y = nextStandY;
         this.velocity.y = 0;
@@ -547,7 +599,7 @@ export class SparrowController {
       // Touchdown onto terrain or standable rooftops
       if (this.mode === 'flying') {
         const floorY = this.getStandableFloorY(this.position.x, this.position.z, this.position.y);
-        const standY = floorY + 0.34;
+        const standY = floorY + this.getStandOffset();
         if (this.position.y <= standY && this.velocity.y <= 0.2) {
           this.position.y = standY;
           this.velocity.y = 0;

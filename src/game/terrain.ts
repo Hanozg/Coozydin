@@ -131,3 +131,103 @@ export function getSurfaceSlopeAngles(
   const roll = Math.atan2(hLeft - hRight, sample * 2);
   return { pitch, roll };
 }
+
+const ROAD_X_SURFACE = [-54, -18, 18, 58];
+const ROAD_Z_SURFACE = [-96, -58, -22, 12, 48];
+
+/**
+ * True top walkable/drivable elevation including raised asphalt/cobble roadways,
+ * sidewalk curbs, Atatürk Kent Meydanı plaza stone, and landmark courtyard plinths.
+ * Geometry builders keep using getSurfaceHeightAt() to avoid double-adding offsets.
+ */
+export function getWalkableSurfaceHeightAt(x: number, z: number): number {
+  const surfaceY = getSurfaceHeightAt(x, z);
+  let y = surfaceY;
+
+  // East-West avenues & curbs (z in [-110..72], x in [-97..105])
+  if (x >= -97 && x <= 105 && z >= -111 && z <= 73) {
+    for (let i = 0; i < ROAD_Z_SURFACE.length; i++) {
+      const dz = Math.abs(z - ROAD_Z_SURFACE[i]);
+      if (dz <= 4.2 && x >= -96 && x <= 104) {
+        y = Math.max(y, surfaceY + 0.13);
+      } else if (dz <= 5.5) {
+        y = Math.max(y, surfaceY + 0.09);
+      }
+    }
+    // North-South boulevards & curbs (render above E-W ribbons cleanly)
+    for (let i = 0; i < ROAD_X_SURFACE.length; i++) {
+      const dx = Math.abs(x - ROAD_X_SURFACE[i]);
+      if (dx <= 4.2 && z >= -110 && z <= 72) {
+        y = Math.max(y, surfaceY + 0.148);
+      } else if (dx <= 5.5) {
+        y = Math.max(y, surfaceY + 0.105);
+      }
+    }
+  }
+
+  // Atatürk Kent Meydanı Circular Plaza & Diagonal Paths
+  const dMeydan = Math.hypot(x, z - 12);
+  if (dMeydan <= 16.0) {
+    const meydanBase = getTerrainHeightAt(0, 12);
+    y = Math.max(y, meydanBase + (dMeydan <= 14.2 ? 0.26 : 0.245));
+  }
+
+  // Historic & Modern Landmark Courtyards / Terraces / Platforms
+  if (Math.abs(x) <= 8.5 && Math.abs(z + 76) <= 4.5) {
+    const b = getTerrainHeightAt(0, -76);
+    y = Math.max(y, b + (Math.abs(x) <= 7.6 && Math.abs(z + 76) <= 3.6 ? 1.1 : 0.6));
+  } else if (Math.abs(x - 36) <= 6.75 && Math.abs(z + 36) <= 7.25) {
+    y = Math.max(y, getTerrainHeightAt(36, -36) + 0.4);
+  } else if (Math.abs(x - 36) <= 8.75 && Math.abs(z + 5) <= 7.75) {
+    y = Math.max(y, getTerrainHeightAt(36, -5) + 0.25);
+  } else if (Math.abs(x + 36) <= 7.0 && Math.abs(z + 36) <= 6.5) {
+    y = Math.max(y, getTerrainHeightAt(-36, -36) + 0.35);
+  } else if (Math.abs(x + 72) <= 7.5 && Math.abs(z + 6) <= 7.5) {
+    y = Math.max(y, getTerrainHeightAt(-72, -6) + 0.4);
+  } else if (Math.abs(x - 36) <= 8.0 && Math.abs(z - 28) <= 7.0) {
+    y = Math.max(y, getTerrainHeightAt(36, 28) + 0.45);
+  } else if (Math.abs(x + 74) <= 13.0 && Math.abs(z - 30) <= 12.0) {
+    const b = getTerrainHeightAt(-74, 30);
+    let top = b + 0.18;
+    if (Math.abs(x + 74) <= 12.0 && Math.abs(z - 34.5) <= 1.6) top = b + 0.23;
+    if (Math.abs(x + 69.5) <= 1.6 && Math.abs(z - 32.4) <= 1.0) top = b + 0.545;
+    y = Math.max(y, top);
+  } else if (Math.abs(x - 80) <= 13.0 && Math.abs(z - 30) <= 12.0) {
+    y = Math.max(y, getTerrainHeightAt(80, 30) + 0.25);
+  } else if (Math.abs(x) <= 14.0 && z >= 61.5 && z <= 75.5) {
+    y = Math.max(y, getTerrainHeightAt(0, 66) + 0.45);
+  } else if (Math.abs(x) <= 82.5 && z >= 75.3 && z <= 78.9) {
+    y = Math.max(y, getTerrainHeightAt(0, 66) + 0.16);
+  } else if (Math.abs(x - 76) <= 10.5 && Math.abs(z + 40) <= 9.5) {
+    y = Math.max(y, getTerrainHeightAt(76, -40) + 0.34);
+  } else if (Math.abs(x - 78) <= 14.0 && Math.abs(z + 78) <= 12.0) {
+    const b = getTerrainHeightAt(78, -78);
+    const onWalk =
+      (Math.abs(x - 77) <= 13.0 && Math.abs(z + 78) <= 1.8) ||
+      (Math.abs(x - 76.5) <= 1.8 && Math.abs(z + 78) <= 10.5);
+    y = Math.max(y, b + (onWalk ? 0.27 : 0.22));
+  }
+
+  return y;
+}
+
+export function getWalkableSlopeAngles(
+  x: number,
+  z: number,
+  heading: number
+): { pitch: number; roll: number } {
+  const fx = -Math.sin(heading);
+  const fz = -Math.cos(heading);
+  const rx = Math.cos(heading);
+  const rz = -Math.sin(heading);
+
+  const sample = 1.25;
+  const hFront = getWalkableSurfaceHeightAt(x + fx * sample, z + fz * sample);
+  const hBack = getWalkableSurfaceHeightAt(x - fx * sample, z - fz * sample);
+  const hRight = getWalkableSurfaceHeightAt(x + rx * sample, z + rz * sample);
+  const hLeft = getWalkableSurfaceHeightAt(x - rx * sample, z - rz * sample);
+
+  const pitch = Math.atan2(hFront - hBack, sample * 2);
+  const roll = Math.atan2(hLeft - hRight, sample * 2);
+  return { pitch, roll };
+}

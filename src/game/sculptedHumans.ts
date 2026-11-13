@@ -807,12 +807,31 @@ export function createSculptedHumanRig(
 
   let walkPhase = 0;
 
+  const getLegMinFootY = (leg: SculptedLegRig): number => {
+    const hX = leg.hip.rotation.x;
+    const hZ = leg.hip.rotation.z;
+    const kX = leg.knee.rotation.x;
+    const aX = leg.ankle.rotation.x;
+    const totalX = hX + kX + aX;
+    const cosTotal = Math.cos(totalX);
+    const sinTotal = Math.sin(totalX);
+    const ankleY = -2.32 * Math.cos(hX) - 2.2 * Math.cos(hX + kX);
+    // Check heel (z=-0.28), ball (z=0.48), and toe tip (z=0.82) along shoe sole
+    const yHeel = ankleY + -0.43 * cosTotal - -0.28 * sinTotal;
+    const yBall = ankleY + -0.43 * cosTotal - 0.48 * sinTotal;
+    const yToe = ankleY + -0.42 * cosTotal - 0.82 * sinTotal;
+    const lowestRelHip = Math.min(yHeel, yBall, yToe);
+    return baseHipY + Math.cos(hZ) * lowestRelHip;
+  };
+
+  const getLowestFootY = (): number => Math.min(getLegMinFootY(legL), getLegMinFootY(legR));
+
   const updateWalk = (speed: number, dt: number, elapsed: number, holdingTreat = false) => {
     scaleGroup.rotation.y = THREE.MathUtils.damp(scaleGroup.rotation.y, baseYaw, 8, dt);
     scaleGroup.rotation.x = THREE.MathUtils.damp(scaleGroup.rotation.x, 0, 8, dt);
     scaleGroup.rotation.z = THREE.MathUtils.damp(scaleGroup.rotation.z, 0, 8, dt);
-    scaleGroup.position.y = THREE.MathUtils.damp(scaleGroup.position.y, 0, 9, dt);
 
+    torsoPivot.position.y = THREE.MathUtils.damp(torsoPivot.position.y, baseHipY, 12, dt);
     torsoPivot.rotation.x = THREE.MathUtils.damp(torsoPivot.rotation.x, 0, 8, dt);
     torsoPivot.rotation.z = THREE.MathUtils.damp(torsoPivot.rotation.z, 0, 8, dt);
     headPivot.rotation.y = THREE.MathUtils.damp(headPivot.rotation.y, 0, 8, dt);
@@ -842,8 +861,11 @@ export function createSculptedHumanRig(
         armR.elbow.rotation.x = -0.18 - Math.max(0, -swing) * 0.25;
       }
 
-      torsoPivot.position.y = baseHipY + Math.abs(Math.sin(walkPhase)) * 0.28;
+      // Keep torso joined cleanly to pelvis while planting lowest stance sole on ground
+      torsoPivot.position.y = baseHipY + Math.abs(Math.sin(walkPhase)) * 0.04;
       torsoPivot.rotation.y = Math.sin(walkPhase) * 0.06;
+      const targetRootY = -getLowestFootY() + Math.abs(Math.sin(walkPhase)) * 0.03;
+      scaleGroup.position.y = THREE.MathUtils.damp(scaleGroup.position.y, targetRootY, 16, dt);
     } else {
       legL.hip.rotation.x = THREE.MathUtils.damp(legL.hip.rotation.x, 0, 10, dt);
       legR.hip.rotation.x = THREE.MathUtils.damp(legR.hip.rotation.x, 0, 10, dt);
@@ -866,12 +888,13 @@ export function createSculptedHumanRig(
         10,
         dt
       );
-      torsoPivot.position.y = baseHipY + Math.sin(elapsed * 2.2) * 0.08;
+      torsoPivot.position.y = baseHipY + Math.sin(elapsed * 2.2) * 0.03;
       torsoPivot.rotation.y = THREE.MathUtils.damp(torsoPivot.rotation.y, 0, 8, dt);
+      scaleGroup.position.y = THREE.MathUtils.damp(scaleGroup.position.y, -getLowestFootY(), 12, dt);
     }
   };
 
-  // Expressive 9/8 Aydın Zeybek choreography with articulated elbow wings & deep knee dips
+  // Expressive 9/8 Aydın Zeybek choreography with articulated elbow wings & ground-planted knee dips
   const updateZeybek = (dt: number, elapsed: number, danceTime: number, phaseOffset = 0) => {
     const barSec = 2.52;
     const tShifted = danceTime + phaseOffset;
@@ -888,9 +911,7 @@ export function createSculptedHumanRig(
       kneeLift = Math.sin((u / 0.4) * Math.PI);
     }
 
-    // Drop pelvis cleanly during Diz Vurma knee dip while keeping proud chest upright
-    const bodyDrop = -1.45 * dip + 0.16 * kneeLift + Math.sin(elapsed * 3.5) * 0.06;
-    scaleGroup.position.y = THREE.MathUtils.damp(scaleGroup.position.y, bodyDrop, 10, dt);
+    scaleGroup.rotation.x = THREE.MathUtils.damp(scaleGroup.rotation.x, 0, 8, dt);
     scaleGroup.rotation.y = THREE.MathUtils.damp(
       scaleGroup.rotation.y,
       baseYaw + leadSign * (0.42 * Math.sin(u * Math.PI)),
@@ -917,7 +938,9 @@ export function createSculptedHumanRig(
       8,
       dt
     );
+    torsoPivot.rotation.z = THREE.MathUtils.damp(torsoPivot.rotation.z, 0, 8, dt);
     headPivot.rotation.x = THREE.MathUtils.damp(headPivot.rotation.x, -0.08 * dip, 8, dt);
+    headPivot.rotation.y = THREE.MathUtils.damp(headPivot.rotation.y, 0, 8, dt);
 
     // Eagle-wing shoulders + softly curved elbows framing the stance
     const wingLift = 1.48 - 0.26 * dip + Math.sin(elapsed * 3.55) * 0.11;
@@ -944,52 +967,99 @@ export function createSculptedHumanRig(
     // Articulated 3-joint legs: proud knee lift -> deep kneeling lunge on Diz Vurma
     const leadHip = -0.68 * kneeLift - 0.92 * dip;
     const leadKnee = 1.05 * kneeLift + 1.42 * dip;
-    const trailHip = 0.24 * dip + 0.14 * kneeLift;
-    const trailKnee = 0.95 * dip;
+    const leadAnkle = -0.5 * dip - 0.22 * kneeLift;
+    const trailHip = 0.24 * dip + 0.12 * kneeLift;
+    const trailKnee = 0.92 * dip + 0.06 * (1 - dip);
+    const trailAnkle = -0.35 * dip;
 
     if (leadSign > 0) {
       legL.hip.rotation.x = THREE.MathUtils.damp(legL.hip.rotation.x, leadHip, 10, dt);
       legL.knee.rotation.x = THREE.MathUtils.damp(legL.knee.rotation.x, leadKnee, 10, dt);
+      legL.ankle.rotation.x = THREE.MathUtils.damp(legL.ankle.rotation.x, leadAnkle, 10, dt);
       legR.hip.rotation.x = THREE.MathUtils.damp(legR.hip.rotation.x, trailHip, 10, dt);
       legR.knee.rotation.x = THREE.MathUtils.damp(legR.knee.rotation.x, trailKnee, 10, dt);
+      legR.ankle.rotation.x = THREE.MathUtils.damp(legR.ankle.rotation.x, trailAnkle, 10, dt);
     } else {
       legR.hip.rotation.x = THREE.MathUtils.damp(legR.hip.rotation.x, leadHip, 10, dt);
       legR.knee.rotation.x = THREE.MathUtils.damp(legR.knee.rotation.x, leadKnee, 10, dt);
+      legR.ankle.rotation.x = THREE.MathUtils.damp(legR.ankle.rotation.x, leadAnkle, 10, dt);
       legL.hip.rotation.x = THREE.MathUtils.damp(legL.hip.rotation.x, trailHip, 10, dt);
       legL.knee.rotation.x = THREE.MathUtils.damp(legL.knee.rotation.x, trailKnee, 10, dt);
+      legL.ankle.rotation.x = THREE.MathUtils.damp(legL.ankle.rotation.x, trailAnkle, 10, dt);
     }
-    legL.hip.rotation.z = THREE.MathUtils.damp(legL.hip.rotation.z, -0.1 * dip, 10, dt);
-    legR.hip.rotation.z = THREE.MathUtils.damp(legR.hip.rotation.z, 0.1 * dip, 10, dt);
+    legL.hip.rotation.z = THREE.MathUtils.damp(legL.hip.rotation.z, -0.08 * dip, 10, dt);
+    legR.hip.rotation.z = THREE.MathUtils.damp(legR.hip.rotation.z, 0.08 * dip, 10, dt);
+
+    // Exact FK grounding so the planted shoe rests cleanly on the stone plaza without piercing
+    const plantedY = -getLowestFootY();
+    scaleGroup.position.y = THREE.MathUtils.damp(scaleGroup.position.y, plantedY, 16, dt);
   };
 
   const updateWave = (near: boolean, dt: number, elapsed: number, seed = 0) => {
+    scaleGroup.rotation.y = THREE.MathUtils.damp(scaleGroup.rotation.y, baseYaw, 8, dt);
+    scaleGroup.rotation.x = THREE.MathUtils.damp(scaleGroup.rotation.x, 0, 8, dt);
+    scaleGroup.rotation.z = THREE.MathUtils.damp(scaleGroup.rotation.z, 0, 8, dt);
+    scaleGroup.position.y = THREE.MathUtils.damp(scaleGroup.position.y, 0, 10, dt);
+
+    torsoPivot.position.y = baseHipY + Math.sin(elapsed * 2.0 + seed) * 0.03;
+    torsoPivot.rotation.x = THREE.MathUtils.damp(torsoPivot.rotation.x, 0, 8, dt);
+    torsoPivot.rotation.y = THREE.MathUtils.damp(torsoPivot.rotation.y, 0, 8, dt);
+    torsoPivot.rotation.z = THREE.MathUtils.damp(torsoPivot.rotation.z, 0, 8, dt);
+    headPivot.rotation.x = THREE.MathUtils.damp(
+      headPivot.rotation.x,
+      near ? Math.sin(elapsed * 2.4 + seed) * 0.04 : 0,
+      8,
+      dt
+    );
+
     const waveTarget = near
       ? 2.25 + Math.sin(elapsed * 7.2 + seed) * 0.36
       : 0.08 + Math.sin(elapsed * 1.4 + seed) * 0.05;
     armR.shoulder.rotation.z = THREE.MathUtils.damp(armR.shoulder.rotation.z, waveTarget, 8, dt);
+    armR.shoulder.rotation.x = THREE.MathUtils.damp(armR.shoulder.rotation.x, near ? -0.22 : 0, 8, dt);
     armR.elbow.rotation.z = THREE.MathUtils.damp(
       armR.elbow.rotation.z,
       near ? -0.35 + Math.sin(elapsed * 7.2 + seed) * 0.2 : -0.08,
       8,
       dt
     );
+    armR.elbow.rotation.x = THREE.MathUtils.damp(armR.elbow.rotation.x, -0.14, 8, dt);
     armL.shoulder.rotation.z = THREE.MathUtils.damp(armL.shoulder.rotation.z, -0.08, 8, dt);
+    armL.shoulder.rotation.x = THREE.MathUtils.damp(armL.shoulder.rotation.x, 0, 8, dt);
+    armL.elbow.rotation.z = THREE.MathUtils.damp(armL.elbow.rotation.z, 0, 8, dt);
     armL.elbow.rotation.x = THREE.MathUtils.damp(armL.elbow.rotation.x, -0.14, 8, dt);
-    torsoPivot.position.y = baseHipY + Math.sin(elapsed * 2.0 + seed) * 0.06;
+
+    legL.hip.rotation.x = THREE.MathUtils.damp(legL.hip.rotation.x, 0, 10, dt);
+    legR.hip.rotation.x = THREE.MathUtils.damp(legR.hip.rotation.x, 0, 10, dt);
+    legL.hip.rotation.z = THREE.MathUtils.damp(legL.hip.rotation.z, 0, 10, dt);
+    legR.hip.rotation.z = THREE.MathUtils.damp(legR.hip.rotation.z, 0, 10, dt);
+    legL.knee.rotation.x = THREE.MathUtils.damp(legL.knee.rotation.x, 0.04, 10, dt);
+    legR.knee.rotation.x = THREE.MathUtils.damp(legR.knee.rotation.x, 0.04, 10, dt);
+    legL.ankle.rotation.x = THREE.MathUtils.damp(legL.ankle.rotation.x, 0, 10, dt);
+    legR.ankle.rotation.x = THREE.MathUtils.damp(legR.ankle.rotation.x, 0, 10, dt);
   };
 
   const updateSit = (dt: number, elapsed: number, teaSipAmount = 0) => {
-    scaleGroup.position.y = THREE.MathUtils.damp(scaleGroup.position.y, -1.65, 10, dt);
+    scaleGroup.position.y = THREE.MathUtils.damp(scaleGroup.position.y, -1.72, 10, dt);
     scaleGroup.rotation.y = THREE.MathUtils.damp(scaleGroup.rotation.y, baseYaw, 10, dt);
+    scaleGroup.rotation.x = THREE.MathUtils.damp(scaleGroup.rotation.x, 0, 10, dt);
+    scaleGroup.rotation.z = THREE.MathUtils.damp(scaleGroup.rotation.z, 0, 10, dt);
     torsoPivot.position.y = THREE.MathUtils.damp(torsoPivot.position.y, baseHipY, 10, dt);
     torsoPivot.rotation.x = THREE.MathUtils.damp(torsoPivot.rotation.x, 0.04, 10, dt);
     torsoPivot.rotation.y = THREE.MathUtils.damp(torsoPivot.rotation.y, 0, 10, dt);
+    torsoPivot.rotation.z = THREE.MathUtils.damp(torsoPivot.rotation.z, 0, 10, dt);
     legL.hip.rotation.x = THREE.MathUtils.damp(legL.hip.rotation.x, -1.35, 10, dt);
     legR.hip.rotation.x = THREE.MathUtils.damp(legR.hip.rotation.x, -1.35, 10, dt);
+    legL.hip.rotation.z = THREE.MathUtils.damp(legL.hip.rotation.z, -0.05, 10, dt);
+    legR.hip.rotation.z = THREE.MathUtils.damp(legR.hip.rotation.z, 0.05, 10, dt);
     legL.knee.rotation.x = THREE.MathUtils.damp(legL.knee.rotation.x, 1.32, 10, dt);
     legR.knee.rotation.x = THREE.MathUtils.damp(legR.knee.rotation.x, 1.32, 10, dt);
     legL.ankle.rotation.x = THREE.MathUtils.damp(legL.ankle.rotation.x, 0, 10, dt);
     legR.ankle.rotation.x = THREE.MathUtils.damp(legR.ankle.rotation.x, 0, 10, dt);
+    armL.shoulder.rotation.z = THREE.MathUtils.damp(armL.shoulder.rotation.z, -0.1, 10, dt);
+    armR.shoulder.rotation.z = THREE.MathUtils.damp(armR.shoulder.rotation.z, 0.1, 10, dt);
+    armL.elbow.rotation.z = THREE.MathUtils.damp(armL.elbow.rotation.z, 0, 10, dt);
+    armR.elbow.rotation.z = THREE.MathUtils.damp(armR.elbow.rotation.z, 0, 10, dt);
     armL.shoulder.rotation.x = THREE.MathUtils.damp(armL.shoulder.rotation.x, -0.35, 10, dt);
     armL.elbow.rotation.x = THREE.MathUtils.damp(armL.elbow.rotation.x, -0.55, 10, dt);
     armR.shoulder.rotation.x = THREE.MathUtils.damp(
@@ -1010,6 +1080,7 @@ export function createSculptedHumanRig(
       8,
       dt
     );
+    headPivot.rotation.y = THREE.MathUtils.damp(headPivot.rotation.y, 0, 8, dt);
   };
 
   return {

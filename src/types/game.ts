@@ -42,6 +42,29 @@ export interface AvatarConfig {
   hairColor: string;
 }
 
+export type HouseExteriorStyle =
+  | 'cottage_villa'
+  | 'modern_gable'
+  | 'aegean_veranda'
+  | 'twin_cottage';
+
+export interface HouseExteriorConfig {
+  style: HouseExteriorStyle;
+  wallColor: string;
+  roofColor: string;
+  trimColor: string;
+}
+
+export interface FurnitureStyleDef {
+  key: string; // e.g. 'armchair:mustard_velvet'
+  furnitureId: RoomFurnitureId;
+  styleId: string;
+  name: string;
+  description: string;
+  priceLokma: number;
+  accentHex: string;
+}
+
 export interface FurnitureSlotPlacement {
   id: RoomFurnitureId;
   enabled: boolean;
@@ -49,6 +72,7 @@ export interface FurnitureSlotPlacement {
   x?: number;
   z?: number;
   rotY?: number;
+  styleId?: string;
 }
 
 export interface CozyRoomState {
@@ -60,6 +84,34 @@ export interface CozyRoomState {
   avatarPlaced?: boolean;
   avatarConfig?: AvatarConfig;
   furniture: FurnitureSlotPlacement[];
+}
+
+export type GezginBadgeCategory = 'landmark' | 'errand';
+
+export interface GezginBadgeDef {
+  id: string;
+  category: GezginBadgeCategory;
+  targetId: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  icon: string;
+  accentColor: string;
+}
+
+export interface UserSavePayload {
+  displayName: string;
+  avatarEmoji: string;
+  coins: number;
+  lokmaPower: number;
+  discoveredIds: string[];
+  completedErrandIds: string[];
+  chattedNpcIds: string[];
+  unlockedFurnitureStyles: string[];
+  vehicleConfig: VehicleConfig;
+  houseExterior: HouseExteriorConfig;
+  cozyRoomState: CozyRoomState;
+  agendaNotes: AgendaNote[];
 }
 
 export interface AgendaNote {
@@ -170,10 +222,22 @@ export interface PlayerHudSnapshot {
   isDancingZeybek?: boolean;
 }
 
+export interface RoofColliderMeta {
+  cx: number;
+  cz: number;
+  halfW: number;
+  halfD: number;
+  wallTopY: number;
+  peakH: number;
+  ridgeAlongZ: boolean;
+  rotY?: number;
+}
+
 export interface ColliderBox {
   minX: number;
   maxX: number;
   minZ: number;
   maxZ: number;
   maxY?: number;
+  roof?: RoofColliderMeta;
 }

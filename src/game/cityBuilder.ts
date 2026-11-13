@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import {
+  DEFAULT_HOUSE_EXTERIOR,
   LANDMARKS,
   PLAYER_HOME_DOOR_POS,
   PLAYER_HOME_POS,
   ROAD_X_COORDS,
   ROAD_Z_COORDS,
 } from '../data/efelerData';
-import { ColliderBox } from '../types/game';
-import { buildDioramaHouse } from './dioramaHouses';
+import { ColliderBox, HouseExteriorConfig } from '../types/game';
+import { buildCustomPlayerHouse, buildDioramaHouse, BuiltCustomPlayerHouse } from './dioramaHouses';
 import { buildAllLandmarks, BuiltLandmark } from './landmarks';
 import {
   createBeyCamiiLokmaStand,
@@ -49,6 +50,7 @@ import {
   getTabakhaneHalfWidth,
   getTabakhaneWaterY,
   getTerrainHeightAt,
+  getWalkableSurfaceHeightAt,
 } from './terrain';
 
 export interface BuiltCity {
@@ -69,6 +71,7 @@ export interface BuiltCity {
   interactiveClickables: THREE.Object3D[];
   perches: PerchSystem;
   crumbSpots: Array<[number, number, number]>;
+  updatePlayerHomeExterior: (config: HouseExteriorConfig) => void;
   update: (dt: number, elapsed: number) => void;
   updateAtmosphere: (dt: number, elapsed: number, state: SeasonalAtmosphereState) => void;
   dispose: () => void;
@@ -215,7 +218,10 @@ function createStoneArchBridgeGeometry(): THREE.BufferGeometry {
   return geo;
 }
 
-export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
+export function buildEfelerCity(
+  mats: CityMaterialLibrary,
+  initialHouseExterior: HouseExteriorConfig = DEFAULT_HOUSE_EXTERIOR
+): BuiltCity {
   const group = new THREE.Group();
   const colliders: ColliderBox[] = [];
   const perches = new PerchSystem();
@@ -654,13 +660,33 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
   builtCottage.group.position.set(cottageX, cottageY, cottageZ);
   builtCottage.group.rotation.y = 0.22;
   group.add(builtCottage.group);
-  registerHousePerches('cottage', cottageX, cottageY, cottageZ, 5.8, 4.6, 3.6, 2, 0.22);
+  const cottagePeak = registerHousePerches(
+    'cottage',
+    cottageX,
+    cottageY,
+    cottageZ,
+    5.8,
+    4.6,
+    3.6,
+    2,
+    0.22
+  );
   colliders.push({
     minX: cottageX - 3.1,
     maxX: cottageX + 3.1,
     minZ: cottageZ - 2.6,
     maxZ: cottageZ + 2.6,
-    maxY: cottageY + 4.9,
+    maxY: cottageY + 3.6 + 0.22 + cottagePeak + 0.14,
+    roof: {
+      cx: cottageX,
+      cz: cottageZ,
+      halfW: 5.8 / 2 + 0.25,
+      halfD: 4.6 / 2 + 0.25,
+      wallTopY: cottageY + 3.6 + 0.22,
+      peakH: cottagePeak + 0.12,
+      ridgeAlongZ: true,
+      rotY: 0.22,
+    },
   });
 
   // 5. Terrain-Conforming Mediterranean Road Network + Bridge Arches + Zebra Crosswalks
@@ -673,14 +699,14 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
   ROAD_Z_COORDS.forEach((rz) => {
     const isBazaar = rz === -22;
     const curb = new THREE.Mesh(
-      createTerrainConformingRibbon(roadMinX - 1, rz, roadMaxX + 1, rz, roadW + 2.6, 104, 4, 0.07, true),
+      createTerrainConformingRibbon(roadMinX - 1, rz, roadMaxX + 1, rz, roadW + 2.6, 104, 4, 0.09, true),
       mats.sidewalk
     );
     curb.receiveShadow = true;
     group.add(curb);
 
     const roadMesh = new THREE.Mesh(
-      createTerrainConformingRibbon(roadMinX, rz, roadMaxX, rz, roadW, 104, 4, 0.1, true),
+      createTerrainConformingRibbon(roadMinX, rz, roadMaxX, rz, roadW, 104, 4, 0.13, true),
       isBazaar ? mats.cobble : mats.asphalt
     );
     roadMesh.receiveShadow = true;
@@ -689,7 +715,7 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
     if (!isBazaar) {
       for (let dx = -90; dx <= 96; dx += 6.5) {
         if (Math.abs(dx) < 17 && rz === 12) continue;
-        const dy = getSurfaceHeightAt(dx, rz) + 0.132;
+        const dy = getSurfaceHeightAt(dx, rz) + 0.165;
         const slopes = getSurfaceSlopeAngles(dx, rz, -Math.PI / 2);
         const dash = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 0.22), mats.roadStripe);
         dash.rotation.order = 'YXZ';
@@ -703,14 +729,14 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
   ROAD_X_COORDS.forEach((rx) => {
     const isSevgiYolu = rx === -18;
     const curb = new THREE.Mesh(
-      createTerrainConformingRibbon(rx, roadMinZ - 1, rx, roadMaxZ + 1, roadW + 2.6, 104, 4, 0.082, true),
+      createTerrainConformingRibbon(rx, roadMinZ - 1, rx, roadMaxZ + 1, roadW + 2.6, 104, 4, 0.105, true),
       mats.sidewalk
     );
     curb.receiveShadow = true;
     group.add(curb);
 
     const roadMesh = new THREE.Mesh(
-      createTerrainConformingRibbon(rx, roadMinZ, rx, roadMaxZ, roadW, 104, 4, 0.116, true),
+      createTerrainConformingRibbon(rx, roadMinZ, rx, roadMaxZ, roadW, 104, 4, 0.148, true),
       isSevgiYolu ? mats.cobble : mats.asphalt
     );
     roadMesh.receiveShadow = true;
@@ -718,7 +744,7 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
 
     if (!isSevgiYolu) {
       for (let dz = -104; dz <= 64; dz += 6.5) {
-        const dy = getSurfaceHeightAt(rx, dz) + 0.142;
+        const dy = getSurfaceHeightAt(rx, dz) + 0.175;
         const slopes = getSurfaceSlopeAngles(rx, dz, 0);
         const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 3.0), mats.roadStripe);
         dash.rotation.order = 'YXZ';
@@ -735,12 +761,12 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
       for (let s = -2.6; s <= 2.6; s += 1.3) {
         const stripeEW = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 2.0), mats.roadStripe);
         stripeEW.rotation.set(-Math.PI / 2 + slopes.pitch, 0, slopes.roll);
-        stripeEW.position.set(rx + s, getSurfaceHeightAt(rx + s, rz + 5.1) + 0.146, rz + 5.1);
+        stripeEW.position.set(rx + s, getSurfaceHeightAt(rx + s, rz + 5.1) + 0.182, rz + 5.1);
         group.add(stripeEW);
 
         const stripeNS = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 0.55), mats.roadStripe);
         stripeNS.rotation.set(-Math.PI / 2 + slopes.pitch, 0, slopes.roll);
-        stripeNS.position.set(rx + 5.1, getSurfaceHeightAt(rx + 5.1, rz + s) + 0.146, rz + s);
+        stripeNS.position.set(rx + 5.1, getSurfaceHeightAt(rx + 5.1, rz + s) + 0.182, rz + s);
         group.add(stripeNS);
       }
     });
@@ -786,25 +812,21 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
   const buildingNpcs = createBuildingNpcSystem(mats, colliders);
   group.add(buildingNpcs.group);
 
-  // Player's Own House ("Sıcak Yuvam") facing Sevgi Yolu (+X) — Miniature Diorama Villa
+  // Player's Own House ("Sıcak Yuvam") facing Sevgi Yolu (+X) — Customizable 4-Style Villa
   const [hx, hz] = PLAYER_HOME_POS;
   const homeY = getTerrainHeightAt(hx, hz);
-  const builtHome = buildDioramaHouse({
-    w: 6.0,
-    d: 5.4,
-    h: 4.4,
-    variant: 0,
+  let builtHome: BuiltCustomPlayerHouse = buildCustomPlayerHouse({
+    config: initialHouseExterior,
     mats,
-    wallMat: mats.creamPlaster,
     lawnMat: yardLawnMat,
     flowerBoxMat,
     blossomMat,
-    isPlayerHome: true,
   });
   builtHome.group.position.set(hx, homeY, hz);
   builtHome.group.rotation.y = Math.PI / 2;
   group.add(builtHome.group);
   const homePeak = registerHousePerches('player_home', hx, homeY, hz, 6.0, 5.4, 4.4, 0, Math.PI / 2);
+  const homeChimneyIndex = chimneyOrigins.length;
   chimneyOrigins.push([
     hx + builtHome.chimneyTopLocal[2],
     homeY + builtHome.chimneyTopLocal[1],
@@ -815,7 +837,17 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
     maxX: hx + 4.0,
     minZ: hz - 3.2,
     maxZ: hz + 3.2,
-    maxY: homeY + 4.4 + homePeak * 0.55,
+    maxY: homeY + 4.4 + 0.22 + homePeak + 0.14,
+    roof: {
+      cx: hx,
+      cz: hz,
+      halfW: 6.0 / 2 + 0.3,
+      halfD: 5.4 / 2 + 0.3,
+      wallTopY: homeY + 4.4 + 0.22,
+      peakH: homePeak + 0.12,
+      ridgeAlongZ: true,
+      rotY: Math.PI / 2,
+    },
   });
   crumbSpots.push([hx + 3.6, homeY + 3.85, hz]);
 
@@ -827,12 +859,14 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
       emissiveIntensity: 0.85,
       side: THREE.DoubleSide,
       roughness: 0.4,
+      polygonOffset: true,
+      polygonOffsetFactor: -3,
     })
   );
   homeRingMesh.rotation.x = -Math.PI / 2;
   homeRingMesh.position.set(
     PLAYER_HOME_DOOR_POS[0],
-    getSurfaceHeightAt(PLAYER_HOME_DOOR_POS[0], PLAYER_HOME_DOOR_POS[1]) + 0.08,
+    getWalkableSurfaceHeightAt(PLAYER_HOME_DOOR_POS[0], PLAYER_HOME_DOOR_POS[1]) + 0.08,
     PLAYER_HOME_DOOR_POS[1]
   );
   group.add(homeRingMesh);
@@ -891,7 +925,17 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
       maxX: x + w / 2 + 0.3,
       minZ: z - d / 2 - 0.3,
       maxZ: z + d / 2 + 1.0,
-      maxY: gy + h + peakH * 0.55,
+      maxY: gy + h + 0.22 + peakH + 0.14,
+      roof: {
+        cx: x,
+        cz: z,
+        halfW: w / 2 + 0.28,
+        halfD: d / 2 + 0.28,
+        wallTopY: gy + h + 0.22,
+        peakH: peakH + 0.12,
+        ridgeAlongZ: variant % 2 === 0,
+        rotY,
+      },
     });
     if (variant % 4 === 1) {
       crumbSpots.push([x, gy + h + peakH + 0.65, z]);
@@ -1158,7 +1202,7 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
   const bulbInst = new THREE.InstancedMesh(bulbGeo, mats.lampBulb, lampCoords.length);
 
   lampCoords.forEach(([x, z], i) => {
-    const sy = getSurfaceHeightAt(x, z);
+    const sy = getWalkableSurfaceHeightAt(x, z);
     dummy.position.set(x, sy, z);
     dummy.rotation.set(0, 0, 0);
     dummy.scale.set(1, 1, 1);
@@ -1236,6 +1280,7 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
     garlandInst.setMatrixAt(i, dummy.matrix);
   });
   garlandInst.instanceMatrix.needsUpdate = true;
+  garlandInst.computeBoundingSphere();
   group.add(garlandInst);
 
   // 10g. Peaceful Gliding White Doves high above Kent Meydanı, Tralleis & ADÜ Aytepe Campus
@@ -1294,6 +1339,25 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
     interactiveClickables,
     perches,
     crumbSpots,
+    updatePlayerHomeExterior: (nextConfig: HouseExteriorConfig) => {
+      group.remove(builtHome.group);
+      builtHome.dispose();
+      builtHome = buildCustomPlayerHouse({
+        config: nextConfig,
+        mats,
+        lawnMat: yardLawnMat,
+        flowerBoxMat,
+        blossomMat,
+      });
+      builtHome.group.position.set(hx, homeY, hz);
+      builtHome.group.rotation.y = Math.PI / 2;
+      group.add(builtHome.group);
+      chimneyOrigins[homeChimneyIndex] = [
+        hx + builtHome.chimneyTopLocal[2],
+        homeY + builtHome.chimneyTopLocal[1],
+        hz - builtHome.chimneyTopLocal[0],
+      ];
+    },
     update: (dt: number, elapsed: number) => {
       steamTrain.update(dt, elapsed);
       ambientTraffic.update(dt, elapsed);
@@ -1431,6 +1495,7 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
           }
         }
       });
+      builtHome.dispose();
       foliage.dispose();
       localDisposables.forEach((d) => d.dispose());
     },

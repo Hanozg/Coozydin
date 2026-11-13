@@ -3,7 +3,7 @@ import { ANCIENT_SIGNPOST_POSITIONS, LANDMARKS } from '../data/efelerData';
 import { ColliderBox, SeasonType } from '../types/game';
 import { CityMaterialLibrary } from './materials';
 import { createSculptedPedestrianGeos } from './sculptedHumans';
-import { getSurfaceHeightAt, getSurfaceSlopeAngles } from './terrain';
+import { getWalkableSlopeAngles, getWalkableSurfaceHeightAt } from './terrain';
 
 /**
  * 1. Growing Fig Tree in the Heart of Kent Meydanı (scales with İncir Puanı)
@@ -367,7 +367,7 @@ export function createPedestrianSystem(): PedestrianSystem {
           a.state === 'walking' && Math.hypot(a.targetX - a.x, a.targetZ - a.z) > 0.6;
         const bob = isMoving ? Math.abs(Math.sin(elapsed * 6.5 + a.phaseOffset)) * 0.06 : 0;
 
-        dummy.position.set(a.x, getSurfaceHeightAt(a.x, a.z) + bob, a.z);
+        dummy.position.set(a.x, getWalkableSurfaceHeightAt(a.x, a.z) + bob, a.z);
         dummy.scale.setScalar(a.scale * 1.12);
         dummy.rotation.y = Math.atan2(a.targetX - a.x, a.targetZ - a.z);
         dummy.updateMatrix();
@@ -433,7 +433,7 @@ export function createTrafficLightSystem(mats: CityMaterialLibrary): TrafficLigh
 
     corners.forEach(([px, pz, isNS]) => {
       const poleGroup = new THREE.Group();
-      poleGroup.position.set(px, getSurfaceHeightAt(px, pz), pz);
+      poleGroup.position.set(px, getWalkableSurfaceHeightAt(px, pz), pz);
       if (!isNS) poleGroup.rotation.y = Math.PI / 2;
 
       const pole = new THREE.Mesh(
@@ -492,7 +492,7 @@ export function buildAncientCitiesSignposts(
 
   ANCIENT_SIGNPOST_POSITIONS.forEach(([sx, sz], idx) => {
     const signGroup = new THREE.Group();
-    signGroup.position.set(sx, getSurfaceHeightAt(sx, sz), sz);
+    signGroup.position.set(sx, getWalkableSurfaceHeightAt(sx, sz), sz);
     if (idx === 1) signGroup.rotation.y = -Math.PI / 2;
 
     const plinth = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.4, 1.3), mats.travertine);
@@ -576,18 +576,34 @@ export function createSteamTrainSystem(mats: CityMaterialLibrary): SteamTrainSys
     opacity: 0.52,
   });
 
-  const wheels: THREE.Mesh[] = [];
+  const wheels: THREE.Group[] = [];
   const addWheelPair = (parent: THREE.Group, lx: number, radius: number) => {
     [-0.95, 0.95].forEach((lz) => {
+      const wheelPivot = new THREE.Group();
+      wheelPivot.position.set(lx, radius, lz);
+
       const wheel = new THREE.Mesh(
         new THREE.CylinderGeometry(radius, radius, 0.16, 12),
         mats.wroughtIron
       );
       wheel.rotation.x = Math.PI / 2;
-      wheel.position.set(lx, radius, lz);
       wheel.castShadow = true;
-      parent.add(wheel);
-      wheels.push(wheel);
+      wheelPivot.add(wheel);
+
+      const spokeBar = new THREE.Mesh(
+        new THREE.BoxGeometry(radius * 1.55, radius * 0.16, 0.19),
+        mats.brass
+      );
+      wheelPivot.add(spokeBar);
+
+      const spokeCross = new THREE.Mesh(
+        new THREE.BoxGeometry(radius * 0.16, radius * 1.55, 0.19),
+        mats.brass
+      );
+      wheelPivot.add(spokeCross);
+
+      parent.add(wheelPivot);
+      wheels.push(wheelPivot);
     });
   };
 
@@ -769,12 +785,13 @@ export function createSteamTrainSystem(mats: CityMaterialLibrary): SteamTrainSys
       }
 
       trainGroup.position.x = trainX;
-      // Subtle mechanical rail sway while rolling
-      trainGroup.position.y = 0.34 + (speed > 0.2 ? Math.sin(elapsed * 11) * 0.014 : 0);
+      // Subtle mechanical rail bounce keeping flange clear atop 0.33 steel rail head
+      trainGroup.position.y =
+        0.335 + (speed > 0.2 ? Math.abs(Math.sin(elapsed * 11)) * 0.012 : 0);
 
-      wheelAngle -= (speed * dt) / 0.45;
+      wheelAngle -= (speed * dt) / 0.48;
       for (let i = 0; i < wheels.length; i++) {
-        wheels[i].rotation.y = wheelAngle;
+        wheels[i].rotation.z = wheelAngle;
       }
 
       // Emit billowing white steam puffs from chimney top (locoGroup +8.5 + funnel +2.55)
@@ -823,9 +840,11 @@ export interface AmbientTrafficSystem {
 
 interface TrafficRider {
   group: THREE.Group;
-  wheels: THREE.Mesh[];
+  wheels: THREE.Group[];
+  wheelR: number;
   loopIndex: number;
   progress: number;
+  heading: number;
   speed: number;
   bobPhase: number;
 }
@@ -883,6 +902,7 @@ export function createAmbientTrafficSystem(mats: CityMaterialLibrary): AmbientTr
   const riderColors = [0xc85a32, 0x3b6e8c, 0x5d8a48, 0xd4923f, 0x6e4555, 0x4c7b7d];
   const shirtColors = [0xf5ecdc, 0x586f4e, 0xd98a3f, 0x4b7496, 0xc96846, 0x7c5a44];
   const riders: TrafficRider[] = [];
+  const initOut = { x: 0, z: 0, heading: 0 };
 
   for (let i = 0; i < 8; i++) {
     const isScooter = i % 2 === 1;
@@ -898,18 +918,28 @@ export function createAmbientTrafficSystem(mats: CityMaterialLibrary): AmbientTr
     });
     const skinMat = new THREE.MeshStandardMaterial({ color: 0xe6be9a, roughness: 0.72 });
 
-    const wheels: THREE.Mesh[] = [];
+    const wheels: THREE.Group[] = [];
     const wheelR = isScooter ? 0.24 : 0.32;
     [-0.55, 0.55].forEach((wz) => {
+      const wheelPivot = new THREE.Group();
+      wheelPivot.position.set(0, wheelR, wz);
+
       const tire = new THREE.Mesh(
         new THREE.TorusGeometry(wheelR, isScooter ? 0.07 : 0.045, 7, 14),
         mats.wroughtIron
       );
       tire.rotation.y = Math.PI / 2;
-      tire.position.set(0, wheelR, wz);
       tire.castShadow = true;
-      riderGroup.add(tire);
-      wheels.push(tire);
+      wheelPivot.add(tire);
+
+      const hub = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06, wheelR * 1.5, 0.04),
+        mats.brass
+      );
+      wheelPivot.add(hub);
+
+      riderGroup.add(wheelPivot);
+      wheels.push(wheelPivot);
     });
 
     if (isScooter) {
@@ -941,12 +971,17 @@ export function createAmbientTrafficSystem(mats: CityMaterialLibrary): AmbientTr
     cap.position.set(0, 1.48, 0.04);
     riderGroup.add(torso, head, cap);
 
+    const startProgress = ((i % 4) / 4) * LOOP_LENGTHS[loopIndex];
+    sampleLoop(loopIndex === 0 ? LOOP_CENTRAL : LOOP_NORTH, LOOP_LENGTHS[loopIndex], startProgress, initOut);
+
     group.add(riderGroup);
     riders.push({
       group: riderGroup,
       wheels,
+      wheelR,
       loopIndex,
-      progress: ((i % 4) / 4) * LOOP_LENGTHS[loopIndex],
+      progress: startProgress,
+      heading: initOut.heading,
       speed: isScooter ? 6.4 : 4.7,
       bobPhase: i * 1.4,
     });
@@ -964,19 +999,24 @@ export function createAmbientTrafficSystem(mats: CityMaterialLibrary): AmbientTr
         r.progress = (r.progress + r.speed * dt) % len;
         sampleLoop(pts, len, r.progress, sampleOut);
 
-        const groundY = getSurfaceHeightAt(sampleOut.x, sampleOut.z);
-        const slopes = getSurfaceSlopeAngles(sampleOut.x, sampleOut.z, sampleOut.heading);
+        let hDiff = sampleOut.heading - r.heading;
+        while (hDiff > Math.PI) hDiff -= Math.PI * 2;
+        while (hDiff < -Math.PI) hDiff += Math.PI * 2;
+        r.heading += hDiff * Math.min(1, dt * 8.5);
+
+        const groundY = getWalkableSurfaceHeightAt(sampleOut.x, sampleOut.z);
+        const slopes = getWalkableSlopeAngles(sampleOut.x, sampleOut.z, r.heading);
 
         r.group.position.set(
           sampleOut.x,
-          groundY + Math.abs(Math.sin(elapsed * 5.2 + r.bobPhase)) * 0.025,
+          groundY + Math.abs(Math.sin(elapsed * 5.2 + r.bobPhase)) * 0.018,
           sampleOut.z
         );
         r.group.rotation.order = 'YXZ';
-        r.group.rotation.y = sampleOut.heading;
+        r.group.rotation.y = r.heading;
         r.group.rotation.x = slopes.pitch;
         for (let w = 0; w < r.wheels.length; w++) {
-          r.wheels[w].rotation.x -= (r.speed * dt) / 0.28;
+          r.wheels[w].rotation.x -= (r.speed * dt) / r.wheelR;
         }
       }
     },

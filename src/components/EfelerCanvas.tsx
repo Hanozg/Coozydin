@@ -29,9 +29,9 @@ import {
 } from '../game/cityNpcs';
 import { createCityMaterials } from '../game/materials';
 import {
-  getSurfaceHeightAt,
-  getSurfaceSlopeAngles,
   getTabakhaneCenterX,
+  getWalkableSlopeAngles,
+  getWalkableSurfaceHeightAt,
 } from '../game/terrain';
 import { SparrowChaseCamera } from '../game/sparrowCamera';
 import { SparrowController, SparrowInputState } from '../game/sparrowController';
@@ -48,6 +48,7 @@ import {
   ExplorationMode,
   GamePhase,
   HeldTreatType,
+  HouseExteriorConfig,
   LandmarkDef,
   NearbyStreetInteraction,
   PlayerHudSnapshot,
@@ -83,6 +84,7 @@ interface EfelerCanvasProps {
   explorationMode: ExplorationMode;
   avatarConfig: AvatarConfig;
   vehicleConfig: VehicleConfig;
+  houseExterior: HouseExteriorConfig;
   timeOfDay: TimeOfDay;
   season: SeasonType;
   weather: WeatherType;
@@ -227,6 +229,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       explorationMode,
       avatarConfig,
       vehicleConfig,
+      houseExterior,
       timeOfDay,
       season,
       weather,
@@ -258,6 +261,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
     const explorationModeRef = useRef(explorationMode);
     const avatarConfigRef = useRef(avatarConfig);
     const vehicleConfigRef = useRef(vehicleConfig);
+    const houseExteriorRef = useRef(houseExterior);
     const timeOfDayRef = useRef(timeOfDay);
     const seasonRef = useRef(season);
     const weatherRef = useRef(weather);
@@ -285,6 +289,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
     explorationModeRef.current = explorationMode;
     avatarConfigRef.current = avatarConfig;
     vehicleConfigRef.current = vehicleConfig;
+    houseExteriorRef.current = houseExterior;
     timeOfDayRef.current = timeOfDay;
     seasonRef.current = season;
     weatherRef.current = weather;
@@ -314,7 +319,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
     const simRef = useRef({
       x: initialTransform?.x ?? -18,
       z: initialTransform?.z ?? 27,
-      y: getSurfaceHeightAt(initialTransform?.x ?? -18, initialTransform?.z ?? 27),
+      y: getWalkableSurfaceHeightAt(initialTransform?.x ?? -18, initialTransform?.z ?? 27),
       pitch: 0,
       roll: 0,
       heading: initialTransform?.heading ?? 0,
@@ -326,6 +331,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       fpPitch: -0.04,
       rebuildVehicleRequested: false,
       updateAvatarConfigRequested: false,
+      rebuildHomeRequested: false,
       nearbyLandmark: null as LandmarkDef | null,
       nearbyNpc: null as BuildingNpcDef | null,
       nearAncientSignpost: false,
@@ -427,7 +433,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       teleportTo: (x: number, z: number, heading = 0) => {
         simRef.current.x = x;
         simRef.current.z = z;
-        simRef.current.y = getSurfaceHeightAt(x, z);
+        simRef.current.y = getWalkableSurfaceHeightAt(x, z);
         simRef.current.pitch = 0;
         simRef.current.roll = 0;
         simRef.current.heading = heading;
@@ -493,6 +499,10 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
     useEffect(() => {
       simRef.current.updateAvatarConfigRequested = true;
     }, [avatarConfig]);
+
+    useEffect(() => {
+      simRef.current.rebuildHomeRequested = true;
+    }, [houseExterior]);
 
     useEffect(() => {
       if (timeOfDay !== lastAutoSyncedTodRef.current) {
@@ -615,7 +625,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
 
       const textures = createProceduralTextures(renderer.capabilities.getMaxAnisotropy());
       const mats = createCityMaterials(textures, isSoftwareGl);
-      const city = buildEfelerCity(mats);
+      const city = buildEfelerCity(mats, houseExteriorRef.current);
       scene.add(city.group);
 
       let lastLokmaTime = -20;
@@ -1032,6 +1042,11 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           cityAvatarRig.applyConfig(avatarConfigRef.current);
         }
 
+        if (simRef.current.rebuildHomeRequested) {
+          simRef.current.rebuildHomeRequested = false;
+          city.updatePlayerHomeExterior(houseExteriorRef.current);
+        }
+
         // 1. Continuous Solar Clock Progression (Auto-Cycle or Smooth Manual Glide)
         if (manualTargetPhaseRef.current !== null) {
           const targetP = manualTargetPhaseRef.current;
@@ -1236,7 +1251,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         const isSparrow = curMode === 'sparrow';
         const isFirstPerson =
           cameraPresetRef.current === 'first_person' && phaseRef.current !== 'title';
-        const slopesPre = getSurfaceSlopeAngles(sim.x, sim.z, sim.heading);
+        const slopesPre = getWalkableSlopeAngles(sim.x, sim.z, sim.heading);
 
         // Mode switch synchronization (Vehicle/Walk <-> Sparrow)
         if (isSparrow && prevMode !== 'sparrow') {
@@ -1245,7 +1260,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         } else if (!isSparrow && prevMode === 'sparrow') {
           sim.x = THREE.MathUtils.clamp(sparrowController.position.x, -98, 104);
           sim.z = THREE.MathUtils.clamp(sparrowController.position.z, -106, 72);
-          sim.y = getSurfaceHeightAt(sim.x, sim.z);
+          sim.y = getWalkableSurfaceHeightAt(sim.x, sim.z);
           sim.heading = sparrowController.yaw + Math.PI;
           sim.speed = 0;
         }
@@ -1293,7 +1308,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           }
         }
 
-        let groundY = getSurfaceHeightAt(sim.x, sim.z);
+        let groundY = getWalkableSurfaceHeightAt(sim.x, sim.z);
 
         if (isSparrow) {
           vehicleRig.root.visible = false;
@@ -1350,7 +1365,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           sim.heading = sparrowController.yaw + Math.PI;
           sim.speed = Math.hypot(sparrowController.velocity.x, sparrowController.velocity.z);
           sim.pitch = -sparrowMesh.bodyPivot.rotation.x;
-          groundY = getSurfaceHeightAt(sim.x, sim.z);
+          groundY = getWalkableSurfaceHeightAt(sim.x, sim.z);
         } else {
           sparrowMesh.root.visible = false;
           flapQueued = false;
@@ -1438,20 +1453,22 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
             audioEngine.updateEngineSound(0, vType, false);
           }
 
-          groundY = getSurfaceHeightAt(sim.x, sim.z);
-          const slopes = getSurfaceSlopeAngles(sim.x, sim.z, sim.heading);
-          sim.y = THREE.MathUtils.damp(sim.y, groundY, 16, dt);
+          groundY = getWalkableSurfaceHeightAt(sim.x, sim.z);
+          const slopes = getWalkableSlopeAngles(sim.x, sim.z, sim.heading);
+          const yDamp = groundY > sim.y ? 32 : 20;
+          sim.y = Math.max(groundY - 0.008, THREE.MathUtils.damp(sim.y, groundY, yDamp, dt));
           sim.pitch = THREE.MathUtils.damp(sim.pitch, slopes.pitch, 12, dt);
           sim.roll = THREE.MathUtils.damp(sim.roll, -slopes.roll, 12, dt);
 
           if (isWalking) {
+            const isDancing = sim.zeybekTimer > 0 && Math.abs(sim.speed) < 0.8;
             vehicleRig.root.visible = false;
             cityAvatarRig.root.visible = !isFirstPerson;
             cityAvatarRig.root.position.set(sim.x, sim.y, sim.z);
             cityAvatarRig.root.rotation.order = 'YXZ';
             cityAvatarRig.root.rotation.y = sim.heading;
-            cityAvatarRig.root.rotation.x = sim.pitch * 0.35;
-            if (sim.zeybekTimer > 0 && Math.abs(sim.speed) < 0.8) {
+            cityAvatarRig.root.rotation.x = isDancing ? 0 : sim.pitch * 0.18;
+            if (isDancing) {
               cityAvatarRig.updateZeybek(dt, elapsed, sim.zeybekElapsed);
               const barSec = 2.52;
               const barIdx = Math.floor(sim.zeybekElapsed / barSec);
@@ -1540,7 +1557,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
             Math.hypot(resCX - sim.companionX, resCZ - sim.companionZ) / Math.max(0.001, dt);
           sim.companionX = resCX;
           sim.companionZ = resCZ;
-          companionRig.root.position.set(resCX, getSurfaceHeightAt(resCX, resCZ), resCZ);
+          companionRig.root.position.set(resCX, getWalkableSurfaceHeightAt(resCX, resCZ), resCZ);
           companionRig.root.rotation.y = sim.heading;
           if (sim.zeybekTimer > 0 && Math.abs(sim.speed) < 0.8) {
             companionRig.updateZeybek(dt, elapsed, sim.zeybekElapsed);
@@ -1815,7 +1832,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           const orbitAngle = elapsed * 0.11;
           const focusX = Math.sin(orbitAngle) * 20;
           const focusZ = 2 + Math.cos(orbitAngle) * 22;
-          const focusY = getSurfaceHeightAt(focusX, focusZ);
+          const focusY = getWalkableSurfaceHeightAt(focusX, focusZ);
           _lookGoal.set(focusX, focusY + 2, focusZ);
           _camGoal.set(focusX + 42, focusY + 36, focusZ + 42);
           camera.zoom = THREE.MathUtils.damp(camera.zoom, 0.9, 2.5, dt);

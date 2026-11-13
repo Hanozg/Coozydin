@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { buildCloudClusterGeometry, SPARROW_PALETTE } from './sculptor';
-import { getSurfaceHeightAt } from './terrain';
+import { getWalkableSurfaceHeightAt } from './terrain';
 
 const _zeroMat4 = new THREE.Matrix4().makeScale(0, 0, 0);
 const _dummy = new THREE.Object3D();
@@ -183,7 +183,7 @@ export class SparrowFX {
     });
     pickupSpots.forEach(([x, y, z], idx) => {
       const m = new THREE.Mesh(this.pickupGeo, this.pickupMat);
-      const safeY = y > 0 ? y : getSurfaceHeightAt(x, z) + 0.52;
+      const safeY = y > 0 ? y : getWalkableSurfaceHeightAt(x, z) + 0.52;
       m.position.set(x, safeY, z);
       this.group.add(m);
       this.pickups.push({

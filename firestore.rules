@@ -1,0 +1,212 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isHexColor(val) {
+      return val is string && val.size() >= 4 && val.size() <= 16 && val.matches('^#[0-9a-fA-F]{3,8}$');
+    }
+
+    function isValidVehicleConfig(vc) {
+      return vc is map &&
+        vc.keys().hasAll(['type', 'color', 'finish', 'accentColor', 'hasAccessory', 'hasStripe']) &&
+        vc.keys().hasOnly(['type', 'color', 'finish', 'accentColor', 'hasAccessory', 'hasStripe']) &&
+        vc.type is string && vc.type.size() <= 20 && vc.type in ['car', 'bicycle', 'motorcycle'] &&
+        isHexColor(vc.color) &&
+        vc.finish is string && vc.finish.size() <= 16 && vc.finish in ['gloss', 'matte'] &&
+        isHexColor(vc.accentColor) &&
+        vc.hasAccessory is bool &&
+        vc.hasStripe is bool;
+    }
+
+    function isValidHouseExterior(he) {
+      return he is map &&
+        he.keys().hasAll(['style', 'wallColor', 'roofColor', 'trimColor']) &&
+        he.keys().hasOnly(['style', 'wallColor', 'roofColor', 'trimColor']) &&
+        he.style is string && he.style.size() <= 32 &&
+        he.style in ['cottage_villa', 'modern_gable', 'aegean_veranda', 'twin_cottage'] &&
+        isHexColor(he.wallColor) &&
+        isHexColor(he.roofColor) &&
+        isHexColor(he.trimColor);
+    }
+
+    function isValidAvatarConfig(ac) {
+      return ac is map &&
+        ac.keys().hasAll(['skinColor', 'shirtColor', 'pantsColor', 'hairStyle', 'hairColor']) &&
+        ac.keys().hasOnly(['skinColor', 'shirtColor', 'pantsColor', 'hairStyle', 'hairColor']) &&
+        isHexColor(ac.skinColor) &&
+        isHexColor(ac.shirtColor) &&
+        isHexColor(ac.pantsColor) &&
+        ac.hairStyle is string && ac.hairStyle.size() <= 20 && ac.hairStyle in ['kasket', 'short', 'long', 'bun'] &&
+        isHexColor(ac.hairColor);
+    }
+
+    function isValidFurnitureItem(fi) {
+      return fi is map &&
+        fi.keys().hasAll(['id', 'enabled', 'slotIndex']) &&
+        fi.keys().hasOnly(['id', 'enabled', 'slotIndex', 'x', 'z', 'rotY', 'styleId']) &&
+        fi.id is string && fi.id.size() >= 1 && fi.id.size() <= 24 &&
+        fi.enabled is bool &&
+        fi.slotIndex is int && fi.slotIndex >= 0 && fi.slotIndex <= 10 &&
+        (!('x' in fi) || fi.x is number) &&
+        (!('z' in fi) || fi.z is number) &&
+        (!('rotY' in fi) || fi.rotY is number) &&
+        (!('styleId' in fi) || (fi.styleId is string && fi.styleId.size() >= 1 && fi.styleId.size() <= 40));
+    }
+
+    function isValidCozyRoomState(cr) {
+      return cr is map &&
+        cr.keys().hasAll(['wallColor', 'floorTone', 'lampOn', 'petType', 'petAffection', 'avatarPlaced', 'avatarConfig', 'furniture']) &&
+        cr.keys().hasOnly(['wallColor', 'floorTone', 'lampOn', 'petType', 'petAffection', 'avatarPlaced', 'avatarConfig', 'furniture']) &&
+        isHexColor(cr.wallColor) &&
+        cr.floorTone is string && cr.floorTone.size() <= 16 && cr.floorTone in ['oak', 'pine', 'stone'] &&
+        cr.lampOn is bool &&
+        cr.petType is string && cr.petType.size() <= 16 && cr.petType in ['cat', 'dog', 'both'] &&
+        cr.petAffection is int && cr.petAffection >= 0 && cr.petAffection <= 100000 &&
+        cr.avatarPlaced is bool &&
+        isValidAvatarConfig(cr.avatarConfig) &&
+        cr.furniture is list && cr.furniture.size() <= 20 &&
+        (cr.furniture.size() == 0 || isValidFurnitureItem(cr.furniture[0]));
+    }
+
+    function isValidAgendaNote(an) {
+      return an is map &&
+        an.keys().hasAll(['id', 'dateKey', 'text', 'done']) &&
+        an.keys().hasOnly(['id', 'dateKey', 'text', 'done']) &&
+        an.id is string && an.id.size() >= 1 && an.id.size() <= 48 &&
+        an.dateKey is string && an.dateKey.size() >= 8 && an.dateKey.size() <= 16 &&
+        an.text is string && an.text.size() >= 1 && an.text.size() <= 240 &&
+        an.done is bool;
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll([
+          'uid',
+          'displayName',
+          'avatarEmoji',
+          'coins',
+          'lokmaPower',
+          'discoveredIds',
+          'chattedNpcIds',
+          'unlockedFurnitureStyles',
+          'vehicleConfig',
+          'houseExterior',
+          'cozyRoomState',
+          'agendaNotes',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid',
+          'displayName',
+          'avatarEmoji',
+          'coins',
+          'lokmaPower',
+          'discoveredIds',
+          'completedErrandIds',
+          'chattedNpcIds',
+          'unlockedFurnitureStyles',
+          'vehicleConfig',
+          'houseExterior',
+          'cozyRoomState',
+          'agendaNotes',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.uid) &&
+        data.uid == request.auth.uid &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 40 &&
+        data.avatarEmoji is string && data.avatarEmoji.size() >= 1 && data.avatarEmoji.size() <= 12 &&
+        data.coins is int && data.coins >= 0 && data.coins <= 1000000 &&
+        data.lokmaPower is int && data.lokmaPower >= 0 && data.lokmaPower <= 100000 &&
+        data.discoveredIds is list && data.discoveredIds.size() <= 30 &&
+        (data.discoveredIds.size() == 0 || (data.discoveredIds[0] is string && data.discoveredIds[0].size() >= 1 && data.discoveredIds[0].size() <= 40)) &&
+        (!('completedErrandIds' in data) || (
+          data.completedErrandIds is list &&
+          data.completedErrandIds.size() <= 40 &&
+          (data.completedErrandIds.size() == 0 || (data.completedErrandIds[0] is string && data.completedErrandIds[0].size() >= 1 && data.completedErrandIds[0].size() <= 48))
+        )) &&
+        data.chattedNpcIds is list && data.chattedNpcIds.size() <= 40 &&
+        (data.chattedNpcIds.size() == 0 || (data.chattedNpcIds[0] is string && data.chattedNpcIds[0].size() >= 1 && data.chattedNpcIds[0].size() <= 40)) &&
+        data.unlockedFurnitureStyles is list && data.unlockedFurnitureStyles.size() <= 80 &&
+        (data.unlockedFurnitureStyles.size() == 0 || (data.unlockedFurnitureStyles[0] is string && data.unlockedFurnitureStyles[0].size() >= 1 && data.unlockedFurnitureStyles[0].size() <= 64)) &&
+        isValidVehicleConfig(data.vehicleConfig) &&
+        isValidHouseExterior(data.houseExterior) &&
+        isValidCozyRoomState(data.cozyRoomState) &&
+        data.agendaNotes is list && data.agendaNotes.size() <= 120 &&
+        (data.agendaNotes.size() == 0 || isValidAgendaNote(data.agendaNotes[0])) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+        isVerified() &&
+        isValidId(userId) &&
+        isOwner(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn() &&
+        isVerified() &&
+        isValidId(userId) &&
+        isOwner(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName',
+          'avatarEmoji',
+          'coins',
+          'lokmaPower',
+          'discoveredIds',
+          'completedErrandIds',
+          'chattedNpcIds',
+          'unlockedFurnitureStyles',
+          'vehicleConfig',
+          'houseExterior',
+          'cozyRoomState',
+          'agendaNotes',
+          'updatedAt'
+        ]);
+
+      allow delete: if isSignedIn() &&
+        isVerified() &&
+        isValidId(userId) &&
+        isOwner(userId);
+    }
+  }
+}

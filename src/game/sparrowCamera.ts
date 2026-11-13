@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { ColliderBox } from '../types/game';
-import { getSurfaceHeightAt } from './terrain';
+import { getWalkableSurfaceHeightAt } from './terrain';
 
 const _anchor = new THREE.Vector3();
 const _backDir = new THREE.Vector3();
@@ -146,7 +146,7 @@ export class SparrowChaseCamera {
       const px = _anchor.x + _backDir.x * dist;
       const py = _anchor.y + _backDir.y * dist;
       const pz = _anchor.z + _backDir.z * dist;
-      const groundH = getSurfaceHeightAt(px, pz) + 0.55;
+      const groundH = getWalkableSurfaceHeightAt(px, pz) + 0.55;
       if (py < groundH) {
         allowedDist = Math.min(allowedDist, Math.max(1.8, dist - 0.35));
         break;
@@ -154,7 +154,9 @@ export class SparrowChaseCamera {
       let blocked = false;
       for (let bIdx = 0; bIdx < params.colliders.length; bIdx++) {
         const b = params.colliders[bIdx];
-        const topY = (b.maxY ?? getSurfaceHeightAt((b.minX + b.maxX) * 0.5, (b.minZ + b.maxZ) * 0.5) + 5.0);
+        const topY =
+          b.maxY ??
+          getWalkableSurfaceHeightAt((b.minX + b.maxX) * 0.5, (b.minZ + b.maxZ) * 0.5) + 5.0;
         if (px > b.minX - 0.25 && px < b.maxX + 0.25 && pz > b.minZ - 0.25 && pz < b.maxZ + 0.25 && py < topY) {
           allowedDist = Math.min(allowedDist, Math.max(1.8, dist - 0.45));
           blocked = true;
@@ -168,7 +170,7 @@ export class SparrowChaseCamera {
     this.smoothedDist += (allowedDist - this.smoothedDist) * (1 - Math.exp(-dt * dampDistRate));
     _desiredPos.copy(_anchor).addScaledVector(_backDir, this.smoothedDist);
 
-    const minGroundY = getSurfaceHeightAt(_desiredPos.x, _desiredPos.z) + 0.65;
+    const minGroundY = getWalkableSurfaceHeightAt(_desiredPos.x, _desiredPos.z) + 0.65;
     if (_desiredPos.y < minGroundY) {
       _desiredPos.y = minGroundY;
     }

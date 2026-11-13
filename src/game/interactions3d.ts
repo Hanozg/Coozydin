@@ -3,6 +3,7 @@ import { ColliderBox, StreetInteractionType } from '../types/game';
 import { CityMaterialLibrary } from './materials';
 import { createSculptedHumanRig, SculptedHumanRig } from './sculptedHumans';
 import { SPARROW_PALETTE } from './sculptor';
+import { getTerrainHeightAt, getWalkableSurfaceHeightAt } from './terrain';
 
 interface EfeDancerRig {
   pivot: THREE.Group;
@@ -79,24 +80,26 @@ export function createStreetMusiciansZeybek(
   const group = new THREE.Group();
   const cx = -8.2;
   const cz = 20.6;
-  group.position.set(cx, 0, cz);
+  const plazaY = getWalkableSurfaceHeightAt(cx, cz);
+  group.position.set(cx, plazaY, cz);
 
   // Woven Kilim Rug on Plaza Stone
   const rugMat = new THREE.MeshStandardMaterial({ color: 0x993e2f, roughness: 0.88 });
-  const rug = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.06, 2.6), rugMat);
-  rug.position.y = 0.25;
+  const rug = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.04, 2.6), rugMat);
+  rug.position.y = 0.02;
   rug.receiveShadow = true;
   group.add(rug);
 
   const rugInnerMat = new THREE.MeshStandardMaterial({ color: 0xd99b43, roughness: 0.85 });
-  const rugInner = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.07, 1.8), rugInnerMat);
-  rugInner.position.y = 0.255;
+  const rugInner = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.05, 1.8), rugInnerMat);
+  rugInner.position.y = 0.025;
   group.add(rugInner);
 
   // Musician 1: Davulcu & Musician 2: Zurna Player in Sparrow Sim sculpted style
+  const musicianBaseY = 0.045;
   const buildMusician = (x: number, z: number, coatHex: number, isDrummer: boolean) => {
     const m = new THREE.Group();
-    m.position.set(x, 0.25, z);
+    m.position.set(x, musicianBaseY, z);
 
     const rig = createSculptedHumanRig(
       {
@@ -149,7 +152,7 @@ export function createStreetMusiciansZeybek(
     side: THREE.DoubleSide,
   });
   const stageRing = new THREE.Mesh(stageRingGeo, stageRingMat);
-  stageRing.position.y = 0.27;
+  stageRing.position.y = 0.04;
   group.add(stageRing);
 
   // 6 Efeler Dancers circling around the musicians
@@ -159,7 +162,7 @@ export function createStreetMusiciansZeybek(
     const efe = createEfeDancer();
     const ang = (i * Math.PI * 2) / dancerCount;
     efe.baseAngle = ang;
-    efe.pivot.position.set(Math.cos(ang) * 3.1, 0.24, Math.sin(ang) * 3.1);
+    efe.pivot.position.set(Math.cos(ang) * 3.1, 0, Math.sin(ang) * 3.1);
     efe.pivot.rotation.y = -ang + Math.PI / 2;
     group.add(efe.pivot);
     dancers.push(efe);
@@ -200,7 +203,7 @@ export function createStreetMusiciansZeybek(
         stageRingMat.emissiveIntensity = 1.2 + Math.sin(elapsed * 8) * 0.4;
 
         // Musicians play energetically with the 9/8 beat
-        drummer.group.position.y = 0.25 + Math.abs(Math.sin(elapsed * 7)) * 0.08;
+        drummer.group.position.y = musicianBaseY + Math.abs(Math.sin(elapsed * 7)) * 0.08;
         zurnaPlayer.group.rotation.z = Math.sin(elapsed * 4.5) * 0.08;
         drummer.rig.updateWalk(0, dt, elapsed, true);
         zurnaPlayer.rig.updateWalk(0, dt, elapsed, true);
@@ -210,7 +213,7 @@ export function createStreetMusiciansZeybek(
         dancers.forEach((efe, idx) => {
           const ang = efe.baseAngle + circleRotation;
           const rad = 3.2 + Math.sin(elapsed * 2 + idx) * 0.15;
-          efe.pivot.position.set(Math.cos(ang) * rad, 0.24, Math.sin(ang) * rad);
+          efe.pivot.position.set(Math.cos(ang) * rad, 0, Math.sin(ang) * rad);
           efe.pivot.rotation.y = -ang;
           efe.rig.updateZeybek(dt, elapsed, danceTime, idx * 0.42);
         });
@@ -229,14 +232,14 @@ export function createStreetMusiciansZeybek(
         sparkInst.instanceMatrix.needsUpdate = true;
       } else {
         stageRingMat.emissiveIntensity = 0.28 + Math.sin(elapsed * 2) * 0.08;
-        drummer.group.position.y = 0.25;
+        drummer.group.position.y = musicianBaseY;
         zurnaPlayer.group.rotation.z = 0;
         drummer.rig.updateWalk(0, dt, elapsed, true);
         zurnaPlayer.rig.updateWalk(0, dt, elapsed, true);
 
         dancers.forEach((efe, idx) => {
           const ang = efe.baseAngle;
-          efe.pivot.position.set(Math.cos(ang) * 3.0, 0.24, Math.sin(ang) * 3.0);
+          efe.pivot.position.set(Math.cos(ang) * 3.0, 0, Math.sin(ang) * 3.0);
           efe.pivot.rotation.y = -ang + Math.PI / 2;
           efe.rig.updateWalk(0, dt, elapsed + idx * 0.5, false);
         });
@@ -262,11 +265,11 @@ export function createLibraryAndVendor(
 ): LibraryVendorRig {
   const group = new THREE.Group();
 
-  // A. Library Building at [-27.5, 0, 25.5] facing East toward Kent Meydanı
+  // A. Library Building at [-27.5, y, 25.5] facing East toward Kent Meydanı
   const libX = -27.5;
   const libZ = 25.5;
   const lib = new THREE.Group();
-  lib.position.set(libX, 0, libZ);
+  lib.position.set(libX, getTerrainHeightAt(libX, libZ), libZ);
 
   const podium = new THREE.Mesh(new THREE.BoxGeometry(9.2, 0.4, 11.4), mats.travertine);
   podium.position.y = 0.2;
@@ -308,11 +311,12 @@ export function createLibraryAndVendor(
     maxZ: libZ + 5.7,
   });
 
-  // B. Mendil & Lif Satıcısı (on sidewalk at [-21.4, 0, 21.5], facing Kent Meydanı)
+  // B. Mendil & Lif Satıcısı (on sidewalk at [-21.4, y, 21.5], facing Kent Meydanı)
   const vx = -21.4;
   const vz = 21.5;
+  const vy = getWalkableSurfaceHeightAt(vx, vz);
   const vendor = new THREE.Group();
-  vendor.position.set(vx, 0, vz);
+  vendor.position.set(vx, vy, vz);
   vendor.rotation.y = Math.PI / 2; // Facing East toward Kent Meydanı
 
   const vendorRig = createSculptedHumanRig(
@@ -381,7 +385,7 @@ export function createLibraryAndVendor(
     group,
     clickTarget,
     vendorPos: [vx, vz],
-    headWorldPos: new THREE.Vector3(vx, 1.75, vz),
+    headWorldPos: new THREE.Vector3(vx, vy + 1.75, vz),
     isBubbleVisible: () => bubbleTimer > 0,
     triggerBubble: () => {
       bubbleTimer = 7.5;
@@ -414,7 +418,8 @@ export function createBeyCamiiLokmaStand(
   const group = new THREE.Group();
   const lx = 33.8;
   const lz = -26.8;
-  group.position.set(lx, 0, lz);
+  const ly = getWalkableSurfaceHeightAt(lx, lz);
+  group.position.set(lx, ly, lz);
 
   // Stone Serving Counter Base
   const counter = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.92, 1.35), mats.travertine);
@@ -472,7 +477,7 @@ export function createBeyCamiiLokmaStand(
     },
     { forwardIsNegZ: false }
   );
-  attendantRig.root.position.set(-0.2, 0, -1.0);
+  attendantRig.root.position.set(-0.2, getWalkableSurfaceHeightAt(lx - 0.2, lz - 1.0) - ly, -1.0);
   group.add(attendantRig.root);
 
   // Subtle Warm Steam Puffs over Cauldron
@@ -498,9 +503,11 @@ export function createBeyCamiiLokmaStand(
     emissive: new THREE.Color(0xe6a135),
     emissiveIntensity: 0.6,
     side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
   });
   const ring = new THREE.Mesh(ringGeo, ringMat);
-  ring.position.set(0, 0.08, 1.75);
+  ring.position.set(0, Math.max(0.06, getWalkableSurfaceHeightAt(lx, lz + 1.75) - ly + 0.08), 1.75);
   group.add(ring);
 
   const clickTarget = makeClickProxy(1.8, 2.0, 'lokma');

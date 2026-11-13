@@ -6,6 +6,7 @@ import { ErrandDef, LandmarkDef } from '../types/game';
 
 interface JournalModalProps {
   discoveredIds: string[];
+  completedErrandIds?: string[];
   activeErrand: ErrandDef | null;
   errandPickedUp: boolean;
   onSelectErrand: (errand: ErrandDef | null) => void;
@@ -15,6 +16,7 @@ interface JournalModalProps {
 
 export function JournalModal({
   discoveredIds,
+  completedErrandIds = [],
   activeErrand,
   errandPickedUp,
   onSelectErrand,
@@ -168,6 +170,7 @@ export function JournalModal({
             <div className="space-y-3">
               {COZY_ERRANDS.map((err) => {
                 const isActive = activeErrand?.id === err.id;
+                const isCompleted = completedErrandIds.includes(err.id);
                 const fromName =
                   LANDMARKS.find((l) => l.id === err.fromLandmarkId)?.name || '';
                 const toName =
@@ -178,11 +181,17 @@ export function JournalModal({
                     className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-xl p-4 bg-[#FAF3E6] border border-[#B99464]/50 shadow-sm"
                   >
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2 text-xs text-[#B84C27] font-semibold">
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-[#B84C27] font-semibold">
                         <Package className="w-3.5 h-3.5" aria-hidden="true" />
                         <span>
                           {fromName} → {toName}
                         </span>
+                        {isCompleted && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#5D8A48]/15 text-[#456D36] text-[11px] font-bold">
+                            <Check className="w-3 h-3" aria-hidden="true" />
+                            <span>Tamamlandı · Rozet Kazanıldı</span>
+                          </span>
+                        )}
                       </div>
                       <h3 className="font-display text-base font-bold text-[#3A2618]">
                         {err.title}

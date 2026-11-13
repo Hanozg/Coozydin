@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { ColliderBox, LandmarkDef } from '../types/game';
 import { CityMaterialLibrary } from './materials';
 import { createGableRoofGeometry, createHipRoofGeometry } from './roofGeometry';
-import { getSurfaceHeightAt, getTerrainHeightAt } from './terrain';
+import { getTerrainHeightAt, getWalkableSurfaceHeightAt } from './terrain';
 
 export interface BuiltLandmark {
   def: LandmarkDef;
@@ -38,10 +38,10 @@ function makeDiscoveryRing(x: number, z: number): THREE.Mesh {
     roughness: 0.3,
     side: THREE.DoubleSide,
     polygonOffset: true,
-    polygonOffsetFactor: -2,
+    polygonOffsetFactor: -3,
   });
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(x, getSurfaceHeightAt(x, z) + 0.09, z);
+  mesh.position.set(x, getWalkableSurfaceHeightAt(x, z) + 0.08, z);
   return mesh;
 }
 

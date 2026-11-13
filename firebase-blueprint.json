@@ -1,0 +1,104 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Oyuncunun Efeler: Aydın Yolları profili, puanları, keşifleri, ev dış cephe tercihi ve oda mobilya tasarımları.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth kullanıcı kimliği.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Oyuncunun profil adı.",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "avatarEmoji": {
+          "type": "string",
+          "description": "Profil rozeti ikonu.",
+          "minLength": 1,
+          "maxLength": 12
+        },
+        "coins": {
+          "type": "integer",
+          "description": "Kazanılan İncir Puanı."
+        },
+        "lokmaPower": {
+          "type": "integer",
+          "description": "Mobilya mağazasında harcanabilir Lokma Puanı."
+        },
+        "discoveredIds": {
+          "type": "array",
+          "description": "Keşfedilen tarihi yapıların kimlik listesi."
+        },
+        "completedErrandIds": {
+          "type": "array",
+          "description": "Tamamlanan sakin görevlerin kimlik listesi."
+        },
+        "chattedNpcIds": {
+          "type": "array",
+          "description": "Sohbet edilen esnaf/NPC kimlik listesi."
+        },
+        "unlockedFurnitureStyles": {
+          "type": "array",
+          "description": "Lokma puanı ile satın alınan mobilya görünüm kimlikleri."
+        },
+        "vehicleConfig": {
+          "type": "object",
+          "description": "Seçili araç tipi, rengi ve aksesuar ayarları."
+        },
+        "houseExterior": {
+          "type": "object",
+          "description": "Oyuncunun evinin seçili mimari stili ve dış cephe boya renkleri."
+        },
+        "cozyRoomState": {
+          "type": "object",
+          "description": "Oda duvar/zemin rengi, evcil hayvanlar, avatar ve mobilya yerleşimi."
+        },
+        "agendaNotes": {
+          "type": "array",
+          "description": "Oyuncunun masa ajandasına eklediği notlar."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Profil oluşturulma zamanı."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Son kayıt güncelleme zamanı."
+        }
+      },
+      "required": [
+        "uid",
+        "displayName",
+        "avatarEmoji",
+        "coins",
+        "lokmaPower",
+        "discoveredIds",
+        "chattedNpcIds",
+        "unlockedFurnitureStyles",
+        "vehicleConfig",
+        "houseExterior",
+        "cozyRoomState",
+        "agendaNotes",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Her kullanıcıya ait özel oyun profili ve ilerleme kaydı."
+    }
+  }
+}

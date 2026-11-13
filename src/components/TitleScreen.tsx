@@ -1,13 +1,25 @@
 import { useEffect } from 'react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, User } from 'lucide-react';
 
 interface TitleScreenProps {
+  profileName?: string;
+  profileEmoji?: string;
+  isCloudSignedIn?: boolean;
   onStart: () => void;
+  onOpenProfile?: () => void;
 }
 
-export function TitleScreen({ onStart }: TitleScreenProps) {
+export function TitleScreen({
+  profileName = 'Efeler Gezgini',
+  profileEmoji = '🏡',
+  isCloudSignedIn = false,
+  onStart,
+  onOpenProfile,
+}: TitleScreenProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if (e.code === 'Enter' || e.code === 'Space') {
         e.preventDefault();
         onStart();
@@ -76,14 +88,33 @@ export function TitleScreen({ onStart }: TitleScreenProps) {
           tarihi dokuyu özelleştirilebilir araba, bisiklet veya motosikletinizle sokak sokak keşfedin.
         </p>
 
-        <button
-          type="button"
-          onClick={onStart}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-3 px-6 sm:px-7 py-3.5 rounded-xl bg-[#C85A32] hover:bg-[#B44D28] active:scale-[0.98] text-[#FAF2E2] font-semibold text-sm md:text-base shadow-md transition-all duration-150 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3A2618]"
-        >
-          <span>Sürüşe Başla</span>
-          <ArrowRight className="w-4 h-4" aria-hidden="true" />
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={onStart}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-3 px-6 sm:px-7 py-3.5 rounded-xl bg-[#C85A32] hover:bg-[#B44D28] active:scale-[0.98] text-[#FAF2E2] font-semibold text-sm md:text-base shadow-md transition-all duration-150 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3A2618]"
+          >
+            <span>Sürüşe Başla</span>
+            <ArrowRight className="w-4 h-4" aria-hidden="true" />
+          </button>
+
+          {onOpenProfile && (
+            <button
+              type="button"
+              onClick={onOpenProfile}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-[#EFE0C3] hover:bg-[#E4D1AE] border-2 border-[#B99464] text-[#3A2618] font-semibold text-xs sm:text-sm shadow-sm transition-colors cursor-pointer"
+            >
+              <span key={profileEmoji} aria-hidden="true">
+                {profileEmoji}
+              </span>
+              <User className="w-3.5 h-3.5 text-[#6B5038]" aria-hidden="true" />
+              <span className="truncate max-w-[140px]">{profileName}</span>
+              {isCloudSignedIn && (
+                <span className="w-2 h-2 rounded-full bg-[#5D8A48]" aria-hidden="true" />
+              )}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Single flat control-hint line */}

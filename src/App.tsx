@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { onAuthStateChanged, User } from 'firebase/auth';
 import { AgendaModal } from './components/AgendaModal';
 import { CozyRoomView } from './components/CozyRoomView';
 import { EfelerCanvas, EfelerCanvasHandle, TouchDriveInput } from './components/EfelerCanvas';
@@ -7,15 +8,26 @@ import { GameHUD } from './components/GameHUD';
 import { JournalModal } from './components/JournalModal';
 import { NpcDialogueModal } from './components/NpcDialogueModal';
 import { PauseModal } from './components/PauseModal';
+import { ProfileModal } from './components/ProfileModal';
 import { RealAydinMapModal } from './components/RealAydinMapModal';
 import { TitleScreen } from './components/TitleScreen';
 import {
   DEFAULT_AVATAR_CONFIG,
   DEFAULT_COZY_ROOM_STATE,
+  DEFAULT_HOUSE_EXTERIOR,
+  DEFAULT_UNLOCKED_FURNITURE_STYLES,
   DEFAULT_VEHICLE_CONFIG,
   LANDMARKS,
 } from './data/efelerData';
 import { audioEngine } from './game/audioEngine';
+import { auth } from './services/firebase';
+import {
+  loadCloudProfile,
+  loadLocalSavePayload,
+  sanitizeUserSavePayload,
+  saveCloudProfile,
+  saveLocalSavePayload,
+} from './services/profileService';
 import {
   AgendaNote,
   BuildingNpcDef,
@@ -23,7 +35,9 @@ import {
   CozyRoomState,
   ErrandDef,
   ExplorationMode,
+  FurnitureStyleDef,
   GamePhase,
+  HouseExteriorConfig,
   LandmarkDef,
   LofiTrackId,
   NpcActionOption,
@@ -31,12 +45,13 @@ import {
   SeasonType,
   StreetInteractionType,
   TimeOfDay,
+  UserSavePayload,
   VehicleConfig,
   WeatherType,
 } from './types/game';
 
-const ROOM_STORAGE_KEY = 'efeler_cozy_room_v1';
-const AGENDA_STORAGE_KEY = 'efeler_agenda_notes_v1';
+const LEGACY_ROOM_STORAGE_KEY = 'efeler_cozy_room_v1';
+const LEGACY_AGENDA_STORAGE_KEY = 'efeler_agenda_notes_v1';
 
 const INITIAL_HUD: PlayerHudSnapshot = {
   speedKmh: 0,
@@ -55,41 +70,60 @@ const INITIAL_HUD: PlayerHudSnapshot = {
   heldTreat: 'none',
 };
 
-function loadSavedRoomState(): CozyRoomState {
-  try {
-    const raw = localStorage.getItem(ROOM_STORAGE_KEY);
-    if (!raw) return DEFAULT_COZY_ROOM_STATE;
-    const parsed = JSON.parse(raw) as Partial<CozyRoomState>;
-    return {
-      ...DEFAULT_COZY_ROOM_STATE,
-      ...parsed,
-      avatarPlaced: parsed.avatarPlaced ?? DEFAULT_COZY_ROOM_STATE.avatarPlaced,
-      avatarConfig: {
-        ...DEFAULT_AVATAR_CONFIG,
-        ...(parsed.avatarConfig || {}),
-      },
-      furniture:
-        Array.isArray(parsed.furniture) && parsed.furniture.length > 0
-          ? parsed.furniture
-          : DEFAULT_COZY_ROOM_STATE.furniture,
-    };
-  } catch {
-    return DEFAULT_COZY_ROOM_STATE;
-  }
-}
+function loadInitialPlayerSave(): UserSavePayload {
+  const saved = loadLocalSavePayload();
+  if (saved) return saved;
 
-function loadSavedAgendaNotes(): AgendaNote[] {
+  let legacyRoom: Partial<CozyRoomState> | undefined;
+  let legacyAgenda: AgendaNote[] = [];
   try {
-    const raw = localStorage.getItem(AGENDA_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as AgendaNote[];
-    return Array.isArray(parsed) ? parsed : [];
+    const rawRoom = localStorage.getItem(LEGACY_ROOM_STORAGE_KEY);
+    if (rawRoom) legacyRoom = JSON.parse(rawRoom) as Partial<CozyRoomState>;
   } catch {
-    return [];
+    // Ignore parse errors
   }
+  try {
+    const rawAgenda = localStorage.getItem(LEGACY_AGENDA_STORAGE_KEY);
+    if (rawAgenda) {
+      const parsed = JSON.parse(rawAgenda) as AgendaNote[];
+      if (Array.isArray(parsed)) legacyAgenda = parsed;
+    }
+  } catch {
+    // Ignore parse errors
+  }
+
+  return sanitizeUserSavePayload({
+    displayName: 'Efeler Gezgini',
+    avatarEmoji: '🏡',
+    coins: 0,
+    lokmaPower: 2,
+    discoveredIds: [],
+    completedErrandIds: [],
+    chattedNpcIds: [],
+    unlockedFurnitureStyles: DEFAULT_UNLOCKED_FURNITURE_STYLES,
+    vehicleConfig: DEFAULT_VEHICLE_CONFIG,
+    houseExterior: DEFAULT_HOUSE_EXTERIOR,
+    cozyRoomState: legacyRoom
+      ? {
+          ...DEFAULT_COZY_ROOM_STATE,
+          ...legacyRoom,
+          avatarConfig: {
+            ...DEFAULT_AVATAR_CONFIG,
+            ...(legacyRoom.avatarConfig || {}),
+          },
+          furniture:
+            Array.isArray(legacyRoom.furniture) && legacyRoom.furniture.length > 0
+              ? legacyRoom.furniture
+              : DEFAULT_COZY_ROOM_STATE.furniture,
+        }
+      : DEFAULT_COZY_ROOM_STATE,
+    agendaNotes: legacyAgenda,
+  });
 }
 
 export default function App() {
+  const initialSave = useMemo(() => loadInitialPlayerSave(), []);
+
   const canvasRef = useRef<EfelerCanvasHandle | null>(null);
   const lastTransformRef = useRef<{ x: number; z: number; heading: number }>({
     x: -18,
@@ -102,13 +136,31 @@ export default function App() {
   const [journalOpen, setJournalOpen] = useState(false);
   const [realMapOpen, setRealMapOpen] = useState(false);
   const [agendaOpen, setAgendaOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [activeNpc, setActiveNpc] = useState<BuildingNpcDef | null>(null);
   const [activeNpcIsFirstChat, setActiveNpcIsFirstChat] = useState(false);
-  const [chattedNpcIds, setChattedNpcIds] = useState<string[]>([]);
   const [quotaExceeded, setQuotaExceeded] = useState(false);
 
+  const [displayName, setDisplayName] = useState<string>(initialSave.displayName);
+  const [avatarEmoji, setAvatarEmoji] = useState<string>(initialSave.avatarEmoji);
+  const [chattedNpcIds, setChattedNpcIds] = useState<string[]>(initialSave.chattedNpcIds);
+  const [discoveredIds, setDiscoveredIds] = useState<string[]>(initialSave.discoveredIds);
+  const [completedErrandIds, setCompletedErrandIds] = useState<string[]>(
+    initialSave.completedErrandIds
+  );
+  const [coins, setCoins] = useState<number>(initialSave.coins);
+  const [lokmaPower, setLokmaPower] = useState<number>(initialSave.lokmaPower);
+  const [unlockedFurnitureStyles, setUnlockedFurnitureStyles] = useState<string[]>(
+    initialSave.unlockedFurnitureStyles
+  );
+  const [vehicleConfig, setVehicleConfig] = useState<VehicleConfig>(initialSave.vehicleConfig);
+  const [houseExterior, setHouseExterior] = useState<HouseExteriorConfig>(
+    initialSave.houseExterior
+  );
+  const [cozyRoomState, setCozyRoomState] = useState<CozyRoomState>(initialSave.cozyRoomState);
+  const [agendaNotes, setAgendaNotes] = useState<AgendaNote[]>(initialSave.agendaNotes);
+
   const [explorationMode, setExplorationMode] = useState<ExplorationMode>('vehicle');
-  const [vehicleConfig, setVehicleConfig] = useState<VehicleConfig>(DEFAULT_VEHICLE_CONFIG);
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('golden');
   const [season, setSeason] = useState<SeasonType>('spring');
   const [weather, setWeather] = useState<WeatherType>('clear');
@@ -116,12 +168,6 @@ export default function App() {
   const [lofiTrack, setLofiTrack] = useState<LofiTrackId>('aegean');
   const [cameraPreset, setCameraPreset] = useState<CameraPreset>('isometric');
 
-  const [cozyRoomState, setCozyRoomState] = useState<CozyRoomState>(loadSavedRoomState);
-  const [agendaNotes, setAgendaNotes] = useState<AgendaNote[]>(loadSavedAgendaNotes);
-
-  const [discoveredIds, setDiscoveredIds] = useState<string[]>([]);
-  const [coins, setCoins] = useState(0);
-  const [lokmaPower, setLokmaPower] = useState(0);
   const [activeErrand, setActiveErrand] = useState<ErrandDef | null>(null);
   const [errandPickedUp, setErrandPickedUp] = useState(false);
 
@@ -132,23 +178,209 @@ export default function App() {
   const [isMuted, setIsMuted] = useState(false);
   const [musicEnabled, setMusicEnabled] = useState(true);
 
+  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const [cloudSyncing, setCloudSyncing] = useState(false);
+  const [cloudStatusMessage, setCloudStatusMessage] = useState<string | null>(null);
+  const [cloudErrorMessage, setCloudErrorMessage] = useState<string | null>(null);
+
+  const cloudHydratedRef = useRef(false);
   const toastTimerRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(ROOM_STORAGE_KEY, JSON.stringify(cozyRoomState));
-    } catch {
-      // Ignore storage quota errors
-    }
-  }, [cozyRoomState]);
+  const currentPayload = useMemo<UserSavePayload>(
+    () =>
+      sanitizeUserSavePayload({
+        displayName,
+        avatarEmoji,
+        coins,
+        lokmaPower,
+        discoveredIds,
+        completedErrandIds,
+        chattedNpcIds,
+        unlockedFurnitureStyles,
+        vehicleConfig,
+        houseExterior,
+        cozyRoomState,
+        agendaNotes,
+      }),
+    [
+      agendaNotes,
+      avatarEmoji,
+      chattedNpcIds,
+      coins,
+      completedErrandIds,
+      cozyRoomState,
+      discoveredIds,
+      displayName,
+      houseExterior,
+      lokmaPower,
+      unlockedFurnitureStyles,
+      vehicleConfig,
+    ]
+  );
 
+  const latestPayloadRef = useRef<UserSavePayload>(currentPayload);
+  latestPayloadRef.current = currentPayload;
+
+  const applySavePayload = useCallback((data: UserSavePayload) => {
+    setDisplayName(data.displayName);
+    setAvatarEmoji(data.avatarEmoji);
+    setCoins(data.coins);
+    setLokmaPower(data.lokmaPower);
+    setDiscoveredIds(data.discoveredIds);
+    setCompletedErrandIds(data.completedErrandIds);
+    setChattedNpcIds(data.chattedNpcIds);
+    setUnlockedFurnitureStyles(data.unlockedFurnitureStyles);
+    setVehicleConfig(data.vehicleConfig);
+    setHouseExterior(data.houseExterior);
+    setCozyRoomState(data.cozyRoomState);
+    setAgendaNotes(data.agendaNotes);
+  }, []);
+
+  // Local auto-save (immediate debounce)
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      saveLocalSavePayload(currentPayload);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [currentPayload]);
+
+  // Firebase Auth listener & initial cloud hydration
+  useEffect(() => {
+    let active = true;
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!active) return;
+      setFirebaseUser(user);
+      setCloudErrorMessage(null);
+
+      if (!user) {
+        cloudHydratedRef.current = false;
+        setCloudStatusMessage(null);
+        return;
+      }
+
+      setCloudSyncing(true);
+      try {
+        const cloudData = await loadCloudProfile(user.uid);
+        if (!active) return;
+        const local = latestPayloadRef.current;
+
+        if (!cloudData) {
+          const initialName =
+            local.displayName === 'Efeler Gezgini' && user.displayName
+              ? user.displayName.slice(0, 40)
+              : local.displayName;
+          const seeded = sanitizeUserSavePayload({
+            ...local,
+            displayName: initialName,
+          });
+          applySavePayload(seeded);
+          await saveCloudProfile(user.uid, seeded);
+          if (!active) return;
+          setCloudStatusMessage('Yeni bulut profili oluşturuldu ve puanların kaydedildi.');
+        } else {
+          const merged = sanitizeUserSavePayload({
+            ...cloudData,
+            displayName:
+              cloudData.displayName === 'Efeler Gezgini' &&
+              local.displayName !== 'Efeler Gezgini'
+                ? local.displayName
+                : cloudData.displayName,
+            coins: Math.max(cloudData.coins, local.coins),
+            lokmaPower: Math.max(cloudData.lokmaPower, local.lokmaPower),
+            discoveredIds: Array.from(
+              new Set([...cloudData.discoveredIds, ...local.discoveredIds])
+            ),
+            completedErrandIds: Array.from(
+              new Set([...(cloudData.completedErrandIds || []), ...local.completedErrandIds])
+            ),
+            chattedNpcIds: Array.from(
+              new Set([...cloudData.chattedNpcIds, ...local.chattedNpcIds])
+            ),
+            unlockedFurnitureStyles: Array.from(
+              new Set([...cloudData.unlockedFurnitureStyles, ...local.unlockedFurnitureStyles])
+            ),
+          });
+          applySavePayload(merged);
+          setCloudStatusMessage('Bulut profilin yüklendi.');
+        }
+        cloudHydratedRef.current = true;
+      } catch {
+        if (!active) return;
+        cloudHydratedRef.current = true;
+        setCloudErrorMessage('Bulut profiline erişilemedi. Yerel kaydınız aktif.');
+      } finally {
+        if (active) setCloudSyncing(false);
+      }
+    });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [applySavePayload]);
+
+  // Debounced cloud auto-save when signed in
+  useEffect(() => {
+    if (!firebaseUser || !cloudHydratedRef.current) return;
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        await saveCloudProfile(firebaseUser.uid, currentPayload);
+        if (!cancelled) {
+          const now = new Date();
+          const hh = String(now.getHours()).padStart(2, '0');
+          const mm = String(now.getMinutes()).padStart(2, '0');
+          setCloudStatusMessage(`Buluta otomatik kaydedildi (${hh}:${mm}).`);
+          setCloudErrorMessage(null);
+        }
+      } catch {
+        if (!cancelled) {
+          setCloudErrorMessage('Bulut kaydı güncellenemedi; yerel kaydınız güvende.');
+        }
+      }
+    }, 2200);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [currentPayload, firebaseUser]);
+
+  const handleManualCloudSave = useCallback(async () => {
+    if (!firebaseUser) return;
+    setCloudSyncing(true);
+    setCloudErrorMessage(null);
     try {
-      localStorage.setItem(AGENDA_STORAGE_KEY, JSON.stringify(agendaNotes));
+      await saveCloudProfile(firebaseUser.uid, latestPayloadRef.current);
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      setCloudStatusMessage(`Buluta başarıyla kaydedildi (${hh}:${mm}).`);
     } catch {
-      // Ignore storage quota errors
+      setCloudErrorMessage('Buluta kaydedilirken bir hata oluştu.');
+    } finally {
+      setCloudSyncing(false);
     }
-  }, [agendaNotes]);
+  }, [firebaseUser]);
+
+  const handleManualCloudLoad = useCallback(async () => {
+    if (!firebaseUser) return;
+    setCloudSyncing(true);
+    setCloudErrorMessage(null);
+    try {
+      const cloudData = await loadCloudProfile(firebaseUser.uid);
+      if (cloudData) {
+        applySavePayload(cloudData);
+        setCloudStatusMessage('Buluttaki son kayıtlı profil yüklendi.');
+      } else {
+        setCloudStatusMessage('Bulutta henüz kayıt bulunamadı.');
+      }
+    } catch {
+      setCloudErrorMessage('Buluttan yükleme başarısız oldu.');
+    } finally {
+      setCloudSyncing(false);
+    }
+  }, [applySavePayload, firebaseUser]);
 
   useEffect(() => {
     const onQuotaExceeded = () => setQuotaExceeded(true);
@@ -212,6 +444,7 @@ export default function App() {
       setDiscoveredIds((prev) => {
         if (prev.includes(lm.id)) return prev;
         setCoins((c) => c + lm.rewardCoins);
+        setLokmaPower((p) => p + 1);
         showDiscoveryToast(lm);
         return [...prev, lm.id];
       });
@@ -229,14 +462,21 @@ export default function App() {
         showErrandToast(`${activeErrand.title} alındı! Şimdi ${destName} noktasına sürün.`);
       } else if (errandPickedUp && activeErrand.toLandmarkId === landmarkId) {
         setCoins((c) => c + activeErrand.rewardCoins);
+        setLokmaPower((p) => p + 2);
+        const isFirstCompletion = !completedErrandIds.includes(activeErrand.id);
+        setCompletedErrandIds((prev) =>
+          prev.includes(activeErrand.id) ? prev : [...prev, activeErrand.id]
+        );
         showErrandToast(
-          `Görev tamamlandı: ${activeErrand.title} (+${activeErrand.rewardCoins} İncir Puanı)`
+          isFirstCompletion
+            ? `Görev tamamlandı: ${activeErrand.title} (+${activeErrand.rewardCoins} İncir, +2 Lokma · Efeler Gezgini Rozeti Kazanıldı!)`
+            : `Görev tamamlandı: ${activeErrand.title} (+${activeErrand.rewardCoins} İncir, +2 Lokma)`
         );
         setActiveErrand(null);
         setErrandPickedUp(false);
       }
     },
-    [activeErrand, errandPickedUp, showErrandToast]
+    [activeErrand, completedErrandIds, errandPickedUp, showErrandToast]
   );
 
   const handleInspectSignpost = useCallback(() => {
@@ -254,12 +494,54 @@ export default function App() {
         );
       } else if (type === 'lokma') {
         setLokmaPower((p) => p + 1);
-        showErrandToast('Bey Camii önünden taze hayır lokması aldınız! +1 Lokma Gücü');
+        showErrandToast('Bey Camii önünden taze hayır lokması aldınız! +1 Lokma Puanı');
       } else if (type === 'vendor') {
         showErrandToast('“Islak mendil, lif ister misiniz? Buyurun!”');
       }
     },
     [showErrandToast]
+  );
+
+  const handlePurchaseFurnitureStyle = useCallback(
+    (item: FurnitureStyleDef): boolean => {
+      const alreadyOwned =
+        item.priceLokma === 0 || unlockedFurnitureStyles.includes(item.key);
+
+      if (alreadyOwned) {
+        audioEngine.init();
+        audioEngine.playDiscoveryChime();
+        setCozyRoomState((prev) => ({
+          ...prev,
+          furniture: prev.furniture.map((f) =>
+            f.id === item.furnitureId ? { ...f, enabled: true, styleId: item.styleId } : f
+          ),
+        }));
+        return true;
+      }
+
+      if (lokmaPower < item.priceLokma) {
+        showErrandToast(
+          `Bu mobilya için ${item.priceLokma} Lokma Puanı gerekli (Bey Camii veya keşiflerden kazanabilirsiniz).`
+        );
+        return false;
+      }
+
+      audioEngine.init();
+      audioEngine.playDiscoveryChime();
+      setLokmaPower((p) => Math.max(0, p - item.priceLokma));
+      setUnlockedFurnitureStyles((prev) =>
+        prev.includes(item.key) ? prev : [...prev, item.key]
+      );
+      setCozyRoomState((prev) => ({
+        ...prev,
+        furniture: prev.furniture.map((f) =>
+          f.id === item.furnitureId ? { ...f, enabled: true, styleId: item.styleId } : f
+        ),
+      }));
+      showErrandToast(`${item.name} satın alındı ve odaya yerleştirildi!`);
+      return true;
+    },
+    [lokmaPower, showErrandToast, unlockedFurnitureStyles]
   );
 
   const handleInteractNpc = useCallback(
@@ -343,6 +625,7 @@ export default function App() {
     canvasRef.current?.teleportTo(tx, tz, heading);
     setJournalOpen(false);
     setRealMapOpen(false);
+    setProfileOpen(false);
     setInHome(false);
     setPhase('playing');
   }, []);
@@ -378,6 +661,7 @@ export default function App() {
     });
     setJournalOpen(false);
     setRealMapOpen(false);
+    setProfileOpen(false);
     setInHome(true);
   }, [vehicleConfig.type]);
 
@@ -403,9 +687,12 @@ export default function App() {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      const typing = document.activeElement?.tagName === 'INPUT';
+      const tag = document.activeElement?.tagName;
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA';
       if (e.code === 'Escape') {
-        if (agendaOpen) {
+        if (profileOpen) {
+          setProfileOpen(false);
+        } else if (agendaOpen) {
           setAgendaOpen(false);
         } else if (activeNpc) {
           setActiveNpc(null);
@@ -425,6 +712,7 @@ export default function App() {
         phase === 'playing' &&
         !inHome &&
         !realMapOpen &&
+        !profileOpen &&
         !activeNpc &&
         !typing
       ) {
@@ -435,6 +723,7 @@ export default function App() {
         !inHome &&
         !journalOpen &&
         !agendaOpen &&
+        !profileOpen &&
         !activeNpc &&
         !typing
       ) {
@@ -446,6 +735,7 @@ export default function App() {
         !journalOpen &&
         !realMapOpen &&
         !agendaOpen &&
+        !profileOpen &&
         !activeNpc &&
         !typing
       ) {
@@ -459,6 +749,7 @@ export default function App() {
         !journalOpen &&
         !realMapOpen &&
         !agendaOpen &&
+        !profileOpen &&
         !activeNpc &&
         !typing
       ) {
@@ -469,7 +760,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [activeNpc, agendaOpen, inHome, journalOpen, phase, realMapOpen]);
+  }, [activeNpc, agendaOpen, inHome, journalOpen, phase, profileOpen, realMapOpen]);
 
   useEffect(() => {
     return () => {
@@ -479,7 +770,9 @@ export default function App() {
   }, []);
 
   const effectivePhase: GamePhase =
-    (journalOpen || realMapOpen || Boolean(activeNpc)) && phase === 'playing' ? 'paused' : phase;
+    (journalOpen || realMapOpen || profileOpen || Boolean(activeNpc)) && phase === 'playing'
+      ? 'paused'
+      : phase;
 
   const handleTouchInput = useCallback((next: Partial<TouchDriveInput>) => {
     if (next.forward || next.backward || next.left || next.right) {
@@ -522,6 +815,7 @@ export default function App() {
             explorationMode={explorationMode}
             avatarConfig={cozyRoomState.avatarConfig || DEFAULT_AVATAR_CONFIG}
             vehicleConfig={vehicleConfig}
+            houseExterior={houseExterior}
             timeOfDay={timeOfDay}
             season={season}
             weather={weather}
@@ -553,11 +847,16 @@ export default function App() {
         >
           <CozyRoomView
             roomState={cozyRoomState}
+            houseExterior={houseExterior}
+            lokmaPower={lokmaPower}
+            unlockedFurnitureStyles={unlockedFurnitureStyles}
             weather={weather}
             lofiTrack={lofiTrack}
             isMuted={isMuted}
             musicEnabled={musicEnabled}
             onChangeRoomState={setCozyRoomState}
+            onChangeHouseExterior={setHouseExterior}
+            onPurchaseFurnitureStyle={handlePurchaseFurnitureStyle}
             onChangeWeather={handleChangeWeather}
             onChangeLofiTrack={handleChangeLofiTrack}
             onToggleMute={handleToggleMute}
@@ -568,13 +867,25 @@ export default function App() {
         </ErrorBoundary>
       )}
 
-      {phase === 'title' && !inHome && <TitleScreen onStart={handleStartGame} />}
+      {phase === 'title' && !inHome && (
+        <TitleScreen
+          profileName={displayName}
+          profileEmoji={avatarEmoji}
+          isCloudSignedIn={Boolean(firebaseUser)}
+          onStart={handleStartGame}
+          onOpenProfile={() => setProfileOpen(true)}
+        />
+      )}
 
       {phase === 'playing' && !journalOpen && !realMapOpen && !activeNpc && !inHome && (
         <GameHUD
           hud={hud}
           explorationMode={explorationMode}
           vehicleConfig={vehicleConfig}
+          houseExterior={houseExterior}
+          profileName={displayName}
+          profileEmoji={avatarEmoji}
+          isCloudSignedIn={Boolean(firebaseUser)}
           timeOfDay={timeOfDay}
           season={season}
           weather={weather}
@@ -598,6 +909,7 @@ export default function App() {
             audioEngine.init();
             setVehicleConfig(next);
           }}
+          onChangeHouseExterior={setHouseExterior}
           onChangeTimeOfDay={setTimeOfDay}
           onChangeSeason={setSeason}
           onChangeWeather={handleChangeWeather}
@@ -609,6 +921,7 @@ export default function App() {
           onToggleMusic={handleToggleMusic}
           onOpenJournal={() => setJournalOpen(true)}
           onOpenRealMap={() => setRealMapOpen(true)}
+          onOpenProfile={() => setProfileOpen(true)}
           onEnterHome={handleEnterHome}
           onPause={() => {
             canvasRef.current?.setTouchInput({
@@ -642,6 +955,7 @@ export default function App() {
       {journalOpen && !inHome && (
         <JournalModal
           discoveredIds={discoveredIds}
+          completedErrandIds={completedErrandIds}
           activeErrand={activeErrand}
           errandPickedUp={errandPickedUp}
           onSelectErrand={(err) => {
@@ -677,19 +991,47 @@ export default function App() {
         />
       )}
 
-      {phase === 'paused' && !journalOpen && !realMapOpen && !activeNpc && !inHome && (
-        <PauseModal
-          discoveredCount={discoveredIds.length}
-          totalLandmarks={LANDMARKS.length}
+      {profileOpen && (
+        <ProfileModal
+          displayName={displayName}
+          avatarEmoji={avatarEmoji}
           coins={coins}
-          onResume={() => setPhase('playing')}
-          onResetPosition={() => {
-            canvasRef.current?.teleportTo(-18, 27, 0);
-            setPhase('playing');
-          }}
-          onReturnTitle={() => setPhase('title')}
+          lokmaPower={lokmaPower}
+          discoveredIds={discoveredIds}
+          completedErrandIds={completedErrandIds}
+          chattedNpcCount={chattedNpcIds.length}
+          unlockedStyleCount={unlockedFurnitureStyles.length}
+          houseExterior={houseExterior}
+          firebaseUser={firebaseUser}
+          cloudSyncing={cloudSyncing}
+          cloudStatusMessage={cloudStatusMessage}
+          cloudErrorMessage={cloudErrorMessage}
+          onChangeDisplayName={(next) => setDisplayName(next.slice(0, 40))}
+          onChangeAvatarEmoji={setAvatarEmoji}
+          onManualCloudSave={handleManualCloudSave}
+          onManualCloudLoad={handleManualCloudLoad}
+          onClose={() => setProfileOpen(false)}
         />
       )}
+
+      {phase === 'paused' &&
+        !journalOpen &&
+        !realMapOpen &&
+        !profileOpen &&
+        !activeNpc &&
+        !inHome && (
+          <PauseModal
+            discoveredCount={discoveredIds.length}
+            totalLandmarks={LANDMARKS.length}
+            coins={coins}
+            onResume={() => setPhase('playing')}
+            onResetPosition={() => {
+              canvasRef.current?.teleportTo(-18, 27, 0);
+              setPhase('playing');
+            }}
+            onReturnTitle={() => setPhase('title')}
+          />
+        )}
     </main>
   );
 }

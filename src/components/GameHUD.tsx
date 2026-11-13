@@ -35,6 +35,10 @@ import { TouchDriveInput } from './EfelerCanvas';
 import {
   ACCENT_SWATCHES,
   getFigTreeStage,
+  HOUSE_ROOF_SWATCHES,
+  HOUSE_STYLE_OPTIONS,
+  HOUSE_TRIM_SWATCHES,
+  HOUSE_WALL_SWATCHES,
   LANDMARKS,
   LOFI_TRACKS,
   PAINT_SWATCHES,
@@ -48,6 +52,7 @@ import {
   ErrandDef,
   ExplorationMode,
   HeldTreatType,
+  HouseExteriorConfig,
   LandmarkDef,
   LofiTrackId,
   PlayerHudSnapshot,
@@ -70,6 +75,10 @@ interface GameHUDProps {
   hud: PlayerHudSnapshot;
   explorationMode: ExplorationMode;
   vehicleConfig: VehicleConfig;
+  houseExterior: HouseExteriorConfig;
+  profileName: string;
+  profileEmoji: string;
+  isCloudSignedIn: boolean;
   timeOfDay: TimeOfDay;
   season: SeasonType;
   weather: WeatherType;
@@ -87,6 +96,7 @@ interface GameHUDProps {
   musicEnabled: boolean;
   onChangeExplorationMode: (next: ExplorationMode) => void;
   onChangeVehicleConfig: (next: VehicleConfig) => void;
+  onChangeHouseExterior: (next: HouseExteriorConfig) => void;
   onChangeTimeOfDay: (next: TimeOfDay) => void;
   onChangeSeason: (next: SeasonType) => void;
   onChangeWeather: (next: WeatherType) => void;
@@ -98,6 +108,7 @@ interface GameHUDProps {
   onToggleMusic: () => void;
   onOpenJournal: () => void;
   onOpenRealMap: () => void;
+  onOpenProfile: () => void;
   onEnterHome: () => void;
   onPause: () => void;
   onDiscoverNearby: () => void;
@@ -111,6 +122,10 @@ export function GameHUD({
   hud,
   explorationMode,
   vehicleConfig,
+  houseExterior,
+  profileName,
+  profileEmoji,
+  isCloudSignedIn,
   timeOfDay,
   season,
   weather,
@@ -128,6 +143,7 @@ export function GameHUD({
   musicEnabled,
   onChangeExplorationMode,
   onChangeVehicleConfig,
+  onChangeHouseExterior,
   onChangeTimeOfDay,
   onChangeSeason,
   onChangeWeather,
@@ -139,6 +155,7 @@ export function GameHUD({
   onToggleMusic,
   onOpenJournal,
   onOpenRealMap,
+  onOpenProfile,
   onEnterHome,
   onPause,
   onDiscoverNearby,
@@ -148,7 +165,9 @@ export function GameHUD({
   onAdjustZoom,
 }: GameHUDProps) {
   const [dockCollapsed, setDockCollapsed] = useState(false);
-  const [activeDrawer, setActiveDrawer] = useState<'none' | 'garage' | 'atmosphere'>('none');
+  const [activeDrawer, setActiveDrawer] = useState<'none' | 'garage' | 'house' | 'atmosphere'>(
+    'none'
+  );
   const [touchControlsEnabled, setTouchControlsEnabled] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768;
@@ -254,6 +273,27 @@ export function GameHUD({
         {/* Top-Right Compact Parchment Action Ribbon */}
         <div className="flex flex-col items-end gap-1.5 sm:gap-2 pointer-events-auto shrink-0">
           <div className="flex items-center gap-1 sm:gap-1.5 rounded-2xl bg-[#F7EEDC]/96 border-2 border-[#B99464] p-1 sm:p-1.5 shadow-md">
+            <button
+              type="button"
+              onClick={onOpenProfile}
+              title="Profilim ve Bulut Kayıt"
+              aria-label="Profilim ve Bulut Kayıt"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#EFE0C3] hover:bg-[#E4D1AE] border border-[#B99464]/60 text-xs font-semibold text-[#3A2618] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <span key={profileEmoji} className="text-sm leading-none" aria-hidden="true">
+                {profileEmoji}
+              </span>
+              <span className="hidden md:inline max-w-[96px] truncate">{profileName}</span>
+              <span className="hidden sm:inline md:hidden">Profil</span>
+              {isCloudSignedIn && (
+                <span
+                  className="w-2 h-2 rounded-full bg-[#5D8A48] shrink-0"
+                  title="Bulut Kaydı Aktif"
+                  aria-hidden="true"
+                />
+              )}
+            </button>
+
             <button
               type="button"
               onClick={onEnterHome}
@@ -398,7 +438,8 @@ export function GameHUD({
           {recentlyDiscovered ? (
             <div key={`disc-${recentlyDiscovered.id}`}>
               <div className="text-xs text-[#B84C27] font-semibold">
-                Tarihi Yapı Keşfedildi · +{recentlyDiscovered.rewardCoins} İncir Puanı
+                Tarihi Yapı Keşfedildi · +{recentlyDiscovered.rewardCoins} İncir · +1 Lokma · Efeler
+                Gezgini Rozeti!
               </div>
               <div className="font-display text-base font-bold text-[#3A2618] mt-0.5">
                 {recentlyDiscovered.name}
@@ -440,15 +481,27 @@ export function GameHUD({
             </span>
           </button>
         ) : hud.nearPlayerHome ? (
-          <button
-            key="near-home"
-            type="button"
-            onClick={onEnterHome}
-            className="pointer-events-auto inline-flex items-center gap-2.5 px-5 py-2.5 rounded-xl bg-[#5D8A48] hover:bg-[#4F783C] border-2 border-[#FAF2E2]/80 text-[#FAF2E2] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
-          >
-            <Home className="w-4 h-4" aria-hidden="true" />
-            <span>[E] Sıcak Yuvam’a Gir (Evim)</span>
-          </button>
+          <div key="near-home" className="pointer-events-auto flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={onEnterHome}
+              className="inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl bg-[#5D8A48] hover:bg-[#4F783C] border-2 border-[#FAF2E2]/80 text-[#FAF2E2] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
+            >
+              <Home className="w-4 h-4" aria-hidden="true" />
+              <span>[E] Sıcak Yuvam’a Gir (Evim)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDockCollapsed(false);
+                setActiveDrawer((d) => (d === 'house' ? 'none' : 'house'));
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#F7EEDC] hover:bg-[#EFE0C3] border-2 border-[#B99464] text-[#3A2618] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
+            >
+              <Paintbrush className="w-4 h-4 text-[#C85A32]" aria-hidden="true" />
+              <span>Dış Cepheyi Tasarla</span>
+            </button>
+          </div>
         ) : hud.nearbyLandmark && (nearbyIsUndiscovered || nearbyIsErrandPoint) ? (
           <button
             key="nearby-landmark"
@@ -695,6 +748,140 @@ export function GameHUD({
                 >
                   Retro Şerit
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* House Exterior Live Customization Drawer */}
+        {!dockCollapsed && activeDrawer === 'house' && (
+          <div className="pointer-events-auto w-full max-w-2xl max-h-[40dvh] overflow-y-auto efeler-scroll rounded-2xl bg-[#F7EEDC]/98 border-2 border-[#B99464] p-3.5 sm:p-4 text-[#3A2618] shadow-xl space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[#B99464]/35">
+              <div>
+                <div className="text-xs font-bold text-[#3A2618]">
+                  Evim — Dış Cephe &amp; Mimari Düzenleme Modu
+                </div>
+                <div className="text-[11px] text-[#6B5038]">
+                  Sevgi Yolu üzerindeki evinin mimarisini ve boya renklerini canlı değiştir.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onEnterHome}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#5D8A48] hover:bg-[#4F783C] text-[#FAF2E2] text-xs font-semibold transition-colors cursor-pointer"
+              >
+                <Home className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>İçeri Gir &amp; Mobilya Mağazası</span>
+              </button>
+            </div>
+
+            <div>
+              <div className="text-[11px] font-semibold text-[#6B5038] mb-1.5">
+                Mimari Bina Modeli (4 Stil)
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {HOUSE_STYLE_OPTIONS.map((opt) => {
+                  const selected = houseExterior.style === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() =>
+                        onChangeHouseExterior({
+                          style: opt.id,
+                          wallColor: opt.defaultWall,
+                          roofColor: opt.defaultRoof,
+                          trimColor: opt.defaultTrim,
+                        })
+                      }
+                      className={`text-left px-3 py-2 rounded-xl border-2 transition-colors cursor-pointer ${
+                        selected
+                          ? 'bg-[#C85A32]/12 border-[#C85A32] text-[#3A2618]'
+                          : 'bg-[#FAF2E2] border-[#B99464]/50 hover:bg-[#EFE0C3]'
+                      }`}
+                    >
+                      <div className="text-xs font-bold text-[#3A2618]">{opt.name}</div>
+                      <div className="text-[10px] text-[#6B5038] leading-snug mt-0.5">
+                        {opt.subtitle}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <div className="text-[11px] font-semibold text-[#6B5038] mb-1.5">
+                  Dış Duvar Boyası
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {HOUSE_WALL_SWATCHES.map((sw) => (
+                    <button
+                      key={sw.id}
+                      type="button"
+                      title={sw.name}
+                      aria-label={sw.name}
+                      onClick={() =>
+                        onChangeHouseExterior({ ...houseExterior, wallColor: sw.hex })
+                      }
+                      className={`w-6 h-6 rounded-full border-2 transition-transform cursor-pointer ${
+                        houseExterior.wallColor === sw.hex
+                          ? 'border-[#3A2618] scale-115 shadow-sm'
+                          : 'border-[#B99464]/70 hover:scale-105'
+                      }`}
+                      style={{ backgroundColor: sw.hex }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-[11px] font-semibold text-[#6B5038] mb-1.5">Çatı Rengi</div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {HOUSE_ROOF_SWATCHES.map((sw) => (
+                    <button
+                      key={sw.id}
+                      type="button"
+                      title={sw.name}
+                      aria-label={sw.name}
+                      onClick={() =>
+                        onChangeHouseExterior({ ...houseExterior, roofColor: sw.hex })
+                      }
+                      className={`w-6 h-6 rounded-full border-2 transition-transform cursor-pointer ${
+                        houseExterior.roofColor === sw.hex
+                          ? 'border-[#3A2618] scale-115 shadow-sm'
+                          : 'border-[#B99464]/70 hover:scale-105'
+                      }`}
+                      style={{ backgroundColor: sw.hex }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-[11px] font-semibold text-[#6B5038] mb-1.5">
+                  Pervaz &amp; Çit
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {HOUSE_TRIM_SWATCHES.map((sw) => (
+                    <button
+                      key={sw.id}
+                      type="button"
+                      title={sw.name}
+                      aria-label={sw.name}
+                      onClick={() =>
+                        onChangeHouseExterior({ ...houseExterior, trimColor: sw.hex })
+                      }
+                      className={`w-6 h-6 rounded-full border-2 transition-transform cursor-pointer ${
+                        houseExterior.trimColor === sw.hex
+                          ? 'border-[#3A2618] scale-115 shadow-sm'
+                          : 'border-[#B99464]/70 hover:scale-105'
+                      }`}
+                      style={{ backgroundColor: sw.hex }}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -978,7 +1165,7 @@ export function GameHUD({
                 </button>
               </div>
 
-              {/* Garage & Atmosphere Toggles */}
+              {/* Garage, House Exterior & Atmosphere Toggles */}
               <button
                 type="button"
                 onClick={() =>
@@ -992,6 +1179,21 @@ export function GameHUD({
               >
                 <Paintbrush className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>Garaj</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setActiveDrawer((d) => (d === 'house' ? 'none' : 'house'))
+                }
+                className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  activeDrawer === 'house'
+                    ? 'bg-[#5D8A48] border-[#4A7138] text-[#FAF2E2]'
+                    : 'bg-[#EDE0C6] border-[#B99464]/60 text-[#3A2618] hover:bg-[#E2D1B2]'
+                }`}
+              >
+                <Home className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Ev Dışı</span>
               </button>
 
               <button

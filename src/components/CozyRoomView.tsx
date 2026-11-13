@@ -12,6 +12,7 @@ import {
   DoorOpen,
   Gamepad2,
   Heart,
+  Home,
   LampDesk,
   Move,
   Music,
@@ -19,6 +20,7 @@ import {
   PawPrint,
   RotateCcw,
   RotateCw,
+  ShoppingBag,
   Sparkles,
   User,
   Volume2,
@@ -31,11 +33,20 @@ import {
   DEFAULT_AVATAR_CONFIG,
   DEFAULT_COZY_ROOM_STATE,
   FURNITURE_CATALOG,
+  FURNITURE_STYLE_SHOP,
+  HOUSE_ROOF_SWATCHES,
+  HOUSE_STYLE_OPTIONS,
+  HOUSE_TRIM_SWATCHES,
+  HOUSE_WALL_SWATCHES,
   LOFI_TRACKS,
   ROOM_WALL_SWATCHES,
   WEATHER_OPTIONS,
 } from '../data/efelerData';
 import { audioEngine } from '../game/audioEngine';
+import {
+  buildFurnitureVariant,
+  disposeFurnitureVisualGroup,
+} from '../game/roomFurnitureBuilder';
 import {
   avatarConfigToAppearance,
   createSculptedHumanRig,
@@ -44,6 +55,8 @@ import {
 import {
   AvatarConfig,
   CozyRoomState,
+  FurnitureStyleDef,
+  HouseExteriorConfig,
   LofiTrackId,
   PetType,
   RoomFurnitureId,
@@ -52,11 +65,16 @@ import {
 
 interface CozyRoomViewProps {
   roomState: CozyRoomState;
+  houseExterior: HouseExteriorConfig;
+  lokmaPower: number;
+  unlockedFurnitureStyles: string[];
   weather: WeatherType;
   lofiTrack: LofiTrackId;
   isMuted: boolean;
   musicEnabled: boolean;
   onChangeRoomState: (next: CozyRoomState) => void;
+  onChangeHouseExterior: (next: HouseExteriorConfig) => void;
+  onPurchaseFurnitureStyle: (item: FurnitureStyleDef) => boolean;
   onChangeWeather: (next: WeatherType) => void;
   onChangeLofiTrack: (next: LofiTrackId) => void;
   onToggleMute: () => void;
@@ -178,6 +196,22 @@ function createCatRig(): {
   body.position.y = 0.24;
   body.castShadow = true;
   group.add(body);
+
+  [
+    [-0.13, 0.1, 0.21],
+    [0.13, 0.1, 0.21],
+    [-0.13, 0.1, -0.21],
+    [0.13, 0.1, -0.21],
+  ].forEach(([lx, ly, lz]) => {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.2, 0.09), furMat);
+    leg.position.set(lx, ly, lz);
+    leg.castShadow = true;
+    group.add(leg);
+
+    const paw = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.05, 0.11), creamMat);
+    paw.position.set(lx, 0.025, lz + 0.012);
+    group.add(paw);
+  });
 
   const chest = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.22, 0.18), creamMat);
   chest.position.set(0, 0.22, 0.28);
@@ -324,11 +358,16 @@ function createAvatarRig(initial: AvatarConfig): AvatarRig {
 
 export function CozyRoomView({
   roomState,
+  houseExterior,
+  lokmaPower,
+  unlockedFurnitureStyles,
   weather,
   lofiTrack,
   isMuted,
   musicEnabled,
   onChangeRoomState,
+  onChangeHouseExterior,
+  onPurchaseFurnitureStyle,
   onChangeWeather,
   onChangeLofiTrack,
   onToggleMute,
@@ -340,8 +379,9 @@ export function CozyRoomView({
   const [editOpen, setEditOpen] = useState(false);
   const [placementMode, setPlacementMode] = useState(false);
   const [selectedFurniture, setSelectedFurniture] = useState<RoomFurnitureId>('armchair');
+  const [shopFilter, setShopFilter] = useState<RoomFurnitureId | 'all'>('all');
   const [drawerTab, setDrawerTab] = useState<
-    'furniture' | 'avatar' | 'style' | 'pets' | 'atmosphere'
+    'furniture' | 'shop' | 'exterior' | 'avatar' | 'style' | 'pets' | 'atmosphere'
   >('furniture');
   const [roomToast, setRoomToast] = useState<string | null>(null);
   const [nearbyInteractable, setNearbyInteractable] = useState<NearbyRoomInteractable | null>(null);
@@ -424,8 +464,8 @@ export function CozyRoomView({
           'armchair',
           st.furniture.find((f) => f.id === 'armchair')
         );
-        avatarWalkRef.current.x = tf.x;
-        avatarWalkRef.current.z = tf.z + Math.cos(tf.rotY) * 0.08;
+        avatarWalkRef.current.x = tf.x + Math.sin(tf.rotY) * 0.14;
+        avatarWalkRef.current.z = tf.z + Math.cos(tf.rotY) * 0.14;
         avatarWalkRef.current.rotY = tf.rotY;
         avatarWalkRef.current.targetX = null;
         avatarWalkRef.current.targetZ = null;
@@ -436,8 +476,16 @@ export function CozyRoomView({
           'armchair',
           st.furniture.find((f) => f.id === 'armchair')
         );
-        avatarWalkRef.current.x = tf.x + Math.sin(tf.rotY) * 0.9;
-        avatarWalkRef.current.z = tf.z + Math.cos(tf.rotY) * 0.9;
+        avatarWalkRef.current.x = THREE.MathUtils.clamp(
+          tf.x + Math.sin(tf.rotY) * 0.9,
+          -3.25,
+          3.25
+        );
+        avatarWalkRef.current.z = THREE.MathUtils.clamp(
+          tf.z + Math.cos(tf.rotY) * 0.9,
+          -3.25,
+          3.25
+        );
         showToast('Koltuktan kalktın.');
       }
     } else if (id === 'desk') {
@@ -625,19 +673,7 @@ export function CozyRoomView({
     walkMarker.visible = false;
     roomGroup.add(walkMarker);
 
-    // 8 Customizable Furniture Pieces
-    const woodMat = new THREE.MeshStandardMaterial({ color: 0x735036, roughness: 0.76 });
-    const fabricMat = new THREE.MeshStandardMaterial({ color: 0x9b4f3a, roughness: 0.85 });
-    const cushionMat = new THREE.MeshStandardMaterial({ color: 0xe6d4b5, roughness: 0.86 });
-    const rugMat = new THREE.MeshStandardMaterial({ color: 0x9e4738, roughness: 0.92 });
-    const brassMat = new THREE.MeshStandardMaterial({ color: 0xd4a857, roughness: 0.35, metalness: 0.65 });
-    const lampShadeMat = new THREE.MeshStandardMaterial({
-      color: 0xf4deb3,
-      emissive: 0xffb764,
-      emissiveIntensity: 1.1,
-      roughness: 0.6,
-    });
-
+    // 8 Customizable Furniture Pieces with Live Style Variants
     const clickables: THREE.Object3D[] = [];
     const furnitureHitMeshes: THREE.Mesh[] = [];
     const furnitureGroups: Record<RoomFurnitureId, THREE.Group> = {
@@ -650,6 +686,19 @@ export function CozyRoomView({
       teatable: new THREE.Group(),
       wallart: new THREE.Group(),
     };
+    const furnitureVisualGroups: Record<RoomFurnitureId, THREE.Group> = {
+      armchair: new THREE.Group(),
+      desk: new THREE.Group(),
+      bookshelf: new THREE.Group(),
+      rug: new THREE.Group(),
+      plant: new THREE.Group(),
+      turntable: new THREE.Group(),
+      teatable: new THREE.Group(),
+      wallart: new THREE.Group(),
+    };
+    (Object.keys(furnitureGroups) as RoomFurnitureId[]).forEach((fid) => {
+      furnitureGroups[fid].add(furnitureVisualGroups[fid]);
+    });
 
     const addFurnitureHitbox = (id: RoomFurnitureId, w: number, h: number, d: number, y: number) => {
       const hit = new THREE.Mesh(
@@ -663,56 +712,13 @@ export function CozyRoomView({
       return hit;
     };
 
-    // 1. Armchair
+    // Hitboxes stay constant while visuals swap live
     {
-      const g = furnitureGroups.armchair;
-      const seat = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.42, 1.05), fabricMat);
-      seat.position.y = 0.3;
-      seat.castShadow = true;
-      const back = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.85, 0.25), fabricMat);
-      back.position.set(0, 0.72, -0.4);
-      back.castShadow = true;
-      [-0.5, 0.5].forEach((ax) => {
-        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.55, 1.02), fabricMat);
-        arm.position.set(ax, 0.46, 0);
-        g.add(arm);
-      });
-      const pillow = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.38, 0.16), cushionMat);
-      pillow.position.set(0, 0.62, -0.2);
-      pillow.rotation.x = -0.25;
-      g.add(seat, back, pillow);
       const hit = addFurnitureHitbox('armchair', 1.25, 1.15, 1.15, 0.58);
       hit.userData.roomAction = 'armchair';
       clickables.push(hit);
     }
-
-    // 2. Desk + Open Agenda + Desk Lamp
     {
-      const g = furnitureGroups.desk;
-      const top = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.1, 0.92), woodMat);
-      top.position.y = 0.88;
-      top.castShadow = true;
-      [
-        [-0.82, 0.44, -0.36],
-        [0.82, 0.44, -0.36],
-        [-0.82, 0.44, 0.36],
-        [0.82, 0.44, 0.36],
-      ].forEach(([lx, ly, lz]) => {
-        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.88, 0.1), woodMat);
-        leg.position.set(lx, ly, lz);
-        g.add(leg);
-      });
-
-      const agendaCover = new THREE.Mesh(
-        new THREE.BoxGeometry(0.58, 0.04, 0.4),
-        new THREE.MeshStandardMaterial({ color: 0x3b6e8c, roughness: 0.7 })
-      );
-      agendaCover.position.set(-0.22, 0.95, 0.08);
-      const agendaPages = new THREE.Mesh(
-        new THREE.BoxGeometry(0.52, 0.05, 0.36),
-        new THREE.MeshStandardMaterial({ color: 0xf7efe0, roughness: 0.85 })
-      );
-      agendaPages.position.set(-0.22, 0.96, 0.08);
       const agendaHit = new THREE.Mesh(
         new THREE.BoxGeometry(0.75, 0.35, 0.6),
         new THREE.MeshBasicMaterial({ visible: false })
@@ -721,12 +727,6 @@ export function CozyRoomView({
       agendaHit.userData.roomAction = 'agenda';
       clickables.push(agendaHit);
 
-      const lampBase = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.08, 12), brassMat);
-      lampBase.position.set(0.58, 0.97, -0.18);
-      const lampNeck = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.45, 8), brassMat);
-      lampNeck.position.set(0.58, 1.2, -0.18);
-      const lampShade = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.25, 14), lampShadeMat);
-      lampShade.position.set(0.58, 1.45, -0.18);
       const lampHit = new THREE.Mesh(
         new THREE.BoxGeometry(0.5, 0.75, 0.5),
         new THREE.MeshBasicMaterial({ visible: false })
@@ -735,137 +735,49 @@ export function CozyRoomView({
       lampHit.userData.roomAction = 'lamp';
       clickables.push(lampHit);
 
-      g.add(top, agendaCover, agendaPages, agendaHit, lampBase, lampNeck, lampShade, lampHit);
+      furnitureGroups.desk.add(agendaHit, lampHit);
       addFurnitureHitbox('desk', 1.9, 1.2, 1.0, 0.6);
     }
-
-    // 3. Bookshelf
     {
-      const g = furnitureGroups.bookshelf;
-      const frame = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.35, 0.44), woodMat);
-      frame.position.y = 1.175;
-      frame.castShadow = true;
-      g.add(frame);
-
-      const bookColors = [0xb64b36, 0x3b6e8c, 0x586f4e, 0xd4a857, 0x7b4c65];
-      for (let shelf = 0; shelf < 3; shelf++) {
-        const sy = 0.52 + shelf * 0.68;
-        for (let b = 0; b < 5; b++) {
-          const book = new THREE.Mesh(
-            new THREE.BoxGeometry(0.14, 0.36 + ((b + shelf) % 2) * 0.08, 0.28),
-            new THREE.MeshStandardMaterial({
-              color: bookColors[(b + shelf * 2) % bookColors.length],
-              roughness: 0.75,
-            })
-          );
-          book.position.set(-0.42 + b * 0.2, sy, 0.14);
-          g.add(book);
-        }
-      }
       const hit = addFurnitureHitbox('bookshelf', 1.5, 2.3, 0.6, 1.15);
       hit.userData.roomAction = 'bookshelf';
       clickables.push(hit);
     }
-
-    // 4. Woven Aegean Rug
+    addFurnitureHitbox('rug', 3.4, 0.2, 2.4, 0.08);
+    addFurnitureHitbox('plant', 0.9, 1.9, 0.9, 0.95);
     {
-      const g = furnitureGroups.rug;
-      const outer = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.03, 2.5), rugMat);
-      outer.receiveShadow = true;
-      const inner = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.036, 1.8), cushionMat);
-      const center = new THREE.Mesh(
-        new THREE.BoxGeometry(1.3, 0.04, 0.9),
-        new THREE.MeshStandardMaterial({ color: 0x3b6e8c, roughness: 0.9 })
-      );
-      g.add(outer, inner, center);
-      addFurnitureHitbox('rug', 3.4, 0.2, 2.4, 0.08);
-    }
-
-    // 5. Olive Tree in Terracotta Pot
-    {
-      const g = furnitureGroups.plant;
-      const pot = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.34, 0.24, 0.52, 12),
-        new THREE.MeshStandardMaterial({ color: 0xb66041, roughness: 0.85 })
-      );
-      pot.position.y = 0.26;
-      pot.castShadow = true;
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 0.95, 8), woodMat);
-      trunk.position.y = 0.85;
-      const crown = new THREE.Mesh(
-        new THREE.IcosahedronGeometry(0.56, 1),
-        new THREE.MeshStandardMaterial({ color: 0x677e56, roughness: 0.84 })
-      );
-      crown.position.y = 1.48;
-      crown.castShadow = true;
-      g.add(pot, trunk, crown);
-      addFurnitureHitbox('plant', 0.9, 1.9, 0.9, 0.95);
-    }
-
-    // 6. Lo-Fi Turntable & Vinyl Stand
-    let vinylDisc: THREE.Mesh;
-    {
-      const g = furnitureGroups.turntable;
-      const cabinet = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.88, 0.56), woodMat);
-      cabinet.position.y = 0.44;
-      cabinet.castShadow = true;
-      const deck = new THREE.Mesh(
-        new THREE.BoxGeometry(0.68, 0.09, 0.44),
-        new THREE.MeshStandardMaterial({ color: 0x2a241f, roughness: 0.55 })
-      );
-      deck.position.set(0, 0.92, 0);
-      vinylDisc = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.18, 0.18, 0.02, 20),
-        new THREE.MeshStandardMaterial({ color: 0x161618, roughness: 0.3 })
-      );
-      vinylDisc.position.set(-0.06, 0.98, 0);
-      const label = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.025, 14), brassMat);
-      label.position.set(-0.06, 0.985, 0);
       const hit = addFurnitureHitbox('turntable', 1.0, 1.25, 0.65, 0.65);
       hit.userData.roomAction = 'turntable';
       clickables.push(hit);
-      g.add(cabinet, deck, vinylDisc, label);
     }
-
-    // 7. Turkish Tea Tray Table
     {
-      const g = furnitureGroups.teatable;
-      const table = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.08, 16), woodMat);
-      table.position.y = 0.42;
-      table.castShadow = true;
-      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.14, 0.42, 10), woodMat);
-      leg.position.y = 0.21;
-      const tray = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.28, 0.04, 16), brassMat);
-      tray.position.y = 0.47;
-      const teaGlass = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.055, 0.045, 0.14, 10),
-        new THREE.MeshStandardMaterial({ color: 0x9b2d20, roughness: 0.25 })
-      );
-      teaGlass.position.set(0.08, 0.56, 0.04);
-      const teapot = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), brassMat);
-      teapot.position.set(-0.1, 0.56, -0.04);
-      g.add(table, leg, tray, teaGlass, teapot);
       const hit = addFurnitureHitbox('teatable', 1.15, 0.85, 1.15, 0.42);
       hit.userData.roomAction = 'teatable';
       clickables.push(hit);
     }
+    addFurnitureHitbox('wallart', 1.5, 1.1, 0.35, 0);
 
-    // 8. Tralleis Wall Art Frame
-    {
-      const g = furnitureGroups.wallart;
-      const frame = new THREE.Mesh(new THREE.BoxGeometry(1.45, 1.0, 0.08), woodMat);
-      const canvas = new THREE.Mesh(
-        new THREE.PlaneGeometry(1.24, 0.8),
-        new THREE.MeshStandardMaterial({ color: 0xe6caa0, roughness: 0.9 })
-      );
-      canvas.position.z = 0.045;
-      const archTint = new THREE.Mesh(
-        new THREE.BoxGeometry(0.75, 0.42, 0.02),
-        new THREE.MeshStandardMaterial({ color: 0xb88154, roughness: 0.8 })
-      );
-      archTint.position.set(0, -0.05, 0.055);
-      g.add(frame, canvas, archTint);
-      addFurnitureHitbox('wallart', 1.5, 1.1, 0.35, 0);
+    const activeStyleSigs: Partial<Record<RoomFurnitureId, string>> = {};
+    let vinylDisc: THREE.Object3D | undefined;
+    let lampShadeMat: THREE.MeshStandardMaterial | undefined;
+
+    const syncFurnitureStyle = (id: RoomFurnitureId, styleId: string) => {
+      if (activeStyleSigs[id] === styleId) return;
+      activeStyleSigs[id] = styleId;
+      const vGrp = furnitureVisualGroups[id];
+      disposeFurnitureVisualGroup(vGrp);
+      const built = buildFurnitureVariant(id, styleId);
+      vGrp.add(built.group);
+      if (id === 'turntable') {
+        vinylDisc = built.spinPart;
+      }
+      if (id === 'desk' && built.lampShadeMat) {
+        lampShadeMat = built.lampShadeMat;
+      }
+    };
+
+    for (const item of roomStateRef.current.furniture) {
+      syncFurnitureStyle(item.id, item.styleId || 'classic');
     }
 
     Object.values(furnitureGroups).forEach((fg) => roomGroup.add(fg));
@@ -881,12 +793,12 @@ export function CozyRoomView({
 
     // Interactive Pets
     const catRig = createCatRig();
-    catRig.group.position.set(-0.85, 0.03, 1.35);
+    catRig.group.position.set(-0.9, 0.005, 1.35);
     roomGroup.add(catRig.group);
     clickables.push(catRig.hitMesh);
 
     const dogRig = createDogRig();
-    dogRig.group.position.set(1.15, 0.03, 1.05);
+    dogRig.group.position.set(1.15, 0.005, 1.0);
     roomGroup.add(dogRig.group);
     clickables.push(dogRig.hitMesh);
 
@@ -1132,6 +1044,127 @@ export function CozyRoomView({
     let lastNearbyId: string | null = null;
     let lastAvatarSig = '';
 
+    const catState = { x: -0.9, z: 1.35, targetX: -0.9, targetZ: 1.35, rotY: 0.4, wait: 0.9 };
+    const dogState = { x: 1.15, z: 1.0, targetX: 1.15, targetZ: 1.0, rotY: -0.5, wait: 1.3 };
+
+    const isPetPointBlocked = (px: number, pz: number, st: CozyRoomState, petRadius: number) => {
+      for (const item of st.furniture) {
+        if (!item.enabled) continue;
+        const r = FURNITURE_RADII[item.id];
+        if (!r) continue;
+        const tf = resolveFurnitureTransform(item.id, item);
+        if (Math.hypot(px - tf.x, pz - tf.z) < r + petRadius) {
+          return true;
+        }
+      }
+      if (st.avatarPlaced ?? true) {
+        if (Math.hypot(px - avatarWalkRef.current.x, pz - avatarWalkRef.current.z) < 0.44 + petRadius) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    const pickFreePetTarget = (st: CozyRoomState, petRadius: number): [number, number] => {
+      for (let attempt = 0; attempt < 18; attempt++) {
+        const tx = -2.65 + Math.random() * 5.3;
+        const tz = -2.65 + Math.random() * 5.3;
+        if (!isPetPointBlocked(tx, tz, st, petRadius + 0.14)) {
+          return [tx, tz];
+        }
+      }
+      return [0, 1.65];
+    };
+
+    const stepPetWander = (
+      pet: typeof catState,
+      otherPet: typeof catState | null,
+      st: CozyRoomState,
+      petRadius: number,
+      speed: number,
+      dt: number
+    ): boolean => {
+      let moving = false;
+      if (pet.wait > 0) {
+        pet.wait -= dt;
+        if (pet.wait <= 0) {
+          const [tx, tz] = pickFreePetTarget(st, petRadius);
+          pet.targetX = tx;
+          pet.targetZ = tz;
+        }
+      } else {
+        const dx = pet.targetX - pet.x;
+        const dz = pet.targetZ - pet.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist < 0.16) {
+          pet.wait = 1.4 + Math.random() * 2.2;
+        } else {
+          moving = true;
+          const vx = dx / dist;
+          const vz = dz / dist;
+          pet.x = THREE.MathUtils.clamp(pet.x + vx * speed * dt, -2.95, 2.95);
+          pet.z = THREE.MathUtils.clamp(pet.z + vz * speed * dt, -2.95, 2.95);
+          const targetRot = Math.atan2(vx, vz);
+          let diff = targetRot - pet.rotY;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          pet.rotY += diff * Math.min(1, dt * 7);
+        }
+      }
+
+      // Push clear of furniture, standing avatar, and companion pet
+      let bumped = false;
+      for (const item of st.furniture) {
+        if (!item.enabled) continue;
+        const r = FURNITURE_RADII[item.id];
+        if (!r) continue;
+        const tf = resolveFurnitureTransform(item.id, item);
+        const odx = pet.x - tf.x;
+        const odz = pet.z - tf.z;
+        const oDist = Math.hypot(odx, odz);
+        const minD = r + petRadius;
+        if (oDist < minD) {
+          const nx = oDist > 0.001 ? odx / oDist : 1;
+          const nz = oDist > 0.001 ? odz / oDist : 0;
+          pet.x = tf.x + nx * minD;
+          pet.z = tf.z + nz * minD;
+          bumped = true;
+        }
+      }
+      if (st.avatarPlaced ?? true) {
+        const adx = pet.x - avatarWalkRef.current.x;
+        const adz = pet.z - avatarWalkRef.current.z;
+        const aDist = Math.hypot(adx, adz);
+        const minA = 0.38 + petRadius;
+        if (aDist < minA) {
+          const nx = aDist > 0.001 ? adx / aDist : 1;
+          const nz = aDist > 0.001 ? adz / aDist : 0;
+          pet.x = avatarWalkRef.current.x + nx * minA;
+          pet.z = avatarWalkRef.current.z + nz * minA;
+          bumped = true;
+        }
+      }
+      if (otherPet) {
+        const pdx = pet.x - otherPet.x;
+        const pdz = pet.z - otherPet.z;
+        const pDist = Math.hypot(pdx, pdz);
+        const minP = 0.62;
+        if (pDist < minP && pDist > 0.001) {
+          pet.x = otherPet.x + (pdx / pDist) * minP;
+          pet.z = otherPet.z + (pdz / pDist) * minP;
+          bumped = true;
+        }
+      }
+      pet.x = THREE.MathUtils.clamp(pet.x, -2.95, 2.95);
+      pet.z = THREE.MathUtils.clamp(pet.z, -2.95, 2.95);
+      if (bumped && moving) {
+        const [tx, tz] = pickFreePetTarget(st, petRadius);
+        pet.targetX = tx;
+        pet.targetZ = tz;
+      }
+      return moving;
+    };
+
     const clock = new THREE.Clock();
     let frameId = 0;
     let disposed = false;
@@ -1168,10 +1201,13 @@ export function CozyRoomView({
 
       // Sync Lamp State
       lampPoint.intensity = THREE.MathUtils.damp(lampPoint.intensity, st.lampOn ? 4.8 : 0, 6, dt);
-      lampShadeMat.emissiveIntensity = st.lampOn ? 1.15 : 0.08;
+      if (lampShadeMat) {
+        lampShadeMat.emissiveIntensity = st.lampOn ? 1.15 : 0.08;
+      }
 
-      // Sync Furniture Positions & Rotations
+      // Sync Furniture Positions, Rotations & Style Variants
       for (const item of st.furniture) {
+        syncFurnitureStyle(item.id, item.styleId || 'classic');
         const grp = furnitureGroups[item.id];
         grp.visible = item.enabled;
         const tf = resolveFurnitureTransform(item.id, item);
@@ -1387,7 +1423,9 @@ export function CozyRoomView({
       }
 
       // Spin Vinyl Record gently
-      vinylDisc.rotation.y += dt * 1.4;
+      if (vinylDisc) {
+        vinylDisc.rotation.y += dt * 1.4;
+      }
 
       // Window Sky & Outside Weather Animation
       if (wType === 'storm') windowSkyMat.color.setHex(0x283344);
@@ -1427,28 +1465,42 @@ export function CozyRoomView({
         winDrops.instanceMatrix.needsUpdate = true;
       }
 
-      // Pets Idle Wandering + Happy Bounce
+      // Pets Idle Wandering + Obstacle Avoidance + Happy Bounce
       catRig.group.visible = st.petType === 'cat' || st.petType === 'both';
       dogRig.group.visible = st.petType === 'dog' || st.petType === 'both';
 
       if (catRig.group.visible) {
         petBounceRef.current.cat = Math.max(0, petBounceRef.current.cat - dt * 2.2);
         const hop = Math.sin(petBounceRef.current.cat * Math.PI) * 0.42;
-        catRig.group.position.x = -0.85 + Math.sin(elapsed * 0.4) * 0.55;
-        catRig.group.position.z = 1.35 + Math.cos(elapsed * 0.35) * 0.35;
-        catRig.group.position.y = 0.03 + hop;
-        catRig.group.rotation.y = Math.sin(elapsed * 0.4) * 0.6 + 0.5;
-        catRig.tail.rotation.z = Math.sin(elapsed * 3.2) * 0.32;
+        const catMoving = stepPetWander(
+          catState,
+          dogRig.group.visible ? dogState : null,
+          st,
+          0.34,
+          0.62,
+          dt
+        );
+        const stepBob = catMoving ? Math.abs(Math.sin(elapsed * 7.5)) * 0.028 : 0;
+        catRig.group.position.set(catState.x, 0.005 + hop + stepBob, catState.z);
+        catRig.group.rotation.y = catState.rotY;
+        catRig.tail.rotation.z = Math.sin(elapsed * (catMoving ? 5.2 : 2.8)) * 0.32;
       }
 
       if (dogRig.group.visible) {
         petBounceRef.current.dog = Math.max(0, petBounceRef.current.dog - dt * 2.2);
         const hop = Math.sin(petBounceRef.current.dog * Math.PI) * 0.48;
-        dogRig.group.position.x = 1.15 + Math.cos(elapsed * 0.48) * 0.5;
-        dogRig.group.position.z = 1.0 + Math.sin(elapsed * 0.42) * 0.45;
-        dogRig.group.position.y = 0.03 + hop;
-        dogRig.group.rotation.y = -Math.cos(elapsed * 0.48) * 0.7 - 0.5;
-        dogRig.tail.rotation.z = Math.sin(elapsed * 7.5) * 0.42;
+        const dogMoving = stepPetWander(
+          dogState,
+          catRig.group.visible ? catState : null,
+          st,
+          0.38,
+          0.74,
+          dt
+        );
+        const stepBob = dogMoving ? Math.abs(Math.sin(elapsed * 8.5)) * 0.035 : 0;
+        dogRig.group.position.set(dogState.x, 0.005 + hop + stepBob, dogState.z);
+        dogRig.group.rotation.y = dogState.rotY;
+        dogRig.tail.rotation.z = Math.sin(elapsed * (dogMoving ? 9.5 : 6.2)) * 0.42;
       }
 
       renderer.render(scene, camera);
@@ -1484,6 +1536,9 @@ export function CozyRoomView({
       renderer.domElement.removeEventListener('touchend', onTouchEnd);
       renderer.domElement.removeEventListener('touchcancel', onTouchEnd);
 
+      (Object.keys(furnitureVisualGroups) as RoomFurnitureId[]).forEach((fid) => {
+        disposeFurnitureVisualGroup(furnitureVisualGroups[fid]);
+      });
       roomGroup.traverse((obj) => {
         if ((obj as THREE.Mesh).isMesh) {
           const geo = (obj as THREE.Mesh).geometry;
@@ -1597,6 +1652,10 @@ export function CozyRoomView({
               <span aria-hidden="true">·</span>
               <span className="font-mono-num text-[#B84C27] font-semibold">
                 Sevgi: {roomState.petAffection}
+              </span>
+              <span aria-hidden="true">·</span>
+              <span className="font-mono-num text-[#8F5624] font-semibold">
+                {lokmaPower} Lokma
               </span>
             </div>
           </div>
@@ -1729,6 +1788,8 @@ export function CozyRoomView({
               <div className="flex flex-wrap items-center gap-1.5 pb-2.5 mb-3 border-b border-[#B99464]/40">
                 {(
                   [
+                    ['shop', 'Mobilya Mağazası'],
+                    ['exterior', 'Ev Dışı & Cephe'],
                     ['furniture', 'Eşya & Yerleşim'],
                     ['avatar', 'Avatarım'],
                     ['style', 'Duvar & Zemin'],
@@ -1750,6 +1811,269 @@ export function CozyRoomView({
                   </button>
                 ))}
               </div>
+
+              {drawerTab === 'shop' && (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs text-[#6B5038]">
+                      Bey Camii hayır lokması ve keşiflerden kazandığın <strong>Lokma Puanı</strong> ile koltuk, pikap ve oda mobilyalarının yeni görünümlerini aç!
+                    </div>
+                    <div className="px-3 py-1 rounded-full bg-[#EFE0C3] border border-[#B99464] text-xs font-bold text-[#8F5624] font-mono-num shrink-0">
+                      Bakiye: {lokmaPower} Lokma
+                    </div>
+                  </div>
+
+                  {/* Category Filter */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setShopFilter('all')}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold cursor-pointer ${
+                        shopFilter === 'all'
+                          ? 'bg-[#5B3D28] text-[#FAF2E2]'
+                          : 'bg-[#EDE0C6] text-[#5B432F]'
+                      }`}
+                    >
+                      Tümü
+                    </button>
+                    {FURNITURE_CATALOG.map((cat) => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setShopFilter(cat.id)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold cursor-pointer ${
+                          shopFilter === cat.id
+                            ? 'bg-[#5B3D28] text-[#FAF2E2]'
+                            : 'bg-[#EDE0C6] text-[#5B432F]'
+                        }`}
+                      >
+                        {cat.label.split(' ')[0]}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {FURNITURE_STYLE_SHOP.filter(
+                      (s) => shopFilter === 'all' || s.furnitureId === shopFilter
+                    ).map((item) => {
+                      const isOwned =
+                        item.priceLokma === 0 || unlockedFurnitureStyles.includes(item.key);
+                      const curSlot = roomState.furniture.find((f) => f.id === item.furnitureId);
+                      const isEquipped = (curSlot?.styleId || 'classic') === item.styleId;
+                      const catLabel =
+                        FURNITURE_CATALOG.find((c) => c.id === item.furnitureId)?.label ||
+                        item.furnitureId;
+
+                      return (
+                        <div
+                          key={item.key}
+                          className={`flex flex-col justify-between gap-2 rounded-xl border p-2.5 ${
+                            isEquipped
+                              ? 'bg-[#EFE0C3] border-[#5D8A48]'
+                              : 'bg-[#FAF3E6] border-[#B99464]/45'
+                          }`}
+                        >
+                          <div className="flex items-start gap-2.5">
+                            <span
+                              className="w-5 h-5 rounded-full border border-[#3A2618]/25 shrink-0 mt-0.5"
+                              style={{ backgroundColor: item.accentHex }}
+                            />
+                            <div className="min-w-0">
+                              <div className="text-[10px] font-semibold text-[#8A6D50] uppercase tracking-wide">
+                                {catLabel}
+                              </div>
+                              <div className="text-xs font-bold text-[#3A2618] leading-tight">
+                                {item.name}
+                              </div>
+                              <div className="text-[11px] text-[#6B5038] mt-0.5 leading-snug">
+                                {item.description}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#B99464]/20">
+                            <span className="text-[11px] font-bold font-mono-num text-[#8F5624]">
+                              {item.priceLokma === 0 ? 'Başlangıç' : `${item.priceLokma} Lokma`}
+                            </span>
+                            {isEquipped ? (
+                              <span
+                                key="equipped"
+                                className="px-2.5 py-1 rounded-lg bg-[#5D8A48] text-[#FAF2E2] text-[11px] font-semibold"
+                              >
+                                Takılı ✓
+                              </span>
+                            ) : isOwned ? (
+                              <button
+                                key="equip"
+                                type="button"
+                                onClick={() => {
+                                  onChangeRoomState({
+                                    ...roomState,
+                                    furniture: roomState.furniture.map((f) =>
+                                      f.id === item.furnitureId
+                                        ? { ...f, styleId: item.styleId, enabled: true }
+                                        : f
+                                    ),
+                                  });
+                                  showToast(`${item.name} odaya yerleştirildi!`);
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-[#3B6E8C] hover:bg-[#315D77] text-[#FAF2E2] text-[11px] font-semibold cursor-pointer"
+                              >
+                                Kullan
+                              </button>
+                            ) : (
+                              <button
+                                key="buy"
+                                type="button"
+                                disabled={lokmaPower < item.priceLokma}
+                                onClick={() => {
+                                  const ok = onPurchaseFurnitureStyle(item);
+                                  if (ok) {
+                                    showToast(`${item.name} satın alındı ve takıldı!`);
+                                  } else {
+                                    showToast(
+                                      `Yetersiz Lokma! Bey Camii önünden hayır lokması alabilirsin (${item.priceLokma} Lokma gerekir).`
+                                    );
+                                  }
+                                }}
+                                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold cursor-pointer ${
+                                  lokmaPower >= item.priceLokma
+                                    ? 'bg-[#C85A32] hover:bg-[#B44D28] text-[#FAF2E2]'
+                                    : 'bg-[#E2D3B8] text-[#8E7761] cursor-not-allowed'
+                                }`}
+                              >
+                                Satın Al ({item.priceLokma} Lokma)
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {drawerTab === 'exterior' && (
+                <div className="space-y-3">
+                  <div className="text-xs text-[#6B5038]">
+                    Efeler sokağındaki kendi evinin dış mimarisini, duvar boyasını ve çatı rengini dilediğin gibi tasarla. Sokağa çıktığında evin anında güncellenir!
+                  </div>
+
+                  <div>
+                    <div className="text-[11px] font-semibold text-[#6B5038] mb-1.5">
+                      Mimari Ev Modeli
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {HOUSE_STYLE_OPTIONS.map((opt) => {
+                        const active = houseExterior.style === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() =>
+                              onChangeHouseExterior({
+                                style: opt.id,
+                                wallColor: opt.defaultWall,
+                                roofColor: opt.defaultRoof,
+                                trimColor: opt.defaultTrim,
+                              })
+                            }
+                            className={`text-left rounded-xl border p-2.5 transition-colors cursor-pointer ${
+                              active
+                                ? 'bg-[#EFE0C3] border-[#C85A32]'
+                                : 'bg-[#FAF3E6] border-[#B99464]/45 hover:bg-[#F3E7D2]'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-bold text-[#3A2618]">{opt.name}</span>
+                              {active && (
+                                <span className="text-[10px] font-bold text-[#4B743B]">Seçili ✓</span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-[#6B5038] mt-0.5 leading-snug">
+                              {opt.subtitle}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-5">
+                    <div>
+                      <div className="text-[11px] font-semibold text-[#6B5038] mb-1.5">
+                        Dış Cephe Boyası
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {HOUSE_WALL_SWATCHES.map((sw) => (
+                          <button
+                            key={sw.id}
+                            type="button"
+                            title={sw.name}
+                            onClick={() =>
+                              onChangeHouseExterior({ ...houseExterior, wallColor: sw.hex })
+                            }
+                            className={`w-6 h-6 rounded-full border-2 cursor-pointer ${
+                              houseExterior.wallColor === sw.hex
+                                ? 'border-[#3A2618] scale-110'
+                                : 'border-[#B99464]/60'
+                            }`}
+                            style={{ backgroundColor: sw.hex }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-[11px] font-semibold text-[#6B5038] mb-1.5">
+                        Çatı Rengi
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {HOUSE_ROOF_SWATCHES.map((sw) => (
+                          <button
+                            key={sw.id}
+                            type="button"
+                            title={sw.name}
+                            onClick={() =>
+                              onChangeHouseExterior({ ...houseExterior, roofColor: sw.hex })
+                            }
+                            className={`w-6 h-6 rounded-full border-2 cursor-pointer ${
+                              houseExterior.roofColor === sw.hex
+                                ? 'border-[#3A2618] scale-110'
+                                : 'border-[#B99464]/60'
+                            }`}
+                            style={{ backgroundColor: sw.hex }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-[11px] font-semibold text-[#6B5038] mb-1.5">
+                        Söve &amp; Pervaz
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {HOUSE_TRIM_SWATCHES.map((sw) => (
+                          <button
+                            key={sw.id}
+                            type="button"
+                            title={sw.name}
+                            onClick={() =>
+                              onChangeHouseExterior({ ...houseExterior, trimColor: sw.hex })
+                            }
+                            className={`w-6 h-6 rounded-full border-2 cursor-pointer ${
+                              houseExterior.trimColor === sw.hex
+                                ? 'border-[#3A2618] scale-110'
+                                : 'border-[#B99464]/60'
+                            }`}
+                            style={{ backgroundColor: sw.hex }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {drawerTab === 'furniture' && (
                 <div className="space-y-2.5">
@@ -2073,6 +2397,48 @@ export function CozyRoomView({
             >
               <Move className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Eşya Yerleştir</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (editOpen && drawerTab === 'shop') {
+                  setEditOpen(false);
+                } else {
+                  setDrawerTab('shop');
+                  setEditOpen(true);
+                  setPlacementMode(false);
+                }
+              }}
+              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                editOpen && drawerTab === 'shop'
+                  ? 'bg-[#C85A32] text-[#FAF2E2]'
+                  : 'bg-[#EFE0C3] hover:bg-[#E4D1AE] border border-[#C85A32]/40 text-[#3A2618]'
+              }`}
+            >
+              <ShoppingBag className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
+              <span>Mağaza</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (editOpen && drawerTab === 'exterior') {
+                  setEditOpen(false);
+                } else {
+                  setDrawerTab('exterior');
+                  setEditOpen(true);
+                  setPlacementMode(false);
+                }
+              }}
+              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                editOpen && drawerTab === 'exterior'
+                  ? 'bg-[#5D8A48] text-[#FAF2E2]'
+                  : 'bg-[#EDE0C6] hover:bg-[#E2D1B2] text-[#3A2618]'
+              }`}
+            >
+              <Home className="w-3.5 h-3.5 text-[#4B743B]" aria-hidden="true" />
+              <span>Ev Dışı</span>
             </button>
 
             <button
