@@ -18,23 +18,24 @@ export function PauseModal({
   onResetPosition,
 }: PauseModalProps) {
   return (
-    <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#14120F]/80 p-6">
-      <div className="w-full max-w-md rounded-2xl bg-[#1F1C17] border border-[#F5EFE6]/12 p-7 text-[#F5EFE6] shadow-2xl">
-        <p className="text-xs text-[#D99B43] font-medium mb-1">Oyun Duraklatıldı</p>
-        <h2 className="font-display text-2xl font-semibold tracking-tight mb-5">
+    <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#2E1E12]/65 p-6">
+      <div className="w-full max-w-md rounded-2xl bg-[#F7EEDC] border-2 border-[#B99464] p-7 text-[#3A2618] shadow-2xl">
+        <p className="text-xs text-[#B84C27] font-semibold mb-1">Oyun Duraklatıldı</p>
+        <h2 className="font-display text-2xl font-bold tracking-tight mb-5 text-[#3A2618]">
           Efeler Sokaklarında Mola
         </h2>
 
-        <div className="flex items-center gap-4 text-sm text-[#CFC6B8] pb-5 mb-6 border-b border-[#F5EFE6]/10">
+        <div className="flex items-center gap-4 text-sm text-[#6B5038] pb-5 mb-6 border-b border-[#B99464]/40 font-medium">
           <span>
             Keşfedilen Yapı:{' '}
-            <strong className="text-[#F5EFE6] font-mono-num">
+            <strong className="text-[#3A2618] font-mono-num">
               {discoveredCount}/{totalLandmarks}
             </strong>
           </span>
           <span aria-hidden="true">·</span>
           <span>
-            İncir Puanı: <strong className="text-[#D99B43] font-mono-num">{coins}</strong>
+            İncir Puanı:{' '}
+            <strong className="text-[#B84C27] font-mono-num">{coins}</strong>
           </span>
         </div>
 
@@ -42,7 +43,7 @@ export function PauseModal({
           <button
             type="button"
             onClick={onResume}
-            className="w-full inline-flex items-center justify-center gap-2.5 px-5 py-3 rounded-xl bg-[#D99B43] hover:bg-[#E4AC59] text-[#181612] font-semibold text-sm transition-colors cursor-pointer"
+            className="w-full inline-flex items-center justify-center gap-2.5 px-5 py-3 rounded-xl bg-[#C85A32] hover:bg-[#B44D28] text-[#FAF2E2] font-semibold text-sm transition-colors cursor-pointer"
           >
             <Play className="w-4 h-4" aria-hidden="true" />
             <span>Sürüşe Devam Et</span>
@@ -51,16 +52,16 @@ export function PauseModal({
           <button
             type="button"
             onClick={onResetPosition}
-            className="w-full inline-flex items-center justify-center gap-2.5 px-5 py-3 rounded-xl bg-[#2A2620] hover:bg-[#342F28] text-[#F5EFE6] font-medium text-sm border border-[#F5EFE6]/10 transition-colors cursor-pointer"
+            className="w-full inline-flex items-center justify-center gap-2.5 px-5 py-3 rounded-xl bg-[#EDE0C6] hover:bg-[#E2D1B2] text-[#3A2618] font-semibold text-sm border border-[#B99464]/60 transition-colors cursor-pointer"
           >
-            <RotateCcw className="w-4 h-4" aria-hidden="true" />
+            <RotateCcw className="w-4 h-4 text-[#6B5038]" aria-hidden="true" />
             <span>Sevgi Yolu’na Dön</span>
           </button>
 
           <button
             type="button"
             onClick={onReturnTitle}
-            className="w-full inline-flex items-center justify-center gap-2.5 px-5 py-2.5 rounded-xl text-[#C7BEB0] hover:text-[#F5EFE6] hover:bg-[#2A2620]/60 font-medium text-sm transition-colors cursor-pointer"
+            className="w-full inline-flex items-center justify-center gap-2.5 px-5 py-2.5 rounded-xl text-[#6B5038] hover:text-[#3A2618] hover:bg-[#EDE0C6]/70 font-semibold text-sm transition-colors cursor-pointer"
           >
             <Home className="w-4 h-4" aria-hidden="true" />
             <span>Ana Ekrana Çık</span>

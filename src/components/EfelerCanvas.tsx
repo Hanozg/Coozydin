@@ -4,44 +4,82 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import {
   ANCIENT_SIGNPOST_POSITIONS,
   DISTRICT_ZONES,
+  getSolarClockLabel,
+  getTimeOfDayFromPhase,
   LANDMARKS,
+  pickAutoWeatherForCycle,
   PLAYER_HOME_DOOR_POS,
   ROAD_X_COORDS,
   ROAD_Z_COORDS,
+  SampledSolarMood,
+  sampleSolarCurve,
   STREET_NAMES_X,
   STREET_NAMES_Z,
   TIME_MOODS,
+  TIME_PHASE_ANCHORS,
 } from '../data/efelerData';
+import { BUILDING_NPCS } from '../data/npcData';
 import { audioEngine } from '../game/audioEngine';
 import { buildEfelerCity } from '../game/cityBuilder';
+import {
+  CityAvatarRig,
+  CompanionWalkerRig,
+  createCityAvatarRig,
+  createCompanionWalkerRig,
+} from '../game/cityNpcs';
 import { createCityMaterials } from '../game/materials';
+import {
+  getSurfaceHeightAt,
+  getSurfaceSlopeAngles,
+  getTabakhaneCenterX,
+} from '../game/terrain';
 import { createProceduralTextures } from '../game/textures';
 import { createVehicleModel, VehicleRig } from '../game/vehicles';
 import {
+  AvatarConfig,
+  BuildingNpcDef,
   CameraPreset,
   ColliderBox,
   ErrandDef,
+  ExplorationMode,
   GamePhase,
+  HeldTreatType,
   LandmarkDef,
   NearbyStreetInteraction,
   PlayerHudSnapshot,
+  SeasonType,
   StreetInteractionType,
   TimeOfDay,
   VehicleConfig,
   WeatherType,
 } from '../types/game';
 
+export interface TouchDriveInput {
+  forward: boolean;
+  backward: boolean;
+  left: boolean;
+  right: boolean;
+}
+
 export interface EfelerCanvasHandle {
   teleportTo: (x: number, z: number, heading?: number) => void;
   triggerDiscoverNearby: () => void;
   triggerHorn: () => void;
+  setTouchInput: (next: Partial<TouchDriveInput>) => void;
+  adjustZoom: (delta: number) => void;
+  startCompanionWalk: (npc: BuildingNpcDef, treat: HeldTreatType) => void;
+  giveTreat: (treat: HeldTreatType) => void;
 }
 
 interface EfelerCanvasProps {
   phase: GamePhase;
+  explorationMode: ExplorationMode;
+  avatarConfig: AvatarConfig;
   vehicleConfig: VehicleConfig;
   timeOfDay: TimeOfDay;
+  season: SeasonType;
   weather: WeatherType;
+  autoAtmosphere: boolean;
   cameraPreset: CameraPreset;
   discoveredIds: string[];
   coins: number;
@@ -53,13 +91,21 @@ interface EfelerCanvasProps {
   onErrandAction: (landmarkId: string) => void;
   onInspectSignpost: () => void;
   onStreetEvent: (type: StreetInteractionType) => void;
+  onInteractNpc: (npc: BuildingNpcDef) => void;
+  onWalkChatMessage: (msg: string) => void;
+  onAutoTimeSync?: (nextTod: TimeOfDay) => void;
+  onAutoWeatherSync?: (nextWeather: WeatherType) => void;
   onEnterHome: () => void;
 }
 
 const _targetSky = new THREE.Color();
+const _targetSkyB = new THREE.Color();
 const _targetSun = new THREE.Color();
+const _targetSunB = new THREE.Color();
 const _targetHemiSky = new THREE.Color();
+const _targetHemiSkyB = new THREE.Color();
 const _targetHemiGround = new THREE.Color();
+const _targetHemiGroundB = new THREE.Color();
 const _stormTint = new THREE.Color(0x3a4354);
 const _rainTint = new THREE.Color(0x6c7c8e);
 const _snowTint = new THREE.Color(0xdde6ef);
@@ -119,14 +165,27 @@ function resolveLocationLabels(x: number, z: number): { district: string; street
   return { district, street: bestStreet };
 }
 
+const STREAM_BRIDGE_ZS = [-96, -58, -22, 12, 48];
+
 function resolveCollision(
   x: number,
   z: number,
   radius: number,
   colliders: ColliderBox[]
 ): [number, number] {
-  let nx = THREE.MathUtils.clamp(x, -95, 95);
-  let nz = THREE.MathUtils.clamp(z, -90, 72);
+  let nx = THREE.MathUtils.clamp(x, -98, 104);
+  let nz = THREE.MathUtils.clamp(z, -106, 72);
+
+  // Keep player on riverbanks / stone bridges instead of stepping into Tabakhane Deresi water
+  const onBridge = STREAM_BRIDGE_ZS.some((bz) => Math.abs(nz - bz) < 4.5);
+  if (!onBridge) {
+    const streamX = getTabakhaneCenterX(nz);
+    const bankMinDist = 3.1 + radius;
+    const dxStream = nx - streamX;
+    if (Math.abs(dxStream) < bankMinDist) {
+      nx = streamX + (dxStream >= 0 ? bankMinDist : -bankMinDist);
+    }
+  }
 
   for (const b of colliders) {
     const closestX = Math.max(b.minX, Math.min(nx, b.maxX));
@@ -152,9 +211,13 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
   function EfelerCanvas(
     {
       phase,
+      explorationMode,
+      avatarConfig,
       vehicleConfig,
       timeOfDay,
+      season,
       weather,
+      autoAtmosphere,
       cameraPreset,
       discoveredIds,
       coins,
@@ -166,6 +229,10 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       onErrandAction,
       onInspectSignpost,
       onStreetEvent,
+      onInteractNpc,
+      onWalkChatMessage,
+      onAutoTimeSync,
+      onAutoWeatherSync,
       onEnterHome,
     },
     ref
@@ -174,9 +241,13 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
     const [contextLost, setContextLost] = useState(false);
 
     const phaseRef = useRef(phase);
+    const explorationModeRef = useRef(explorationMode);
+    const avatarConfigRef = useRef(avatarConfig);
     const vehicleConfigRef = useRef(vehicleConfig);
     const timeOfDayRef = useRef(timeOfDay);
+    const seasonRef = useRef(season);
     const weatherRef = useRef(weather);
+    const autoAtmosphereRef = useRef(autoAtmosphere);
     const cameraPresetRef = useRef(cameraPreset);
     const discoveredIdsRef = useRef(discoveredIds);
     const coinsRef = useRef(coins);
@@ -188,13 +259,21 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       onErrandAction,
       onInspectSignpost,
       onStreetEvent,
+      onInteractNpc,
+      onWalkChatMessage,
+      onAutoTimeSync,
+      onAutoWeatherSync,
       onEnterHome,
     });
 
     phaseRef.current = phase;
+    explorationModeRef.current = explorationMode;
+    avatarConfigRef.current = avatarConfig;
     vehicleConfigRef.current = vehicleConfig;
     timeOfDayRef.current = timeOfDay;
+    seasonRef.current = season;
     weatherRef.current = weather;
+    autoAtmosphereRef.current = autoAtmosphere;
     cameraPresetRef.current = cameraPreset;
     discoveredIdsRef.current = discoveredIds;
     coinsRef.current = coins;
@@ -206,22 +285,53 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       onErrandAction,
       onInspectSignpost,
       onStreetEvent,
+      onInteractNpc,
+      onWalkChatMessage,
+      onAutoTimeSync,
+      onAutoWeatherSync,
       onEnterHome,
     };
+
+    const lastAutoSyncedTodRef = useRef<TimeOfDay>(timeOfDay);
+    const manualTargetPhaseRef = useRef<number | null>(null);
 
     const simRef = useRef({
       x: initialTransform?.x ?? -18,
       z: initialTransform?.z ?? 27,
+      y: getSurfaceHeightAt(initialTransform?.x ?? -18, initialTransform?.z ?? 27),
+      pitch: 0,
+      roll: 0,
       heading: initialTransform?.heading ?? 0,
       speed: 0,
       steerAngle: 0,
       wheelSpin: 0,
       zoomFactor: 1.0,
+      fpYaw: 0,
+      fpPitch: -0.04,
       rebuildVehicleRequested: false,
+      updateAvatarConfigRequested: false,
       nearbyLandmark: null as LandmarkDef | null,
+      nearbyNpc: null as BuildingNpcDef | null,
       nearAncientSignpost: false,
       nearPlayerHome: false,
       nearbyStreetInteraction: null as NearbyStreetInteraction | null,
+      heldTreat: 'none' as HeldTreatType,
+      treatTimer: 0,
+      treatDirty: false,
+      companionNpc: null as BuildingNpcDef | null,
+      companionTimer: 0,
+      companionChatAccum: 0,
+      companionChatIdx: 0,
+      companionX: initialTransform?.x ?? -18,
+      companionZ: initialTransform?.z ?? 27,
+      companionDirty: false,
+    });
+
+    const touchInputRef = useRef<TouchDriveInput>({
+      forward: false,
+      backward: false,
+      left: false,
+      right: false,
     });
 
     const streetTriggersRef = useRef<{
@@ -248,7 +358,14 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         }
       }
 
-      // Priority 2: Enter Player Home ("Sıcak Yuvam")
+      // Priority 2: Building NPC Chat / Treat / Walk
+      if (simRef.current.nearbyNpc) {
+        audioEngine.playDiscoveryChime();
+        callbacksRef.current.onInteractNpc(simRef.current.nearbyNpc);
+        return;
+      }
+
+      // Priority 3: Enter Player Home ("Sıcak Yuvam")
       if (simRef.current.nearPlayerHome) {
         audioEngine.updateEngineSound(0, vehicleConfigRef.current.type, false);
         audioEngine.playDiscoveryChime();
@@ -256,14 +373,14 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         return;
       }
 
-      // Priority 3: Ancient Cities Signpost
+      // Priority 4: Ancient Cities Signpost
       if (simRef.current.nearAncientSignpost && !simRef.current.nearbyLandmark) {
         audioEngine.playDiscoveryChime();
         callbacksRef.current.onInspectSignpost();
         return;
       }
 
-      // Priority 4: Landmark Discovery / Errand Pickup & Dropoff
+      // Priority 5: Landmark Discovery / Errand Pickup & Dropoff
       const lm = simRef.current.nearbyLandmark;
       if (!lm) return;
       if (!discoveredIdsRef.current.includes(lm.id)) {
@@ -284,8 +401,15 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       teleportTo: (x: number, z: number, heading = 0) => {
         simRef.current.x = x;
         simRef.current.z = z;
+        simRef.current.y = getSurfaceHeightAt(x, z);
+        simRef.current.pitch = 0;
+        simRef.current.roll = 0;
         simRef.current.heading = heading;
         simRef.current.speed = 0;
+        if (simRef.current.companionNpc) {
+          simRef.current.companionX = x + Math.cos(heading) * 1.25;
+          simRef.current.companionZ = z - Math.sin(heading) * 1.25;
+        }
       },
       triggerDiscoverNearby: () => {
         performDiscover();
@@ -293,11 +417,58 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       triggerHorn: () => {
         audioEngine.playHorn(vehicleConfigRef.current.type);
       },
+      setTouchInput: (next: Partial<TouchDriveInput>) => {
+        Object.assign(touchInputRef.current, next);
+      },
+      adjustZoom: (delta: number) => {
+        simRef.current.zoomFactor = THREE.MathUtils.clamp(
+          simRef.current.zoomFactor + delta,
+          0.68,
+          2.2
+        );
+      },
+      startCompanionWalk: (npc: BuildingNpcDef, treat: HeldTreatType) => {
+        const s = simRef.current;
+        s.companionNpc = npc;
+        s.companionTimer = 30;
+        s.companionChatAccum = 3.5;
+        s.companionChatIdx = 0;
+        s.companionX = s.x + Math.cos(s.heading) * 1.28;
+        s.companionZ = s.z - Math.sin(s.heading) * 1.28;
+        s.companionDirty = true;
+        s.heldTreat = treat;
+        s.treatTimer = 34;
+        s.treatDirty = true;
+      },
+      giveTreat: (treat: HeldTreatType) => {
+        const s = simRef.current;
+        s.heldTreat = treat;
+        s.treatTimer = 30;
+        s.treatDirty = true;
+      },
     }));
 
     useEffect(() => {
       simRef.current.rebuildVehicleRequested = true;
     }, [vehicleConfig]);
+
+    useEffect(() => {
+      simRef.current.updateAvatarConfigRequested = true;
+    }, [avatarConfig]);
+
+    useEffect(() => {
+      if (timeOfDay !== lastAutoSyncedTodRef.current) {
+        lastAutoSyncedTodRef.current = timeOfDay;
+        manualTargetPhaseRef.current = TIME_PHASE_ANCHORS[timeOfDay];
+      }
+    }, [timeOfDay]);
+
+    useEffect(() => {
+      if (cameraPreset === 'first_person') {
+        simRef.current.fpYaw = 0;
+        simRef.current.fpPitch = -0.04;
+      }
+    }, [cameraPreset]);
 
     useEffect(() => {
       const container = mountRef.current;
@@ -310,7 +481,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       });
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.08;
+      renderer.toneMappingExposure = 1.18;
       renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio, 2));
       renderer.shadowMap.enabled = !isSoftwareGl;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -318,6 +489,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       renderer.domElement.style.display = 'block';
       renderer.domElement.style.width = '100%';
       renderer.domElement.style.height = '100%';
+      renderer.domElement.style.touchAction = 'none';
       container.appendChild(renderer.domElement);
 
       const handleContextLost = (e: Event) => {
@@ -333,26 +505,32 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       const scene = new THREE.Scene();
       const initialMood = TIME_MOODS[timeOfDayRef.current];
       scene.background = new THREE.Color(initialMood.skyColor);
-      scene.fog = new THREE.FogExp2(initialMood.fogColor, 0.004);
+      scene.fog = new THREE.FogExp2(initialMood.fogColor, 0.0026);
 
       const pmrem = new THREE.PMREMGenerator(renderer);
       const envRT = pmrem.fromScene(new RoomEnvironment(), 0.04);
       scene.environment = envRT.texture;
       pmrem.dispose();
 
+      const getEffectiveFrustum = (asp: number) =>
+        asp < 1 ? 32 / Math.max(0.62, Math.pow(asp, 0.48)) : 32;
+
       const aspect = container.clientWidth / Math.max(1, container.clientHeight);
-      const baseFrustum = 35;
+      const initialFrustum = getEffectiveFrustum(aspect);
       const camera = new THREE.OrthographicCamera(
-        (-baseFrustum * aspect) / 2,
-        (baseFrustum * aspect) / 2,
-        baseFrustum / 2,
-        -baseFrustum / 2,
+        (-initialFrustum * aspect) / 2,
+        (initialFrustum * aspect) / 2,
+        initialFrustum / 2,
+        -initialFrustum / 2,
         -120,
         350
       );
       camera.position.set(38, 34, 62);
       _lookCurrent.set(simRef.current.x, 1, simRef.current.z);
       camera.lookAt(_lookCurrent);
+
+      const fpCamera = new THREE.PerspectiveCamera(62, aspect, 0.12, 280);
+      fpCamera.position.set(simRef.current.x, simRef.current.y + 1.46, simRef.current.z);
 
       const hemiLight = new THREE.HemisphereLight(
         initialMood.hemiSky,
@@ -370,19 +548,20 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       sunLight.shadow.mapSize.width = 2048;
       sunLight.shadow.mapSize.height = 2048;
       sunLight.shadow.camera.near = 5;
-      sunLight.shadow.camera.far = 220;
-      const d = 62;
+      sunLight.shadow.camera.far = 210;
+      const d = 42;
       sunLight.shadow.camera.left = -d;
       sunLight.shadow.camera.right = d;
       sunLight.shadow.camera.top = d;
       sunLight.shadow.camera.bottom = -d;
-      sunLight.shadow.bias = -0.0005;
+      sunLight.shadow.bias = -0.0004;
       sunLight.shadow.normalBias = 0.02;
+      sunLight.shadow.radius = 2.2;
       scene.add(sunLight);
       scene.add(sunLight.target);
 
-      const rimLight = new THREE.DirectionalLight(0xc2d9ff, 0.35);
-      rimLight.position.set(-40, 28, -50);
+      const rimLight = new THREE.DirectionalLight(0xffe0ba, 0.38);
+      rimLight.position.set(42, 26, -45);
       scene.add(rimLight);
 
       const textures = createProceduralTextures(renderer.capabilities.getMaxAnisotropy());
@@ -419,8 +598,20 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         textures.contactShadow,
         isSoftwareGl
       );
-      vehicleRig.root.position.set(simRef.current.x, 0, simRef.current.z);
+      vehicleRig.root.position.set(simRef.current.x, simRef.current.y, simRef.current.z);
+      vehicleRig.root.rotation.order = 'YXZ';
       scene.add(vehicleRig.root);
+
+      const cityAvatarRig: CityAvatarRig = createCityAvatarRig(
+        avatarConfigRef.current,
+        textures.contactShadow
+      );
+      cityAvatarRig.root.position.set(simRef.current.x, simRef.current.y, simRef.current.z);
+      cityAvatarRig.root.visible = explorationModeRef.current === 'walk';
+      scene.add(cityAvatarRig.root);
+
+      const companionRig: CompanionWalkerRig = createCompanionWalkerRig();
+      scene.add(companionRig.root);
 
       const particleCount = 24;
       const particleGeo = new THREE.SphereGeometry(0.22, 6, 6);
@@ -473,9 +664,13 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         renderer.compile(scene, camera);
       }
 
-      // Raycasting for Clicking Street Musicians, Vendor, and Lokma Stand directly in 3D
+      // Raycasting for Clicking Street Encounters & Building NPCs + Drag-to-Look in First-Person
       const raycaster = new THREE.Raycaster();
       let lastMoveRaycast = 0;
+      let isPointerDragging = false;
+      let lastDragX = 0;
+      let lastDragY = 0;
+      let pointerDragDist = 0;
 
       const updatePointer = (clientX: number, clientY: number) => {
         const rect = renderer.domElement.getBoundingClientRect();
@@ -483,31 +678,79 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         _pointerVec.y = -((clientY - rect.top) / rect.height) * 2 + 1;
       };
 
+      const onPointerDown = (e: PointerEvent) => {
+        if (phaseRef.current !== 'playing') return;
+        isPointerDragging = true;
+        lastDragX = e.clientX;
+        lastDragY = e.clientY;
+        pointerDragDist = 0;
+      };
+
       const onPointerMove = (e: PointerEvent) => {
         if (phaseRef.current !== 'playing') return;
+        if (isPointerDragging) {
+          const dx = e.clientX - lastDragX;
+          const dy = e.clientY - lastDragY;
+          lastDragX = e.clientX;
+          lastDragY = e.clientY;
+          pointerDragDist += Math.hypot(dx, dy);
+          if (cameraPresetRef.current === 'first_person') {
+            simRef.current.fpYaw = THREE.MathUtils.clamp(
+              simRef.current.fpYaw - dx * 0.0055,
+              -2.1,
+              2.1
+            );
+            simRef.current.fpPitch = THREE.MathUtils.clamp(
+              simRef.current.fpPitch - dy * 0.0045,
+              -0.52,
+              0.45
+            );
+          }
+        }
         const now = performance.now();
         if (now - lastMoveRaycast < 65) return;
         lastMoveRaycast = now;
         updatePointer(e.clientX, e.clientY);
-        raycaster.setFromCamera(_pointerVec, camera);
+        const activeCam = cameraPresetRef.current === 'first_person' ? fpCamera : camera;
+        raycaster.setFromCamera(_pointerVec, activeCam);
         const hits = raycaster.intersectObjects(city.interactiveClickables, false);
         renderer.domElement.style.cursor = hits.length > 0 ? 'pointer' : 'default';
       };
 
+      const onPointerUp = () => {
+        isPointerDragging = false;
+      };
+
       const onPointerClick = (e: MouseEvent) => {
         if (phaseRef.current !== 'playing') return;
+        if (pointerDragDist > 8) return;
         updatePointer(e.clientX, e.clientY);
-        raycaster.setFromCamera(_pointerVec, camera);
+        const activeCam = cameraPresetRef.current === 'first_person' ? fpCamera : camera;
+        raycaster.setFromCamera(_pointerVec, activeCam);
         const hits = raycaster.intersectObjects(city.interactiveClickables, false);
-        if (hits.length > 0 && streetTriggersRef.current) {
-          const type = hits[0].object.userData.interactionType as StreetInteractionType;
-          if (type === 'musicians') streetTriggersRef.current.triggerMusicians();
-          else if (type === 'lokma') streetTriggersRef.current.triggerLokma();
-          else if (type === 'vendor') streetTriggersRef.current.triggerVendor();
+        if (hits.length > 0) {
+          const ud = hits[0].object.userData;
+          if (ud.npcId) {
+            const npc = BUILDING_NPCS.find((n) => n.id === ud.npcId);
+            if (npc) {
+              audioEngine.playDiscoveryChime();
+              callbacksRef.current.onInteractNpc(npc);
+              return;
+            }
+          }
+          if (streetTriggersRef.current) {
+            const type = ud.interactionType as StreetInteractionType;
+            if (type === 'musicians') streetTriggersRef.current.triggerMusicians();
+            else if (type === 'lokma') streetTriggersRef.current.triggerLokma();
+            else if (type === 'vendor') streetTriggersRef.current.triggerVendor();
+          }
         }
       };
 
+      renderer.domElement.addEventListener('pointerdown', onPointerDown);
       renderer.domElement.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
+      window.addEventListener('pointercancel', onPointerUp);
       renderer.domElement.addEventListener('click', onPointerClick);
 
       const heldKeys = new Set<string>();
@@ -531,31 +774,69 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       };
       const onWindowBlur = () => {
         heldKeys.clear();
+        touchInputRef.current.forward = false;
+        touchInputRef.current.backward = false;
+        touchInputRef.current.left = false;
+        touchInputRef.current.right = false;
       };
       const onWheel = (e: WheelEvent) => {
         if (phaseRef.current !== 'playing') return;
         simRef.current.zoomFactor = THREE.MathUtils.clamp(
           simRef.current.zoomFactor - e.deltaY * 0.0008,
-          0.72,
-          2.05
+          0.68,
+          2.2
         );
+      };
+
+      let pinchStartDist = 0;
+      let pinchStartZoom = 1;
+      const getTouchDist = (t1: Touch, t2: Touch) =>
+        Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+
+      const onTouchStart = (e: TouchEvent) => {
+        if (phaseRef.current !== 'playing') return;
+        if (e.touches.length === 2) {
+          pinchStartDist = getTouchDist(e.touches[0], e.touches[1]);
+          pinchStartZoom = simRef.current.zoomFactor;
+        }
+      };
+      const onTouchMove = (e: TouchEvent) => {
+        if (phaseRef.current !== 'playing') return;
+        if (e.touches.length === 2 && pinchStartDist > 10) {
+          e.preventDefault();
+          const dist = getTouchDist(e.touches[0], e.touches[1]);
+          const ratio = dist / pinchStartDist;
+          simRef.current.zoomFactor = THREE.MathUtils.clamp(pinchStartZoom * ratio, 0.68, 2.2);
+        }
+      };
+      const onTouchEnd = (e: TouchEvent) => {
+        if (e.touches.length < 2) {
+          pinchStartDist = 0;
+        }
       };
 
       window.addEventListener('keydown', onKeyDown);
       window.addEventListener('keyup', onKeyUp);
       window.addEventListener('blur', onWindowBlur);
       renderer.domElement.addEventListener('wheel', onWheel, { passive: true });
+      renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: true });
+      renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+      renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: true });
+      renderer.domElement.addEventListener('touchcancel', onTouchEnd, { passive: true });
 
       const onResize = () => {
         if (!container) return;
         const w = container.clientWidth;
         const h = Math.max(1, container.clientHeight);
         const asp = w / h;
-        camera.left = (-baseFrustum * asp) / 2;
-        camera.right = (baseFrustum * asp) / 2;
-        camera.top = baseFrustum / 2;
-        camera.bottom = -baseFrustum / 2;
+        const frustum = getEffectiveFrustum(asp);
+        camera.left = (-frustum * asp) / 2;
+        camera.right = (frustum * asp) / 2;
+        camera.top = frustum / 2;
+        camera.bottom = -frustum / 2;
         camera.updateProjectionMatrix();
+        fpCamera.aspect = asp;
+        fpCamera.updateProjectionMatrix();
         renderer.setSize(w, h);
       };
       window.addEventListener('resize', onResize);
@@ -564,6 +845,28 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       let frameId = 0;
       let disposed = false;
       let hudAccum = 0;
+
+      // Continuous Daily Solar Clock & Gradual Weather State Machine
+      let solarPhase = TIME_PHASE_ANCHORS[timeOfDayRef.current];
+      const sampledSolar: SampledSolarMood = {
+        a: TIME_MOODS.golden,
+        b: TIME_MOODS.golden,
+        t: 0,
+        sunIntensity: 2.0,
+        hemiIntensity: 0.78,
+        windowGlow: 0.4,
+        lampLevel: 0.5,
+        sunPos: [0, 50, 40],
+      };
+      const weatherWeights = {
+        clear: weatherRef.current === 'clear' ? 1 : 0,
+        rain: weatherRef.current === 'rain' ? 1 : 0,
+        snow: weatherRef.current === 'snow' ? 1 : 0,
+        storm: weatherRef.current === 'storm' ? 1 : 0,
+      };
+      let frostFactor = seasonRef.current === 'winter' || weatherRef.current === 'snow' ? 0.85 : 0;
+      let wetFactor = weatherRef.current === 'rain' || weatherRef.current === 'storm' ? 0.8 : 0;
+      let autoWeatherTimer = 34;
 
       function afterDraw(cb: () => void) {
         const gl = renderer.getContext() as WebGL2RenderingContext;
@@ -597,18 +900,77 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
             textures.contactShadow,
             isSoftwareGl
           );
-          vehicleRig.root.position.set(simRef.current.x, 0, simRef.current.z);
+          vehicleRig.root.position.set(simRef.current.x, simRef.current.y, simRef.current.z);
+          vehicleRig.root.rotation.order = 'YXZ';
           vehicleRig.root.rotation.y = simRef.current.heading;
+          vehicleRig.root.rotation.x = simRef.current.pitch;
           scene.add(vehicleRig.root);
         }
 
-        const mood = TIME_MOODS[timeOfDayRef.current];
-        const wType = weatherRef.current;
+        if (simRef.current.updateAvatarConfigRequested) {
+          simRef.current.updateAvatarConfigRequested = false;
+          cityAvatarRig.applyConfig(avatarConfigRef.current);
+        }
 
-        if (wType === 'storm') {
+        // 1. Continuous Solar Clock Progression (Auto-Cycle or Smooth Manual Glide)
+        if (manualTargetPhaseRef.current !== null) {
+          const targetP = manualTargetPhaseRef.current;
+          let diff = targetP - solarPhase;
+          if (diff > 0.5) diff -= 1;
+          if (diff < -0.5) diff += 1;
+          if (Math.abs(diff) < 0.004) {
+            solarPhase = targetP;
+            manualTargetPhaseRef.current = null;
+          } else {
+            solarPhase = ((solarPhase + diff * Math.min(1, dt * 2.2)) % 1 + 1) % 1;
+          }
+        } else if (autoAtmosphereRef.current && phaseRef.current === 'playing') {
+          // Gentle full 24h Efeler cycle (~4 minutes real-time)
+          solarPhase = (solarPhase + dt * 0.0042) % 1;
+          const bucket = getTimeOfDayFromPhase(solarPhase);
+          if (bucket !== lastAutoSyncedTodRef.current) {
+            lastAutoSyncedTodRef.current = bucket;
+            callbacksRef.current.onAutoTimeSync?.(bucket);
+          }
+        }
+
+        sampleSolarCurve(solarPhase, sampledSolar);
+
+        // 2. Gradual Multi-Second Weather Crossfade & Auto Weather Drift
+        if (autoAtmosphereRef.current && phaseRef.current === 'playing') {
+          autoWeatherTimer -= dt;
+          if (autoWeatherTimer <= 0) {
+            autoWeatherTimer = 36 + Math.random() * 24;
+            const candidate = pickAutoWeatherForCycle(solarPhase, seasonRef.current, Math.random());
+            if (candidate !== weatherRef.current) {
+              callbacksRef.current.onAutoWeatherSync?.(candidate);
+            }
+          }
+        }
+
+        const wType = weatherRef.current;
+        const wFadeRate = Math.min(1, dt * 0.28);
+        weatherWeights.clear = THREE.MathUtils.lerp(weatherWeights.clear, wType === 'clear' ? 1 : 0, wFadeRate);
+        weatherWeights.rain = THREE.MathUtils.lerp(weatherWeights.rain, wType === 'rain' ? 1 : 0, wFadeRate);
+        weatherWeights.snow = THREE.MathUtils.lerp(weatherWeights.snow, wType === 'snow' ? 1 : 0, wFadeRate);
+        weatherWeights.storm = THREE.MathUtils.lerp(weatherWeights.storm, wType === 'storm' ? 1 : 0, wFadeRate);
+
+        const targetFrost =
+          seasonRef.current === 'winter'
+            ? Math.max(0.76, weatherWeights.snow)
+            : weatherWeights.snow * 0.92;
+        frostFactor = THREE.MathUtils.damp(frostFactor, targetFrost, 0.35, dt);
+
+        const targetWet = Math.min(1, weatherWeights.rain + weatherWeights.storm * 1.15);
+        wetFactor = THREE.MathUtils.damp(wetFactor, targetWet, 0.45, dt);
+
+        const windStrength =
+          0.55 + weatherWeights.rain * 0.35 + weatherWeights.storm * 1.15 + weatherWeights.snow * 0.25;
+
+        if (weatherWeights.storm > 0.35) {
           lightningTimer -= dt;
           if (lightningTimer <= 0) {
-            lightningFlash = 1.0;
+            lightningFlash = weatherWeights.storm;
             lightningTimer = 4.5 + Math.random() * 6.5;
           }
           lightningFlash = Math.max(0, lightningFlash - dt * 3.8);
@@ -616,14 +978,12 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           lightningFlash = 0;
         }
 
-        _targetSky.set(mood.skyColor);
-        if (wType === 'storm') {
-          _targetSky.lerp(_stormTint, 0.68);
-        } else if (wType === 'rain') {
-          _targetSky.lerp(_rainTint, 0.45);
-        } else if (wType === 'snow') {
-          _targetSky.lerp(_snowTint, 0.35);
-        }
+        _targetSky.set(sampledSolar.a.skyColor);
+        _targetSkyB.set(sampledSolar.b.skyColor);
+        _targetSky.lerp(_targetSkyB, sampledSolar.t);
+        _targetSky.lerp(_stormTint, weatherWeights.storm * 0.68);
+        _targetSky.lerp(_rainTint, weatherWeights.rain * 0.45);
+        _targetSky.lerp(_snowTint, weatherWeights.snow * 0.35);
         if (lightningFlash > 0.02) {
           _targetSky.lerp(_lightningTint, lightningFlash * 0.55);
         }
@@ -632,51 +992,90 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         if (scene.fog instanceof THREE.FogExp2) {
           scene.fog.color.copy(scene.background as THREE.Color);
           const targetFogDensity =
-            wType === 'storm' ? 0.009 : wType === 'rain' ? 0.0068 : wType === 'snow' ? 0.006 : 0.004;
-          scene.fog.density = THREE.MathUtils.damp(scene.fog.density, targetFogDensity, 2.5, dt);
+            0.0026 +
+            weatherWeights.storm * 0.0056 +
+            weatherWeights.rain * 0.0032 +
+            weatherWeights.snow * 0.0024;
+          scene.fog.density = THREE.MathUtils.damp(scene.fog.density, targetFogDensity, 1.8, dt);
         }
 
-        _targetSun.set(mood.sunColor);
-        if (wType === 'storm') _targetSun.lerp(_stormTint, 0.55);
+        _targetSun.set(sampledSolar.a.sunColor);
+        _targetSunB.set(sampledSolar.b.sunColor);
+        _targetSun.lerp(_targetSunB, sampledSolar.t);
+        _targetSun.lerp(_stormTint, weatherWeights.storm * 0.55);
         sunLight.color.lerp(_targetSun, Math.min(1, dt * 3));
-        const weatherSunScale = wType === 'storm' ? 0.55 : wType === 'rain' ? 0.72 : wType === 'snow' ? 0.85 : 1.0;
+        const weatherSunScale =
+          1.0 -
+          weatherWeights.storm * 0.45 -
+          weatherWeights.rain * 0.28 -
+          weatherWeights.snow * 0.15;
         sunLight.intensity = THREE.MathUtils.damp(
           sunLight.intensity,
-          mood.sunIntensity * weatherSunScale + lightningFlash * 1.6,
-          4,
+          sampledSolar.sunIntensity * weatherSunScale + lightningFlash * 1.6,
+          3.2,
           dt
         );
-        _targetHemiSky.set(mood.hemiSky);
-        _targetHemiGround.set(mood.hemiGround);
+
+        _targetHemiSky.set(sampledSolar.a.hemiSky);
+        _targetHemiSkyB.set(sampledSolar.b.hemiSky);
+        _targetHemiSky.lerp(_targetHemiSkyB, sampledSolar.t);
+        _targetHemiGround.set(sampledSolar.a.hemiGround);
+        _targetHemiGroundB.set(sampledSolar.b.hemiGround);
+        _targetHemiGround.lerp(_targetHemiGroundB, sampledSolar.t);
         hemiLight.color.lerp(_targetHemiSky, Math.min(1, dt * 3));
         hemiLight.groundColor.lerp(_targetHemiGround, Math.min(1, dt * 3));
-        hemiLight.intensity = THREE.MathUtils.damp(hemiLight.intensity, mood.hemiIntensity, 3, dt);
+        hemiLight.intensity = THREE.MathUtils.damp(
+          hemiLight.intensity,
+          sampledSolar.hemiIntensity,
+          3,
+          dt
+        );
 
-        const nightOrStorm = mood.lampOn || wType === 'storm' || wType === 'rain';
+        const lampActiveLevel = Math.max(
+          sampledSolar.lampLevel,
+          weatherWeights.storm * 0.85 + weatherWeights.rain * 0.55
+        );
         mats.windowLit.emissiveIntensity = THREE.MathUtils.damp(
           mats.windowLit.emissiveIntensity,
-          nightOrStorm ? Math.max(0.75, mood.windowGlow) : mood.windowGlow,
-          3.5,
+          Math.max(sampledSolar.windowGlow, lampActiveLevel * 0.72),
+          3.0,
           dt
         );
         mats.lampBulb.emissiveIntensity = THREE.MathUtils.damp(
           mats.lampBulb.emissiveIntensity,
-          nightOrStorm ? 1.85 : 0.08,
-          3.5,
+          0.08 + lampActiveLevel * 1.77,
+          3.0,
           dt
         );
         vehicleRig.headlightGlowMeshes.forEach((hm) => {
           const mat = hm.material as THREE.MeshStandardMaterial;
-          mat.emissiveIntensity = nightOrStorm ? 1.7 : 0.25;
+          mat.emissiveIntensity = 0.25 + lampActiveLevel * 1.45;
         });
 
-        // Update Living World & Interactive Street Encounters
-        city.figTree.update(dt, coinsRef.current, elapsed);
+        // Update Living World, Seasonal Trees, Diorama Roofs/Ground, Street Encounters & NPCs
+        city.update(dt, elapsed);
+        city.figTree.update(
+          dt,
+          coinsRef.current,
+          elapsed,
+          seasonRef.current,
+          frostFactor,
+          windStrength
+        );
+        city.updateAtmosphere(dt, elapsed, {
+          season: seasonRef.current,
+          frostFactor,
+          wetFactor,
+          windStrength,
+          lookX: _lookCurrent.x,
+          lookZ: _lookCurrent.z,
+        });
         city.pedestrians.update(dt, elapsed);
         city.trafficLights.update(elapsed);
         city.musicians.update(dt, elapsed);
         city.libraryVendor.update(dt, elapsed);
         city.lokmaStand.update(dt, elapsed);
+        city.buildingNpcs.update(dt, elapsed, simRef.current.x, simRef.current.z);
 
         const bubbleNow = city.libraryVendor.isBubbleVisible();
         if (bubbleNow && !prevVendorBubble && phaseRef.current === 'playing') {
@@ -693,30 +1092,74 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
 
         const sim = simRef.current;
         const vType = vehicleConfigRef.current.type;
-        if (phaseRef.current === 'playing') {
-          const forward = heldKeys.has('KeyW') || heldKeys.has('ArrowUp');
-          const backward = heldKeys.has('KeyS') || heldKeys.has('ArrowDown');
-          const left = heldKeys.has('KeyA') || heldKeys.has('ArrowLeft');
-          const right = heldKeys.has('KeyD') || heldKeys.has('ArrowRight');
+        const isWalking = explorationModeRef.current === 'walk';
+        const isFirstPerson =
+          cameraPresetRef.current === 'first_person' && phaseRef.current !== 'title';
+        const slopesPre = getSurfaceSlopeAngles(sim.x, sim.z, sim.heading);
 
-          const maxSpeed = vType === 'bicycle' ? 11.5 : vType === 'motorcycle' ? 19.5 : 17.0;
-          const accel = vType === 'bicycle' ? 14 : vType === 'motorcycle' ? 22 : 17;
-          const drag = vType === 'bicycle' ? 3.8 : 2.6;
-          const turnRate = vType === 'bicycle' ? 2.5 : vType === 'motorcycle' ? 2.35 : 1.95;
+        // Held treat duration & rig sync
+        if (sim.treatTimer > 0) {
+          sim.treatTimer -= dt;
+          if (sim.treatTimer <= 0) {
+            sim.heldTreat = 'none';
+            sim.treatDirty = true;
+          }
+        }
+        if (sim.treatDirty) {
+          sim.treatDirty = false;
+          cityAvatarRig.setTreat(sim.heldTreat);
+        }
+
+        if (phaseRef.current === 'playing') {
+          const forward =
+            heldKeys.has('KeyW') || heldKeys.has('ArrowUp') || touchInputRef.current.forward;
+          const backward =
+            heldKeys.has('KeyS') || heldKeys.has('ArrowDown') || touchInputRef.current.backward;
+          const left =
+            heldKeys.has('KeyA') || heldKeys.has('ArrowLeft') || touchInputRef.current.left;
+          const right =
+            heldKeys.has('KeyD') || heldKeys.has('ArrowRight') || touchInputRef.current.right;
+          const sprint = heldKeys.has('ShiftLeft') || heldKeys.has('ShiftRight');
+
+          const maxSpeed = isWalking
+            ? sprint
+              ? 8.0
+              : 5.4
+            : vType === 'bicycle'
+              ? 11.5
+              : vType === 'motorcycle'
+                ? 19.5
+                : 17.0;
+          const accel = isWalking ? 24 : vType === 'bicycle' ? 14 : vType === 'motorcycle' ? 22 : 17;
+          const drag = isWalking ? 14 : vType === 'bicycle' ? 3.8 : 2.6;
+          const turnRate = isWalking
+            ? 2.65
+            : vType === 'bicycle'
+              ? 2.5
+              : vType === 'motorcycle'
+                ? 2.35
+                : 1.95;
 
           if (forward) {
             sim.speed = Math.min(maxSpeed, sim.speed + accel * dt);
           } else if (backward) {
-            sim.speed = Math.max(-maxSpeed * 0.45, sim.speed - accel * 0.9 * dt);
+            sim.speed = Math.max(-maxSpeed * (isWalking ? 0.65 : 0.45), sim.speed - accel * 0.9 * dt);
           } else {
             sim.speed = THREE.MathUtils.damp(sim.speed, 0, drag, dt);
             if (Math.abs(sim.speed) < 0.04) sim.speed = 0;
           }
 
+          // Gentle uphill resistance & downhill coasting on Aytepe / Tralleis slopes
+          if (!isWalking && Math.abs(slopesPre.pitch) > 0.008 && Math.abs(sim.speed) > 0.25) {
+            sim.speed -= Math.sin(slopesPre.pitch) * 4.8 * dt;
+          }
+
           const steerInput = (left ? 1 : 0) - (right ? 1 : 0);
           sim.steerAngle = THREE.MathUtils.damp(sim.steerAngle, steerInput * 0.42, 10, dt);
 
-          if (Math.abs(sim.speed) > 0.15) {
+          if (isWalking) {
+            sim.heading += steerInput * turnRate * dt;
+          } else if (Math.abs(sim.speed) > 0.15) {
             const dirSign = sim.speed >= 0 ? 1 : -1;
             const speedTurnScale = THREE.MathUtils.clamp(Math.abs(sim.speed) / 4.5, 0.35, 1.0);
             sim.heading += steerInput * turnRate * speedTurnScale * dirSign * dt;
@@ -725,7 +1168,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           const moveX = -Math.sin(sim.heading) * sim.speed * dt;
           const moveZ = -Math.cos(sim.heading) * sim.speed * dt;
 
-          const colRadius = vType === 'car' ? 1.35 : 0.72;
+          const colRadius = isWalking ? 0.55 : vType === 'car' ? 1.35 : 0.72;
           const [resolvedX, resolvedZ] = resolveCollision(
             sim.x + moveX,
             sim.z + moveZ,
@@ -735,37 +1178,114 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           sim.x = resolvedX;
           sim.z = resolvedZ;
 
-          audioEngine.updateEngineSound(Math.abs(sim.speed), vType, true);
+          if (isWalking) {
+            audioEngine.updateEngineSound(0, vType, false);
+          } else {
+            audioEngine.updateEngineSound(Math.abs(sim.speed), vType, true);
+          }
         } else {
           sim.speed = THREE.MathUtils.damp(sim.speed, 0, 4, dt);
           audioEngine.updateEngineSound(0, vType, false);
         }
 
-        vehicleRig.root.position.set(sim.x, 0, sim.z);
-        vehicleRig.root.rotation.y = sim.heading;
+        const groundY = getSurfaceHeightAt(sim.x, sim.z);
+        const slopes = getSurfaceSlopeAngles(sim.x, sim.z, sim.heading);
+        sim.y = THREE.MathUtils.damp(sim.y, groundY, 16, dt);
+        sim.pitch = THREE.MathUtils.damp(sim.pitch, slopes.pitch, 12, dt);
+        sim.roll = THREE.MathUtils.damp(sim.roll, -slopes.roll, 12, dt);
 
-        sim.wheelSpin += (sim.speed * dt) / (vType === 'car' ? 0.33 : 0.35);
-        vehicleRig.wheels.forEach((w) => {
-          w.rotation.x = -sim.wheelSpin;
-        });
-        vehicleRig.steerPivots.forEach((p) => {
-          p.rotation.y = sim.steerAngle;
-        });
-        if (vehicleRig.pedalCrank) {
-          vehicleRig.pedalCrank.rotation.x = -sim.wheelSpin * 0.7;
+        if (isWalking) {
+          vehicleRig.root.visible = false;
+          cityAvatarRig.root.visible = !isFirstPerson;
+          cityAvatarRig.root.position.set(sim.x, sim.y, sim.z);
+          cityAvatarRig.root.rotation.order = 'YXZ';
+          cityAvatarRig.root.rotation.y = sim.heading;
+          cityAvatarRig.root.rotation.x = sim.pitch * 0.35;
+          cityAvatarRig.updateWalk(sim.speed, dt, elapsed);
+        } else {
+          cityAvatarRig.root.visible = false;
+          vehicleRig.root.visible = !isFirstPerson;
+          vehicleRig.root.position.set(sim.x, sim.y, sim.z);
+          vehicleRig.root.rotation.order = 'YXZ';
+          vehicleRig.root.rotation.y = sim.heading;
+          vehicleRig.root.rotation.x = sim.pitch;
+
+          sim.wheelSpin += (sim.speed * dt) / (vType === 'car' ? 0.33 : 0.35);
+          vehicleRig.wheels.forEach((w) => {
+            w.rotation.x = -sim.wheelSpin;
+          });
+          vehicleRig.steerPivots.forEach((p) => {
+            p.rotation.y = sim.steerAngle;
+          });
+          if (vehicleRig.pedalCrank) {
+            vehicleRig.pedalCrank.rotation.x = -sim.wheelSpin * 0.7;
+          }
+          const steerRoll =
+            vType === 'car'
+              ? -sim.steerAngle * Math.min(1, Math.abs(sim.speed) / 12) * 0.14
+              : sim.steerAngle * Math.min(1, Math.abs(sim.speed) / 8) * 0.38;
+          vehicleRig.tiltGroup.rotation.z = THREE.MathUtils.damp(
+            vehicleRig.tiltGroup.rotation.z,
+            steerRoll + sim.roll,
+            8,
+            dt
+          );
         }
-        const targetRoll =
-          vType === 'car'
-            ? -sim.steerAngle * Math.min(1, Math.abs(sim.speed) / 12) * 0.14
-            : sim.steerAngle * Math.min(1, Math.abs(sim.speed) / 8) * 0.38;
-        vehicleRig.tiltGroup.rotation.z = THREE.MathUtils.damp(
-          vehicleRig.tiltGroup.rotation.z,
-          targetRoll,
-          8,
-          dt
-        );
 
-        if (Math.abs(sim.speed) > 4.5 && phaseRef.current === 'playing') {
+        // Companion NPC boulevard walk logic
+        if (sim.companionDirty && sim.companionNpc) {
+          sim.companionDirty = false;
+          companionRig.configure(
+            sim.companionNpc,
+            sim.heldTreat !== 'none' ? sim.heldTreat : 'icecream'
+          );
+        }
+        if (sim.companionNpc && isWalking) {
+          sim.companionTimer -= dt;
+          companionRig.root.visible = true;
+          const targetCX = sim.x + Math.cos(sim.heading) * 1.28 + Math.sin(sim.heading) * 0.15;
+          const targetCZ = sim.z - Math.sin(sim.heading) * 1.28 + Math.cos(sim.heading) * 0.15;
+          const stepX = THREE.MathUtils.damp(sim.companionX, targetCX, 5.5, dt);
+          const stepZ = THREE.MathUtils.damp(sim.companionZ, targetCZ, 5.5, dt);
+          const [resCX, resCZ] = resolveCollision(stepX, stepZ, 0.48, city.colliders);
+          const compSpeed =
+            Math.hypot(resCX - sim.companionX, resCZ - sim.companionZ) / Math.max(0.001, dt);
+          sim.companionX = resCX;
+          sim.companionZ = resCZ;
+          companionRig.root.position.set(resCX, getSurfaceHeightAt(resCX, resCZ), resCZ);
+          companionRig.root.rotation.y = sim.heading;
+          companionRig.updateWalk(compSpeed, dt, elapsed);
+
+          if (phaseRef.current === 'playing') {
+            sim.companionChatAccum -= dt;
+            if (sim.companionChatAccum <= 0) {
+              sim.companionChatAccum = 8.5;
+              const lines = sim.companionNpc.walkChatLines || [
+                'Efeler sokaklarında birlikte yürümek çok keyifli!',
+              ];
+              const line = lines[sim.companionChatIdx % lines.length];
+              sim.companionChatIdx += 1;
+              callbacksRef.current.onWalkChatMessage(`${sim.companionNpc.name}: “${line}”`);
+            }
+          }
+
+          if (sim.companionTimer <= 0) {
+            const doneName = sim.companionNpc.name;
+            sim.companionNpc = null;
+            companionRig.root.visible = false;
+            callbacksRef.current.onWalkChatMessage(
+              `${doneName} ile keyifli bulvar yürüyüşünüz tamamlandı!`
+            );
+          }
+        } else {
+          if (!isWalking && sim.companionNpc) {
+            sim.companionNpc = null;
+            sim.companionTimer = 0;
+          }
+          companionRig.root.visible = false;
+        }
+
+        if (!isWalking && Math.abs(sim.speed) > 4.5 && phaseRef.current === 'playing') {
           particleSpawnAccum += dt;
           if (particleSpawnAccum > 0.09) {
             particleSpawnAccum = 0;
@@ -774,7 +1294,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
             p.active = true;
             p.life = 0;
             p.x = sim.x + Math.sin(sim.heading) * 1.1 + (Math.random() - 0.5) * 0.5;
-            p.y = 0.18;
+            p.y = groundY + 0.18;
             p.z = sim.z + Math.cos(sim.heading) * 1.1 + (Math.random() - 0.5) * 0.5;
             p.vx = (Math.random() - 0.5) * 0.6;
             p.vy = 0.65 + Math.random() * 0.4;
@@ -851,6 +1371,17 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         }
         sim.nearbyLandmark = closestLm;
 
+        let closestNpc: BuildingNpcDef | null = null;
+        let closestNpcDist = 6.2;
+        for (const npc of BUILDING_NPCS) {
+          const nd = Math.hypot(sim.x - npc.position[0], sim.z - npc.position[1]);
+          if (nd < closestNpcDist) {
+            closestNpcDist = nd;
+            closestNpc = npc;
+          }
+        }
+        sim.nearbyNpc = closestNpc;
+
         // Check proximity to Interactive Street Encounters
         let streetInt: NearbyStreetInteraction | null = null;
         const dMusicians = Math.hypot(
@@ -904,28 +1435,43 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           sim.nearPlayerHome ? 1.18 + Math.sin(elapsed * 4) * 0.1 : 1.0 + Math.sin(elapsed * 2.2) * 0.06
         );
 
-        // Update 3D Weather Particles centered around look target
-        if (wType === 'clear') {
+        // Update 3D Weather Particles gradually with crossfaded precipitation strength
+        const precipStrength = Math.max(
+          weatherWeights.rain,
+          weatherWeights.snow,
+          weatherWeights.storm
+        );
+        const snowDom = weatherWeights.snow > Math.max(weatherWeights.rain, weatherWeights.storm);
+        const stormDom = weatherWeights.storm > Math.max(weatherWeights.rain, weatherWeights.snow);
+        if (precipStrength < 0.03) {
           if (weatherMesh.visible) weatherMesh.visible = false;
         } else {
           if (!weatherMesh.visible) weatherMesh.visible = true;
-          if (wType === 'snow') {
+          if (snowDom) {
             weatherMat.color.setHex(0xffffff);
-            weatherMat.opacity = 0.85;
-          } else if (wType === 'storm') {
+            weatherMat.opacity = 0.85 * precipStrength;
+          } else if (stormDom) {
             weatherMat.color.setHex(0xb8cde4);
-            weatherMat.opacity = 0.68;
+            weatherMat.opacity = 0.68 * precipStrength;
           } else {
             weatherMat.color.setHex(0xd0e2f2);
-            weatherMat.opacity = 0.52;
+            weatherMat.opacity = 0.52 * precipStrength;
           }
 
+          const activeDrops = Math.floor(weatherCount * precipStrength);
           for (let i = 0; i < weatherCount; i++) {
+            if (i >= activeDrops) {
+              wDummy.position.set(0, -30, 0);
+              wDummy.scale.setScalar(0.01);
+              wDummy.updateMatrix();
+              weatherMesh.setMatrixAt(i, wDummy.matrix);
+              continue;
+            }
             const drop = weatherDrops[i];
-            if (wType === 'snow') {
+            if (snowDom) {
               drop.y -= 3.2 * drop.speed * dt;
               drop.ox += Math.sin(elapsed * 1.4 + drop.phase) * 1.4 * dt;
-            } else if (wType === 'storm') {
+            } else if (stormDom) {
               drop.y -= 28 * drop.speed * dt;
               drop.ox -= 7.5 * dt;
             } else {
@@ -939,11 +1485,15 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
               drop.oz = (Math.random() - 0.5) * 68;
             }
 
-            wDummy.position.set(_lookCurrent.x + drop.ox, drop.y, _lookCurrent.z + drop.oz);
-            if (wType === 'snow') {
+            wDummy.position.set(
+              _lookCurrent.x + drop.ox,
+              Math.max(0, _lookCurrent.y - 1.0) + drop.y,
+              _lookCurrent.z + drop.oz
+            );
+            if (snowDom) {
               wDummy.rotation.set(elapsed + drop.phase, elapsed * 0.6, 0);
               wDummy.scale.set(2.2, 0.22, 2.2);
-            } else if (wType === 'storm') {
+            } else if (stormDom) {
               wDummy.rotation.set(0, 0, 0.28);
               wDummy.scale.set(1.0, 1.35, 1.0);
             } else {
@@ -963,34 +1513,57 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
               ? 0.65
               : 1.0;
 
+        const activeCam = isFirstPerson ? fpCamera : camera;
+
         if (phaseRef.current === 'title') {
           const orbitAngle = elapsed * 0.11;
           const focusX = Math.sin(orbitAngle) * 20;
           const focusZ = 2 + Math.cos(orbitAngle) * 22;
-          _lookGoal.set(focusX, 2, focusZ);
-          _camGoal.set(focusX + 42, 36, focusZ + 42);
+          const focusY = getSurfaceHeightAt(focusX, focusZ);
+          _lookGoal.set(focusX, focusY + 2, focusZ);
+          _camGoal.set(focusX + 42, focusY + 36, focusZ + 42);
           camera.zoom = THREE.MathUtils.damp(camera.zoom, 0.9, 2.5, dt);
+          _lookCurrent.lerp(_lookGoal, 1 - Math.exp(-5.5 * dt));
+          camera.position.lerp(_camGoal, 1 - Math.exp(-5.5 * dt));
+          camera.lookAt(_lookCurrent);
+          camera.updateProjectionMatrix();
+        } else if (isFirstPerson) {
+          const eyeH = isWalking ? 1.46 : 1.32;
+          const fwdOff = isWalking ? 0.14 : 0.38;
+          const camX = sim.x - Math.sin(sim.heading) * fwdOff;
+          const camZ = sim.z - Math.cos(sim.heading) * fwdOff;
+          const camY = sim.y + eyeH;
+          const lookAngle = sim.heading + sim.fpYaw;
+          const totalPitch = THREE.MathUtils.clamp(sim.pitch * 0.6 + sim.fpPitch, -0.65, 0.52);
+
+          fpCamera.position.set(camX, camY, camZ);
+          _lookGoal.set(
+            camX - Math.sin(lookAngle) * Math.cos(totalPitch) * 16,
+            camY + Math.sin(totalPitch) * 16,
+            camZ - Math.cos(lookAngle) * Math.cos(totalPitch) * 16
+          );
+          fpCamera.lookAt(_lookGoal);
+          _lookCurrent.set(sim.x, sim.y + 1.0, sim.z);
         } else {
-          _lookGoal.set(sim.x, 1.0, sim.z);
-          _camGoal.set(sim.x + 38, 34, sim.z + 38);
+          _lookGoal.set(sim.x, sim.y + 1.0, sim.z);
+          _camGoal.set(sim.x + 38, sim.y + 34, sim.z + 38);
           camera.zoom = THREE.MathUtils.damp(
             camera.zoom,
             sim.zoomFactor * presetZoom,
             5,
             dt
           );
+          _lookCurrent.lerp(_lookGoal, 1 - Math.exp(-5.5 * dt));
+          camera.position.lerp(_camGoal, 1 - Math.exp(-5.5 * dt));
+          camera.lookAt(_lookCurrent);
+          camera.updateProjectionMatrix();
         }
-
-        _lookCurrent.lerp(_lookGoal, 1 - Math.exp(-5.5 * dt));
-        camera.position.lerp(_camGoal, 1 - Math.exp(-5.5 * dt));
-        camera.lookAt(_lookCurrent);
-        camera.updateProjectionMatrix();
 
         sunLight.target.position.copy(_lookCurrent);
         sunLight.position.set(
-          _lookCurrent.x + mood.sunPosition[0],
-          mood.sunPosition[1],
-          _lookCurrent.z + mood.sunPosition[2]
+          _lookCurrent.x + sampledSolar.sunPos[0],
+          _lookCurrent.y + sampledSolar.sunPos[1],
+          _lookCurrent.z + sampledSolar.sunPos[2]
         );
 
         hudAccum += dt;
@@ -1013,7 +1586,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           // Project Vendor Head Position for crisp DOM Speech Bubble
           let vendorBubble: PlayerHudSnapshot['vendorBubble'] = null;
           if (city.libraryVendor.isBubbleVisible() && container) {
-            _projVec.copy(city.libraryVendor.headWorldPos).project(camera);
+            _projVec.copy(city.libraryVendor.headWorldPos).project(activeCam);
             if (_projVec.z < 1 && Math.abs(_projVec.x) <= 1.05 && Math.abs(_projVec.y) <= 1.05) {
               vendorBubble = {
                 x: ((_projVec.x + 1) / 2) * container.clientWidth,
@@ -1029,6 +1602,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
             currentDistrict: loc.district,
             currentStreet: loc.street,
             nearbyLandmark: closestLm,
+            nearbyNpc: closestNpc,
             nearAncientSignpost: nearSign,
             nearPlayerHome: sim.nearPlayerHome,
             nearbyStreetInteraction: streetInt,
@@ -1036,10 +1610,13 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
             distanceToActiveErrand: distToErrand,
             playerPos: [sim.x, sim.z],
             headingRad: sim.heading,
+            companionName: sim.companionNpc ? sim.companionNpc.name : null,
+            heldTreat: sim.heldTreat,
+            solarClock: getSolarClockLabel(solarPhase),
           });
         }
 
-        renderer.render(scene, camera);
+        renderer.render(scene, activeCam);
 
         if (isSoftwareGl) {
           afterDraw(tick);
@@ -1062,14 +1639,23 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         window.removeEventListener('keyup', onKeyUp);
         window.removeEventListener('blur', onWindowBlur);
         window.removeEventListener('resize', onResize);
+        window.removeEventListener('pointerup', onPointerUp);
+        window.removeEventListener('pointercancel', onPointerUp);
+        renderer.domElement.removeEventListener('pointerdown', onPointerDown);
         renderer.domElement.removeEventListener('pointermove', onPointerMove);
         renderer.domElement.removeEventListener('click', onPointerClick);
         renderer.domElement.removeEventListener('wheel', onWheel);
+        renderer.domElement.removeEventListener('touchstart', onTouchStart);
+        renderer.domElement.removeEventListener('touchmove', onTouchMove);
+        renderer.domElement.removeEventListener('touchend', onTouchEnd);
+        renderer.domElement.removeEventListener('touchcancel', onTouchEnd);
         renderer.domElement.removeEventListener('webglcontextlost', handleContextLost);
         renderer.domElement.removeEventListener('webglcontextrestored', handleContextRestored);
 
         audioEngine.updateEngineSound(0, vehicleConfigRef.current.type, false);
         vehicleRig.dispose();
+        cityAvatarRig.dispose();
+        companionRig.dispose();
         particleGeo.dispose();
         particleMat.dispose();
         weatherGeo.dispose();

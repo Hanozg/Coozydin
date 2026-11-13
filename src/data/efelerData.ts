@@ -1,4 +1,4 @@
-import { DistrictZone, ErrandDef, LandmarkDef, TimeOfDay, VehicleConfig } from '../types/game';
+import { DistrictZone, ErrandDef, LandmarkDef, SeasonType, TimeOfDay, VehicleConfig, WeatherType } from '../types/game';
 
 export const PAINT_SWATCHES = [
   { id: 'olive', name: 'Zeytin Yeşili', hex: '#586F4E' },
@@ -142,14 +142,14 @@ export const LANDMARKS: LandmarkDef[] = [
     name: 'Forum Aydın Yaşam & AVM',
     era: 'Modern Ege Mimarisi',
     district: 'Doğu Bulvarı',
-    position: [74, 0, 30],
+    position: [80, 0, 30],
     interactionRadius: 17,
     summary:
       'Açık hava Ege sokakları konseptiyle tasarlanan Forum Aydın; palmiyeli avlusu, cam atriyum çatısı ve kafeleriyle günün her saatinde hareketlidir.',
     architectureNote:
       'Krem traverten ve terracotta cepheli iki katlı açık galeri kanatları, ortadaki serin süs havuzu ve yüksek cam kanopi ile bütünleşir.',
     rewardCoins: 30,
-    doorPosition: [65, 30],
+    doorPosition: [71, 30],
   },
   {
     id: 'trengari',
@@ -164,6 +164,34 @@ export const LANDMARKS: LandmarkDef[] = [
       'Üçgen alınlıklı merkezi saat bölümü, yüksek kemerli pencereler, kırma kiremit çatı ve peronu örten dökme demir sundurma mimarinin ana unsurlarıdır.',
     rewardCoins: 35,
     doorPosition: [0, 62],
+  },
+  {
+    id: 'ortamahalle',
+    name: 'Orta Mahalle Tarihi Dokusu & Çeşmesi',
+    era: '19. Yüzyıl · Geleneksel Efeler Mahallesi',
+    district: 'Orta Mahalle · Tabakhane Karşısı',
+    position: [76, 0, -40],
+    interactionRadius: 15,
+    summary:
+      'Tarihi Sarı Belediye Binası arkasından akan Tabakhane Deresi’nin doğu yakasında, bulvardan taş köprülerle ayrılan taş sokakları, asmalı pergolaları ve mahalle çeşmesiyle sıcacık komşuluk kültürünü yaşatır.',
+    architectureNote:
+      'Kemerli mermer mahalle çeşmesi, yokuş eteklerine oturan cumbalı ahşap karkas evler, alaturka kiremit çatılar ve üzüm asmalı avlu duvarları mahalle dokusunu korur.',
+    rewardCoins: 35,
+    doorPosition: [65, -40],
+  },
+  {
+    id: 'universite',
+    name: 'ADÜ Aytepe Üniversitesi Kampüsü',
+    era: '1992 · Aydın Adnan Menderes Üniversitesi',
+    district: 'Aytepe Tepesi · Üniversite Bölgesi',
+    position: [78, 0, -78],
+    interactionRadius: 19,
+    summary:
+      'Orta Mahalle ve Tabakhane vadisinden yokuş yukarı tırmanılarak ulaşılan Aytepe sırtlarındaki ADÜ yerleşkesi; taş giriş takı, rektörlük binası, kubbeli kütüphanesi ve ovaya bakan çim amfisiyle kentin gençlik kalbidir.',
+    architectureNote:
+      'Eğimli Aytepe yamacına teraslanmış sütunlu rektörlük girişi, sekizgen tamburlu kubbeli kütüphane, geniş traverten yürüyüş aksları ve bisiklet park alanlarıyla ferah bir kampüs sunar.',
+    rewardCoins: 45,
+    doorPosition: [63.5, -78],
   },
 ];
 
@@ -204,17 +232,62 @@ export const COZY_ERRANDS: ErrandDef[] = [
       'Bey Camii civarındaki eski taş baskı atölyesinden çıkan hediyelik sabunları Forum Aydın avlusundaki butiğe bırakın.',
     rewardCoins: 30,
   },
+  {
+    id: 'errand-ortamahalle',
+    title: 'Orta Mahalle Taş Fırın Simidi',
+    fromLandmarkId: 'ortamahalle',
+    toLandmarkId: 'universite',
+    description:
+      'Orta Mahalle fırınından alınan çıtır susamlı simitleri ADÜ Aytepe Kampüsü kütüphane önündeki öğrencilere götürün.',
+    rewardCoins: 35,
+  },
+  {
+    id: 'errand-kampus',
+    title: 'Kampüs Botanik İncir Fidanı',
+    fromLandmarkId: 'universite',
+    toLandmarkId: 'kentmeydani',
+    description:
+      'ADÜ Ziraat bahçesinde yetiştirilen özel incir fidanını Kent Meydanı’ndaki bahçıvanlara teslim edin.',
+    rewardCoins: 40,
+  },
 ];
 
 export const DISTRICT_ZONES: DistrictZone[] = [
   {
+    id: 'kalfakoy-west',
+    name: 'Kalfaköy & Kuzey Yamaç',
+    subtitle: 'Tralleis Yolu Batı',
+    minX: -120,
+    maxX: -18,
+    minZ: -125,
+    maxZ: -52,
+  },
+  {
     id: 'tralleis-ridge',
     name: 'Tralleis & Kalfaköy Yamacı',
     subtitle: 'Tralleis Yolu',
-    minX: -120,
-    maxX: 120,
-    minZ: -120,
-    maxZ: -44,
+    minX: -18,
+    maxX: 28,
+    minZ: -125,
+    maxZ: -52,
+  },
+  {
+    id: 'universite-adu',
+    name: 'ADÜ Aytepe Üniversitesi (Yokuş Yukarı)',
+    subtitle: 'Aytepe Üniversite Yokuşu',
+    minX: 28,
+    maxX: 125,
+    minZ: -125,
+    maxZ: -56,
+  },
+  {
+    id: 'orta-mahalle',
+    name: 'Orta Mahalle (Tabakhane Doğu Yakası)',
+    subtitle: 'Orta Mahalle & Tabakhane',
+    minX: 47,
+    maxX: 125,
+    minZ: -56,
+    maxZ: -16,
   },
   {
     id: 'historic-bazaar',
@@ -222,16 +295,16 @@ export const DISTRICT_ZONES: DistrictZone[] = [
     subtitle: 'Ramazan Paşa Sk.',
     minX: -120,
     maxX: -2,
-    minZ: -44,
+    minZ: -52,
     maxZ: -2,
   },
   {
     id: 'kulliye-quarter',
-    name: 'Bey Camii & Külliye Mahallesi',
+    name: 'Bey Camii & Tabakhane Kenarı',
     subtitle: 'Gazi Bulvarı',
     minX: -2,
-    maxX: 120,
-    minZ: -44,
+    maxX: 47,
+    minZ: -52,
     maxZ: -2,
   },
   {
@@ -246,15 +319,15 @@ export const DISTRICT_ZONES: DistrictZone[] = [
   {
     id: 'forum-east',
     name: 'Forum Aydın & Doğu Bulvarı',
-    subtitle: 'Adnan Menderes Blv. Doğu',
+    subtitle: 'Doğu Bulvarı',
     minX: 54,
-    maxX: 120,
-    minZ: -2,
+    maxX: 125,
+    minZ: -16,
     maxZ: 42,
   },
   {
     id: 'kent-meydani',
-    name: 'Efeler Merkez & Kent Meydanı',
+    name: 'Efeler Merkez & Sarı Belediye',
     subtitle: 'Adnan Menderes Blv.',
     minX: -54,
     maxX: 54,
@@ -266,23 +339,24 @@ export const DISTRICT_ZONES: DistrictZone[] = [
     name: 'İstasyon & Gar Çevresi',
     subtitle: 'İstasyon Caddesi',
     minX: -120,
-    maxX: 120,
+    maxX: 125,
     minZ: 36,
     maxZ: 120,
   },
 ];
 
-export const ROAD_X_COORDS = [-54, -18, 18, 54] as const;
-export const ROAD_Z_COORDS = [-58, -22, 12, 48] as const;
+export const ROAD_X_COORDS = [-54, -18, 18, 58] as const;
+export const ROAD_Z_COORDS = [-96, -58, -22, 12, 48] as const;
 
 export const STREET_NAMES_X: Record<number, string> = {
   [-54]: 'Yağcılar & Tekstil Caddesi',
   [-18]: 'Sevgi Yolu',
   [18]: 'Hükümet Bulvarı',
-  [54]: 'Doğu Bulvarı',
+  [58]: 'Doğu Bulvarı',
 };
 
 export const STREET_NAMES_Z: Record<number, string> = {
+  [-96]: 'Aytepe Üniversite Bulvarı',
   [-58]: 'Tralleis Yolu',
   [-22]: 'Gazi Bulvarı',
   [12]: 'Adnan Menderes Blv.',
@@ -291,13 +365,20 @@ export const STREET_NAMES_Z: Record<number, string> = {
 
 export const ANCIENT_SIGNPOST_POSITIONS: [number, number][] = [
   [-27, -51],
-  [58, 3],
+  [64, 3],
 ];
 
 export const PLAYER_HOME_POS: [number, number] = [-28, -4];
 export const PLAYER_HOME_DOOR_POS: [number, number] = [-22.5, -4];
 
-export const WEATHER_OPTIONS: { id: 'clear' | 'rain' | 'snow' | 'storm'; label: string }[] = [
+export const SEASON_OPTIONS: { id: SeasonType; label: string }[] = [
+  { id: 'spring', label: 'İlkbahar' },
+  { id: 'summer', label: 'Yaz' },
+  { id: 'autumn', label: 'Sonbahar' },
+  { id: 'winter', label: 'Kış' },
+];
+
+export const WEATHER_OPTIONS: { id: WeatherType; label: string }[] = [
   { id: 'clear', label: 'Açık' },
   { id: 'rain', label: 'Yağmur' },
   { id: 'snow', label: 'Kar' },
@@ -332,12 +413,45 @@ export const FURNITURE_CATALOG: {
   { id: 'wallart', label: 'Tralleis Tablosu' },
 ];
 
+export const AVATAR_SKIN_SWATCHES = [
+  { id: 'fair', name: 'Açık Buğday', hex: '#F2D2B6' },
+  { id: 'warm', name: 'Ege Buğdayı', hex: '#E0B28D' },
+  { id: 'bronze', name: 'Zeytin Bronz', hex: '#C28A60' },
+  { id: 'deep', name: 'Koyu Kahve', hex: '#8A5A3C' },
+] as const;
+
+export const AVATAR_SHIRT_SWATCHES = [
+  { id: 'terracotta', name: 'Kiremit', hex: '#C85A32' },
+  { id: 'olive', name: 'Zeytin', hex: '#5D8A48' },
+  { id: 'aegean', name: 'Ege Mavisi', hex: '#3B6E8C' },
+  { id: 'ochre', name: 'Sarı', hex: '#D4923F' },
+  { id: 'cream', name: 'Krem', hex: '#EAE0CC' },
+  { id: 'plum', name: 'İncir Moru', hex: '#6E4555' },
+] as const;
+
+export const AVATAR_HAIR_STYLES: { id: 'kasket' | 'short' | 'long' | 'bun'; label: string }[] = [
+  { id: 'kasket', label: 'Efeler Kasketi' },
+  { id: 'short', label: 'Kısa Saç' },
+  { id: 'long', label: 'Uzun Dalgalı' },
+  { id: 'bun', label: 'Topuz' },
+];
+
+export const DEFAULT_AVATAR_CONFIG = {
+  skinColor: '#E0B28D',
+  shirtColor: '#C85A32',
+  pantsColor: '#3B4D5E',
+  hairStyle: 'kasket' as const,
+  hairColor: '#3A281E',
+};
+
 export const DEFAULT_COZY_ROOM_STATE = {
   wallColor: '#EADEC9',
   floorTone: 'oak' as const,
   lampOn: true,
   petType: 'both' as const,
   petAffection: 3,
+  avatarPlaced: true,
+  avatarConfig: DEFAULT_AVATAR_CONFIG,
   furniture: [
     { id: 'armchair' as const, enabled: true, slotIndex: 0 },
     { id: 'desk' as const, enabled: true, slotIndex: 0 },
@@ -375,57 +489,150 @@ export interface LightingMood {
 export const TIME_MOODS: Record<TimeOfDay, LightingMood> = {
   morning: {
     label: 'Sabah',
-    skyColor: '#D9E5EC',
-    fogColor: '#DCE6EA',
-    sunColor: '#FFF0D6',
-    sunIntensity: 1.75,
-    sunPosition: [70, 62, 45],
-    hemiSky: '#B8D8EE',
-    hemiGround: '#8C7A62',
-    hemiIntensity: 0.72,
+    skyColor: '#E8DFCE',
+    fogColor: '#E8DFCE',
+    sunColor: '#FFE8BF',
+    sunIntensity: 1.95,
+    sunPosition: [68, 54, 42],
+    hemiSky: '#DCE8EE',
+    hemiGround: '#9C8362',
+    hemiIntensity: 0.78,
     lampOn: false,
-    windowGlow: 0.08,
+    windowGlow: 0.1,
   },
   noon: {
     label: 'Öğle',
-    skyColor: '#CFE2EE',
-    fogColor: '#D6E4EB',
-    sunColor: '#FFF9EC',
-    sunIntensity: 2.05,
-    sunPosition: [45, 95, 35],
-    hemiSky: '#CBE5F6',
-    hemiGround: '#9E8B70',
-    hemiIntensity: 0.78,
+    skyColor: '#DCE8EC',
+    fogColor: '#DCE8EC',
+    sunColor: '#FFF5DE',
+    sunIntensity: 2.1,
+    sunPosition: [44, 82, 34],
+    hemiSky: '#DDF0FA',
+    hemiGround: '#A98E6E',
+    hemiIntensity: 0.82,
     lampOn: false,
-    windowGlow: 0.04,
+    windowGlow: 0.06,
   },
   golden: {
     label: 'Altın Saat',
-    skyColor: '#E8C59B',
-    fogColor: '#E5BF95',
-    sunColor: '#FFB86C',
-    sunIntensity: 1.95,
-    sunPosition: [-80, 34, 52],
-    hemiSky: '#F0B684',
-    hemiGround: '#6B5344',
-    hemiIntensity: 0.65,
+    skyColor: '#EAD0AA',
+    fogColor: '#E8CC9F',
+    sunColor: '#FFC985',
+    sunIntensity: 2.2,
+    sunPosition: [-72, 36, 48],
+    hemiSky: '#FFF0D4',
+    hemiGround: '#8B6846',
+    hemiIntensity: 0.78,
     lampOn: true,
-    windowGlow: 0.65,
+    windowGlow: 0.55,
   },
   evening: {
     label: 'Akşam',
-    skyColor: '#23283A',
-    fogColor: '#24293B',
-    sunColor: '#8CA7D6',
-    sunIntensity: 0.65,
+    skyColor: '#25293B',
+    fogColor: '#262A3C',
+    sunColor: '#98B2DF',
+    sunIntensity: 0.72,
     sunPosition: [-50, 58, -40],
-    hemiSky: '#44547A',
-    hemiGround: '#2A231E',
-    hemiIntensity: 0.52,
+    hemiSky: '#4B5B82',
+    hemiGround: '#332820',
+    hemiIntensity: 0.56,
     lampOn: true,
     windowGlow: 1.15,
   },
 };
+
+export const TIME_PHASE_ANCHORS: Record<TimeOfDay, number> = {
+  morning: 0.0,
+  noon: 0.28,
+  golden: 0.58,
+  evening: 0.82,
+};
+
+const SOLAR_KEYFRAMES: { phase: number; mood: LightingMood }[] = [
+  { phase: 0.0, mood: TIME_MOODS.morning },
+  { phase: 0.28, mood: TIME_MOODS.noon },
+  { phase: 0.58, mood: TIME_MOODS.golden },
+  { phase: 0.82, mood: TIME_MOODS.evening },
+  { phase: 1.0, mood: TIME_MOODS.morning },
+];
+
+export function getTimeOfDayFromPhase(phase: number): TimeOfDay {
+  const p = ((phase % 1) + 1) % 1;
+  if (p < 0.14 || p >= 0.94) return 'morning';
+  if (p < 0.44) return 'noon';
+  if (p < 0.71) return 'golden';
+  return 'evening';
+}
+
+export function getSolarClockLabel(phase: number): string {
+  // Map phase 0.0 = 07:00 -> 0.28 = 13:45 -> 0.58 = 18:15 -> 0.82 = 22:30 -> 1.0 = 07:00
+  const p = ((phase % 1) + 1) % 1;
+  const totalMinutes = Math.round((7 * 60 + p * 24 * 60) % (24 * 60));
+  const hh = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
+  const mm = String(totalMinutes % 60).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+export interface SampledSolarMood {
+  a: LightingMood;
+  b: LightingMood;
+  t: number;
+  sunIntensity: number;
+  hemiIntensity: number;
+  windowGlow: number;
+  lampLevel: number;
+  sunPos: [number, number, number];
+}
+
+export function sampleSolarCurve(phase: number, out: SampledSolarMood): void {
+  const p = ((phase % 1) + 1) % 1;
+  let k0 = SOLAR_KEYFRAMES[0];
+  let k1 = SOLAR_KEYFRAMES[1];
+  for (let i = 0; i < SOLAR_KEYFRAMES.length - 1; i++) {
+    if (p >= SOLAR_KEYFRAMES[i].phase && p <= SOLAR_KEYFRAMES[i + 1].phase) {
+      k0 = SOLAR_KEYFRAMES[i];
+      k1 = SOLAR_KEYFRAMES[i + 1];
+      break;
+    }
+  }
+  const span = Math.max(0.0001, k1.phase - k0.phase);
+  const rawT = (p - k0.phase) / span;
+  const t = rawT * rawT * (3 - 2 * rawT);
+
+  out.a = k0.mood;
+  out.b = k1.mood;
+  out.t = t;
+  out.sunIntensity = k0.mood.sunIntensity + (k1.mood.sunIntensity - k0.mood.sunIntensity) * t;
+  out.hemiIntensity = k0.mood.hemiIntensity + (k1.mood.hemiIntensity - k0.mood.hemiIntensity) * t;
+  out.windowGlow = k0.mood.windowGlow + (k1.mood.windowGlow - k0.mood.windowGlow) * t;
+  const lamp0 = k0.mood.lampOn ? 1 : 0;
+  const lamp1 = k1.mood.lampOn ? 1 : 0;
+  out.lampLevel = lamp0 + (lamp1 - lamp0) * t;
+  out.sunPos[0] = k0.mood.sunPosition[0] + (k1.mood.sunPosition[0] - k0.mood.sunPosition[0]) * t;
+  out.sunPos[1] = k0.mood.sunPosition[1] + (k1.mood.sunPosition[1] - k0.mood.sunPosition[1]) * t;
+  out.sunPos[2] = k0.mood.sunPosition[2] + (k1.mood.sunPosition[2] - k0.mood.sunPosition[2]) * t;
+}
+
+export function pickAutoWeatherForCycle(phase: number, season: SeasonType, roll: number): WeatherType {
+  const p = ((phase % 1) + 1) % 1;
+  if (season === 'winter') {
+    if (roll < 0.48) return 'snow';
+    if (roll < 0.68 && p > 0.65) return 'storm';
+    return 'clear';
+  }
+  if (season === 'autumn') {
+    if (roll < 0.36) return 'rain';
+    if (roll < 0.5 && p > 0.52) return 'storm';
+    return 'clear';
+  }
+  if (season === 'spring') {
+    if (roll < 0.28 && p > 0.2 && p < 0.72) return 'rain';
+    return 'clear';
+  }
+  // Summer: mostly sunny/golden, rare brief afternoon shower
+  if (roll < 0.14 && p > 0.35 && p < 0.62) return 'rain';
+  return 'clear';
+}
 
 export function getFigTreeStage(coins: number): {
   label: string;

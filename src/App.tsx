@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AgendaModal } from './components/AgendaModal';
 import { CozyRoomView } from './components/CozyRoomView';
-import { EfelerCanvas, EfelerCanvasHandle } from './components/EfelerCanvas';
+import { EfelerCanvas, EfelerCanvasHandle, TouchDriveInput } from './components/EfelerCanvas';
 import { GameHUD } from './components/GameHUD';
 import { JournalModal } from './components/JournalModal';
+import { NpcDialogueModal } from './components/NpcDialogueModal';
 import { PauseModal } from './components/PauseModal';
+import { RealAydinMapModal } from './components/RealAydinMapModal';
 import { TitleScreen } from './components/TitleScreen';
 import {
+  DEFAULT_AVATAR_CONFIG,
   DEFAULT_COZY_ROOM_STATE,
   DEFAULT_VEHICLE_CONFIG,
   LANDMARKS,
@@ -14,13 +17,17 @@ import {
 import { audioEngine } from './game/audioEngine';
 import {
   AgendaNote,
+  BuildingNpcDef,
   CameraPreset,
   CozyRoomState,
   ErrandDef,
+  ExplorationMode,
   GamePhase,
   LandmarkDef,
   LofiTrackId,
+  NpcActionOption,
   PlayerHudSnapshot,
+  SeasonType,
   StreetInteractionType,
   TimeOfDay,
   VehicleConfig,
@@ -35,6 +42,7 @@ const INITIAL_HUD: PlayerHudSnapshot = {
   currentDistrict: 'Efeler Merkez & Kent Meydanı',
   currentStreet: 'Sevgi Yolu',
   nearbyLandmark: null,
+  nearbyNpc: null,
   nearAncientSignpost: false,
   nearPlayerHome: false,
   nearbyStreetInteraction: null,
@@ -42,6 +50,8 @@ const INITIAL_HUD: PlayerHudSnapshot = {
   distanceToActiveErrand: null,
   playerPos: [-18, 27],
   headingRad: 0,
+  companionName: null,
+  heldTreat: 'none',
 };
 
 function loadSavedRoomState(): CozyRoomState {
@@ -52,6 +62,11 @@ function loadSavedRoomState(): CozyRoomState {
     return {
       ...DEFAULT_COZY_ROOM_STATE,
       ...parsed,
+      avatarPlaced: parsed.avatarPlaced ?? DEFAULT_COZY_ROOM_STATE.avatarPlaced,
+      avatarConfig: {
+        ...DEFAULT_AVATAR_CONFIG,
+        ...(parsed.avatarConfig || {}),
+      },
       furniture:
         Array.isArray(parsed.furniture) && parsed.furniture.length > 0
           ? parsed.furniture
@@ -84,11 +99,19 @@ export default function App() {
   const [phase, setPhase] = useState<GamePhase>('title');
   const [inHome, setInHome] = useState(false);
   const [journalOpen, setJournalOpen] = useState(false);
+  const [realMapOpen, setRealMapOpen] = useState(false);
   const [agendaOpen, setAgendaOpen] = useState(false);
+  const [activeNpc, setActiveNpc] = useState<BuildingNpcDef | null>(null);
+  const [activeNpcIsFirstChat, setActiveNpcIsFirstChat] = useState(false);
+  const [chattedNpcIds, setChattedNpcIds] = useState<string[]>([]);
+  const [quotaExceeded, setQuotaExceeded] = useState(false);
 
+  const [explorationMode, setExplorationMode] = useState<ExplorationMode>('vehicle');
   const [vehicleConfig, setVehicleConfig] = useState<VehicleConfig>(DEFAULT_VEHICLE_CONFIG);
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('golden');
+  const [season, setSeason] = useState<SeasonType>('spring');
   const [weather, setWeather] = useState<WeatherType>('clear');
+  const [autoAtmosphere, setAutoAtmosphere] = useState<boolean>(true);
   const [lofiTrack, setLofiTrack] = useState<LofiTrackId>('aegean');
   const [cameraPreset, setCameraPreset] = useState<CameraPreset>('isometric');
 
@@ -126,6 +149,12 @@ export default function App() {
     }
   }, [agendaNotes]);
 
+  useEffect(() => {
+    const onQuotaExceeded = () => setQuotaExceeded(true);
+    window.addEventListener('gmp-quota-exceeded', onQuotaExceeded);
+    return () => window.removeEventListener('gmp-quota-exceeded', onQuotaExceeded);
+  }, []);
+
   const handleHudUpdate = useCallback((snapshot: PlayerHudSnapshot) => {
     lastTransformRef.current = {
       x: snapshot.playerPos[0],
@@ -162,6 +191,11 @@ export default function App() {
 
   const handleChangeWeather = useCallback((next: WeatherType) => {
     audioEngine.init();
+    setWeather(next);
+    audioEngine.setWeatherAudio(next);
+  }, []);
+
+  const handleAutoWeatherSync = useCallback((next: WeatherType) => {
     setWeather(next);
     audioEngine.setWeatherAudio(next);
   }, []);
@@ -226,6 +260,44 @@ export default function App() {
     [showErrandToast]
   );
 
+  const handleInteractNpc = useCallback(
+    (npc: BuildingNpcDef) => {
+      audioEngine.init();
+      canvasRef.current?.setTouchInput({
+        forward: false,
+        backward: false,
+        left: false,
+        right: false,
+      });
+      const isFirst = !chattedNpcIds.includes(npc.id);
+      if (isFirst) {
+        setChattedNpcIds((prev) => (prev.includes(npc.id) ? prev : [...prev, npc.id]));
+        setCoins((c) => c + 5);
+      }
+      setActiveNpcIsFirstChat(isFirst);
+      setActiveNpc(npc);
+    },
+    [chattedNpcIds]
+  );
+
+  const handleSelectNpcAction = useCallback(
+    (npc: BuildingNpcDef, action: NpcActionOption) => {
+      if (coins < action.cost) return;
+      audioEngine.init();
+      audioEngine.playDiscoveryChime();
+      setCoins((c) => Math.max(0, c - action.cost));
+      setActiveNpc(null);
+      showErrandToast(action.resultMessage);
+      if (action.startsWalk) {
+        setExplorationMode('walk');
+        canvasRef.current?.startCompanionWalk(npc, action.treat);
+      } else {
+        canvasRef.current?.giveTreat(action.treat);
+      }
+    },
+    [coins, showErrandToast]
+  );
+
   const handleNavigateToLandmark = useCallback((lm: LandmarkDef) => {
     const [lx, , lz] = lm.position;
     let tx = lx;
@@ -255,9 +327,19 @@ export default function App() {
       tx = lx;
       tz = lz - 9.5;
       heading = Math.PI;
+    } else if (lm.id === 'ortamahalle') {
+      tx = lx - 14.0;
+      tz = lz;
+      heading = -Math.PI / 2;
+    } else if (lm.id === 'universite') {
+      tx = lx - 16.0;
+      tz = lz;
+      heading = -Math.PI / 2;
     }
     canvasRef.current?.teleportTo(tx, tz, heading);
     setJournalOpen(false);
+    setRealMapOpen(false);
+    setInHome(false);
     setPhase('playing');
   }, []);
 
@@ -282,7 +364,14 @@ export default function App() {
   const handleEnterHome = useCallback(() => {
     audioEngine.init();
     audioEngine.updateEngineSound(0, vehicleConfig.type, false);
+    canvasRef.current?.setTouchInput({
+      forward: false,
+      backward: false,
+      left: false,
+      right: false,
+    });
     setJournalOpen(false);
+    setRealMapOpen(false);
     setInHome(true);
   }, [vehicleConfig.type]);
 
@@ -308,9 +397,14 @@ export default function App() {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      const typing = document.activeElement?.tagName === 'INPUT';
       if (e.code === 'Escape') {
         if (agendaOpen) {
           setAgendaOpen(false);
+        } else if (activeNpc) {
+          setActiveNpc(null);
+        } else if (realMapOpen) {
+          setRealMapOpen(false);
         } else if (journalOpen) {
           setJournalOpen(false);
         } else if (inHome) {
@@ -320,13 +414,52 @@ export default function App() {
         } else if (phase === 'paused') {
           setPhase('playing');
         }
-      } else if (e.code === 'KeyJ' && phase === 'playing' && !inHome) {
+      } else if (
+        e.code === 'KeyJ' &&
+        phase === 'playing' &&
+        !inHome &&
+        !realMapOpen &&
+        !activeNpc &&
+        !typing
+      ) {
         setJournalOpen((o) => !o);
+      } else if (
+        e.code === 'KeyM' &&
+        phase === 'playing' &&
+        !inHome &&
+        !journalOpen &&
+        !agendaOpen &&
+        !activeNpc &&
+        !typing
+      ) {
+        setRealMapOpen((o) => !o);
+      } else if (
+        e.code === 'KeyV' &&
+        phase === 'playing' &&
+        !inHome &&
+        !journalOpen &&
+        !realMapOpen &&
+        !agendaOpen &&
+        !activeNpc &&
+        !typing
+      ) {
+        setExplorationMode((m) => (m === 'walk' ? 'vehicle' : 'walk'));
+      } else if (
+        e.code === 'KeyC' &&
+        phase === 'playing' &&
+        !inHome &&
+        !journalOpen &&
+        !realMapOpen &&
+        !agendaOpen &&
+        !activeNpc &&
+        !typing
+      ) {
+        setCameraPreset((p) => (p === 'first_person' ? 'isometric' : 'first_person'));
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [agendaOpen, inHome, journalOpen, phase]);
+  }, [activeNpc, agendaOpen, inHome, journalOpen, phase, realMapOpen]);
 
   useEffect(() => {
     return () => {
@@ -335,17 +468,49 @@ export default function App() {
     };
   }, []);
 
-  const effectivePhase: GamePhase = journalOpen && phase === 'playing' ? 'paused' : phase;
+  const effectivePhase: GamePhase =
+    (journalOpen || realMapOpen || Boolean(activeNpc)) && phase === 'playing' ? 'paused' : phase;
+
+  const handleTouchInput = useCallback((next: Partial<TouchDriveInput>) => {
+    if (next.forward || next.backward || next.left || next.right) {
+      audioEngine.init();
+    }
+    canvasRef.current?.setTouchInput(next);
+  }, []);
+
+  const handleAdjustZoom = useCallback((delta: number) => {
+    canvasRef.current?.adjustZoom(delta);
+  }, []);
 
   return (
-    <main className="relative w-screen h-screen overflow-hidden bg-[#181612]">
+    <main className="relative w-screen h-[100dvh] overflow-hidden bg-[#EAD0AA] select-none">
+      {quotaExceeded && (
+        <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm">
+          <span>
+            Google Maps Platform quota reached. If you are the app owner, visit{' '}
+            <a
+              href="https://developers.google.com/maps/ai/ai-studio?utm_campaign=gmp_mcp_codeassist_v1_aistudio#quota_exceeded_errors"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline font-semibold text-amber-950 hover:text-amber-800"
+            >
+              maps developer site
+            </a>{' '}
+            for instructions to update your account.
+          </span>
+        </div>
+      )}
       {!inHome ? (
         <EfelerCanvas
           ref={canvasRef}
           phase={effectivePhase}
+          explorationMode={explorationMode}
+          avatarConfig={cozyRoomState.avatarConfig || DEFAULT_AVATAR_CONFIG}
           vehicleConfig={vehicleConfig}
           timeOfDay={timeOfDay}
+          season={season}
           weather={weather}
+          autoAtmosphere={autoAtmosphere}
           cameraPreset={cameraPreset}
           discoveredIds={discoveredIds}
           coins={coins}
@@ -357,6 +522,10 @@ export default function App() {
           onErrandAction={handleErrandAction}
           onInspectSignpost={handleInspectSignpost}
           onStreetEvent={handleStreetEvent}
+          onInteractNpc={handleInteractNpc}
+          onWalkChatMessage={showErrandToast}
+          onAutoTimeSync={setTimeOfDay}
+          onAutoWeatherSync={handleAutoWeatherSync}
           onEnterHome={handleEnterHome}
         />
       ) : (
@@ -378,12 +547,15 @@ export default function App() {
 
       {phase === 'title' && !inHome && <TitleScreen onStart={handleStartGame} />}
 
-      {phase === 'playing' && !journalOpen && !inHome && (
+      {phase === 'playing' && !journalOpen && !realMapOpen && !activeNpc && !inHome && (
         <GameHUD
           hud={hud}
+          explorationMode={explorationMode}
           vehicleConfig={vehicleConfig}
           timeOfDay={timeOfDay}
+          season={season}
           weather={weather}
+          autoAtmosphere={autoAtmosphere}
           lofiTrack={lofiTrack}
           cameraPreset={cameraPreset}
           discoveredIds={discoveredIds}
@@ -395,21 +567,49 @@ export default function App() {
           errandToast={errandToast}
           isMuted={isMuted}
           musicEnabled={musicEnabled}
+          onChangeExplorationMode={(next) => {
+            audioEngine.init();
+            setExplorationMode(next);
+          }}
           onChangeVehicleConfig={(next) => {
             audioEngine.init();
             setVehicleConfig(next);
           }}
           onChangeTimeOfDay={setTimeOfDay}
+          onChangeSeason={setSeason}
           onChangeWeather={handleChangeWeather}
+          onToggleAutoAtmosphere={() => setAutoAtmosphere((prev) => !prev)}
           onChangeLofiTrack={handleChangeLofiTrack}
           onChangeCameraPreset={setCameraPreset}
+          onInteractNpc={handleInteractNpc}
           onToggleMute={handleToggleMute}
           onToggleMusic={handleToggleMusic}
           onOpenJournal={() => setJournalOpen(true)}
+          onOpenRealMap={() => setRealMapOpen(true)}
           onEnterHome={handleEnterHome}
-          onPause={() => setPhase('paused')}
+          onPause={() => {
+            canvasRef.current?.setTouchInput({
+              forward: false,
+              backward: false,
+              left: false,
+              right: false,
+            });
+            setPhase('paused');
+          }}
           onDiscoverNearby={() => canvasRef.current?.triggerDiscoverNearby()}
           onHorn={() => canvasRef.current?.triggerHorn()}
+          onTouchInput={handleTouchInput}
+          onAdjustZoom={handleAdjustZoom}
+        />
+      )}
+
+      {activeNpc && !inHome && (
+        <NpcDialogueModal
+          npc={activeNpc}
+          coins={coins}
+          isFirstChat={activeNpcIsFirstChat}
+          onSelectAction={handleSelectNpcAction}
+          onClose={() => setActiveNpc(null)}
         />
       )}
 
@@ -427,6 +627,13 @@ export default function App() {
         />
       )}
 
+      {realMapOpen && !inHome && (
+        <RealAydinMapModal
+          onJumpTo3DLandmark={handleNavigateToLandmark}
+          onClose={() => setRealMapOpen(false)}
+        />
+      )}
+
       {agendaOpen && (
         <AgendaModal
           notes={agendaNotes}
@@ -437,7 +644,7 @@ export default function App() {
         />
       )}
 
-      {phase === 'paused' && !journalOpen && !inHome && (
+      {phase === 'paused' && !journalOpen && !realMapOpen && !activeNpc && !inHome && (
         <PauseModal
           discoveredCount={discoveredIds.length}
           totalLandmarks={LANDMARKS.length}

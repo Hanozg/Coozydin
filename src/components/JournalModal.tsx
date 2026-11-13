@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Check, Compass, MapPin, Package, X } from 'lucide-react';
+import { Check, Compass, MapPin, Package, Sparkles, X } from 'lucide-react';
 import { COZY_ERRANDS, LANDMARKS } from '../data/efelerData';
+import { DAILY_EVOLUTION_LOG, UPCOMING_EVOLUTION_IDEAS } from '../data/evolutionLog';
 import { ErrandDef, LandmarkDef } from '../types/game';
 
 interface JournalModalProps {
@@ -20,31 +21,31 @@ export function JournalModal({
   onNavigateToLandmark,
   onClose,
 }: JournalModalProps) {
-  const [tab, setTab] = useState<'landmarks' | 'errands'>('landmarks');
+  const [tab, setTab] = useState<'landmarks' | 'errands' | 'evolution'>('landmarks');
 
   return (
-    <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#14120F]/78 p-4 md:p-8">
-      <div className="w-full max-w-3xl max-h-[84vh] flex flex-col rounded-2xl bg-[#1E1B16] border border-[#F5EFE6]/12 text-[#F5EFE6] shadow-2xl overflow-hidden">
+    <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#2E1E12]/65 p-3 sm:p-4 md:p-8">
+      <div className="w-full max-w-3xl max-h-[90dvh] flex flex-col rounded-2xl bg-[#F7EEDC] border-2 border-[#B99464] text-[#3A2618] shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-[#F5EFE6]/10">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 sm:py-5 border-b border-[#B99464]/45 bg-[#EFE0C3]">
           <div>
-            <h2 className="font-display text-xl md:text-2xl font-semibold tracking-tight">
+            <h2 className="font-display text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-[#3A2618]">
               Efeler Keşif Defteri
             </h2>
-            <p className="text-xs text-[#BEB5A6] mt-0.5">
+            <p className="text-xs text-[#6B5038] mt-0.5 font-medium">
               {discoveredIds.length} / {LANDMARKS.length} tarihi yapı keşfedildi
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1 p-1 rounded-lg bg-[#14120F]">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-[#E2D0AF]">
               <button
                 type="button"
                 onClick={() => setTab('landmarks')}
-                className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                   tab === 'landmarks'
-                    ? 'bg-[#D99B43] text-[#181612]'
-                    : 'text-[#CFC6B8] hover:text-[#F5EFE6]'
+                    ? 'bg-[#C85A32] text-[#FAF2E2]'
+                    : 'text-[#5B432F] hover:text-[#3A2618]'
                 }`}
               >
                 Tarihi Yapılar
@@ -52,13 +53,25 @@ export function JournalModal({
               <button
                 type="button"
                 onClick={() => setTab('errands')}
-                className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                   tab === 'errands'
-                    ? 'bg-[#D99B43] text-[#181612]'
-                    : 'text-[#CFC6B8] hover:text-[#F5EFE6]'
+                    ? 'bg-[#C85A32] text-[#FAF2E2]'
+                    : 'text-[#5B432F] hover:text-[#3A2618]'
                 }`}
               >
                 Sakin Görevler
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab('evolution')}
+                className={`inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  tab === 'evolution'
+                    ? 'bg-[#5D8A48] text-[#FAF2E2]'
+                    : 'text-[#5B432F] hover:text-[#3A2618]'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Gelişim Günlüğü</span>
               </button>
             </div>
 
@@ -66,7 +79,7 @@ export function JournalModal({
               type="button"
               onClick={onClose}
               aria-label="Defteri Kapat"
-              className="p-2 rounded-lg text-[#CFC6B8] hover:text-[#F5EFE6] hover:bg-[#2A2620] transition-colors cursor-pointer"
+              className="p-2 rounded-lg text-[#6B5038] hover:text-[#3A2618] hover:bg-[#E2D0AF] transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -82,16 +95,16 @@ export function JournalModal({
                 return (
                   <div
                     key={lm.id}
-                    className="flex flex-col justify-between rounded-xl p-4 bg-[#25211B] border border-[#F5EFE6]/8"
+                    className="flex flex-col justify-between rounded-xl p-4 bg-[#FAF3E6] border border-[#B99464]/50 shadow-sm"
                   >
                     <div>
-                      <div className="flex items-center justify-between gap-2 text-xs text-[#BEB5A6] mb-1.5">
+                      <div className="flex items-center justify-between gap-2 text-xs text-[#6B5038] mb-1.5 font-medium">
                         <span>
                           {lm.district} · {lm.era}
                         </span>
                         <span
-                          className={`inline-flex items-center gap-1 font-medium ${
-                            isDiscovered ? 'text-[#89C490]' : 'text-[#D99B43]'
+                          className={`inline-flex items-center gap-1 font-semibold ${
+                            isDiscovered ? 'text-[#4B743B]' : 'text-[#B84C27]'
                           }`}
                         >
                           {isDiscovered ? (
@@ -108,50 +121,50 @@ export function JournalModal({
                         </span>
                       </div>
 
-                      <h3 className="font-display text-base font-semibold text-[#F5EFE6] mb-2">
+                      <h3 className="font-display text-base font-bold text-[#3A2618] mb-2">
                         {lm.name}
                       </h3>
 
-                      <p className="text-xs text-[#CFC6B8] leading-relaxed mb-2">
+                      <p className="text-xs text-[#543E2B] leading-relaxed mb-2">
                         {lm.summary}
                       </p>
-                      <p className="text-xs text-[#A89F91] leading-relaxed">
+                      <p className="text-xs text-[#7A614A] leading-relaxed">
                         {lm.architectureNote}
                       </p>
                     </div>
 
-                    <div className="flex items-center justify-between pt-3 mt-3 border-t border-[#F5EFE6]/8">
-                      <span className="text-xs text-[#D99B43] font-mono-num">
+                    <div className="flex items-center justify-between pt-3 mt-3 border-t border-[#B99464]/30">
+                      <span className="text-xs text-[#B84C27] font-semibold font-mono-num">
                         +{lm.rewardCoins} İncir Puanı
                       </span>
                       <button
                         type="button"
                         onClick={() => onNavigateToLandmark(lm)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#322D25] hover:bg-[#3E382E] text-xs font-medium text-[#F5EFE6] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#EDE0C6] hover:bg-[#E2D1B2] border border-[#B99464]/50 text-xs font-semibold text-[#3A2618] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                       >
-                        <MapPin className="w-3.5 h-3.5 text-[#D99B43]" aria-hidden="true" />
+                        <MapPin className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
                         <span>Yakınına Git</span>
                       </button>
                     </div>
                   </div>
                 );
               })}
-              <div className="md:col-span-2 rounded-xl p-4 bg-[#221E18] border border-[#D99B43]/25 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="md:col-span-2 rounded-xl p-4 bg-[#EFE0C3] border border-[#C85A32]/45 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <div className="text-xs text-[#D99B43] font-medium">
+                  <div className="text-xs text-[#B84C27] font-semibold">
                     Sonraki Aşama · Çok Yakında
                   </div>
-                  <div className="font-display text-sm md:text-base font-semibold text-[#F5EFE6] mt-0.5">
+                  <div className="font-display text-sm md:text-base font-bold text-[#3A2618] mt-0.5">
                     Aydın’a Ait Diğer Antik Kentler Çok Yakında!
                   </div>
-                  <p className="text-xs text-[#BEB5A6] mt-0.5">
+                  <p className="text-xs text-[#5E4530] mt-0.5">
                     Nysa, Aphrodisias, Magnesia, Miletos, Priene ve Alinda rotaları Efeler dışındaki
                     yeni harita genişlemeleriyle oyuna eklenecek.
                   </p>
                 </div>
               </div>
             </div>
-          ) : (
+          ) : tab === 'errands' ? (
             <div className="space-y-3">
               {COZY_ERRANDS.map((err) => {
                 const isActive = activeErrand?.id === err.id;
@@ -162,21 +175,21 @@ export function JournalModal({
                 return (
                   <div
                     key={err.id}
-                    className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-xl p-4 bg-[#25211B] border border-[#F5EFE6]/8"
+                    className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-xl p-4 bg-[#FAF3E6] border border-[#B99464]/50 shadow-sm"
                   >
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2 text-xs text-[#D99B43]">
+                      <div className="flex items-center gap-2 text-xs text-[#B84C27] font-semibold">
                         <Package className="w-3.5 h-3.5" aria-hidden="true" />
                         <span>
                           {fromName} → {toName}
                         </span>
                       </div>
-                      <h3 className="font-display text-base font-semibold text-[#F5EFE6]">
+                      <h3 className="font-display text-base font-bold text-[#3A2618]">
                         {err.title}
                       </h3>
-                      <p className="text-xs text-[#CFC6B8] max-w-xl">{err.description}</p>
+                      <p className="text-xs text-[#543E2B] max-w-xl">{err.description}</p>
                       {isActive && (
-                        <p className="text-xs text-[#89C490] pt-0.5">
+                        <p className="text-xs text-[#4B743B] font-semibold pt-0.5">
                           Durum:{' '}
                           {errandPickedUp
                             ? `Teslimat için ${toName} noktasına sürün`
@@ -186,7 +199,7 @@ export function JournalModal({
                     </div>
 
                     <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-xs text-[#D99B43] font-mono-num">
+                      <span className="text-xs text-[#B84C27] font-semibold font-mono-num">
                         +{err.rewardCoins} Puan
                       </span>
                       <button
@@ -194,8 +207,8 @@ export function JournalModal({
                         onClick={() => onSelectErrand(isActive ? null : err)}
                         className={`px-4 py-2 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                           isActive
-                            ? 'bg-[#3A3229] text-[#F5EFE6] hover:bg-[#493E32]'
-                            : 'bg-[#D99B43] text-[#181612] hover:bg-[#E4AC59]'
+                            ? 'bg-[#EDE0C6] text-[#3A2618] border border-[#B99464]/60 hover:bg-[#E2D1B2]'
+                            : 'bg-[#C85A32] text-[#FAF2E2] hover:bg-[#B44D28]'
                         }`}
                       >
                         {isActive ? 'Görevi Bırak' : 'Görevi Al'}
@@ -204,6 +217,81 @@ export function JournalModal({
                   </div>
                 );
               })}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="rounded-xl p-4 bg-[#EFE0C3] border border-[#5D8A48]/45">
+                <div className="text-xs font-semibold text-[#456D36]">
+                  Yaşayan Efeler · Günlük Otomatik Genişleme
+                </div>
+                <p className="text-xs text-[#543E2B] mt-1 leading-relaxed">
+                  Efeler: Aydın Yolları her gün en az bir kez kendi kodunu ve 3B dünyasını
+                  geliştirerek yeni mahalleler, hareketli yaşam detayları ve sakin etkileşimler
+                  ekler.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {DAILY_EVOLUTION_LOG.map((entry) => {
+                  const targetLm = entry.landmarkId
+                    ? LANDMARKS.find((l) => l.id === entry.landmarkId)
+                    : undefined;
+                  return (
+                    <div
+                      key={entry.id}
+                      className="rounded-xl p-4 bg-[#FAF3E6] border border-[#B99464]/55 shadow-sm space-y-2.5"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[#6B5038] font-medium">
+                        <span className="font-mono-num">
+                          Gün {entry.dayNumber} · {entry.date} · {entry.category}
+                        </span>
+                        {targetLm && (
+                          <button
+                            type="button"
+                            onClick={() => onNavigateToLandmark(targetLm)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#EDE0C6] hover:bg-[#E2D1B2] border border-[#B99464]/50 text-xs font-semibold text-[#3A2618] transition-colors cursor-pointer"
+                          >
+                            <MapPin className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
+                            <span>Yakınına Git</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <h3 className="font-display text-base font-bold text-[#3A2618]">
+                        {entry.title}
+                      </h3>
+
+                      <p className="text-xs text-[#543E2B] leading-relaxed">{entry.summary}</p>
+
+                      <ul className="space-y-1 pt-1 border-t border-[#B99464]/25">
+                        {entry.highlights.map((h, i) => (
+                          <li
+                            key={i}
+                            className="flex items-start gap-2 text-xs text-[#5E4530] leading-relaxed"
+                          >
+                            <span className="text-[#4B743B] font-bold mt-0.5">·</span>
+                            <span>{h}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="rounded-xl p-4 bg-[#FAF3E6] border border-[#B99464]/45 space-y-2">
+                <div className="text-xs font-semibold text-[#B84C27]">
+                  Sıradaki Gelişim Fikirleri (Yol Haritası)
+                </div>
+                <ul className="space-y-1">
+                  {UPCOMING_EVOLUTION_IDEAS.map((idea, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-xs text-[#5E4530]">
+                      <span className="text-[#B84C27] font-bold">·</span>
+                      <span>{idea}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
           )}
         </div>

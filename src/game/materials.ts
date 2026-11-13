@@ -7,17 +7,28 @@ export interface CityMaterialLibrary {
   cobble: THREE.MeshStandardMaterial;
   sidewalk: THREE.MeshStandardMaterial;
   plaza: THREE.MeshStandardMaterial;
+  dirtPath: THREE.MeshStandardMaterial;
   ground: THREE.MeshStandardMaterial;
+  wheatField: THREE.MeshStandardMaterial;
+  lavenderField: THREE.MeshStandardMaterial;
   travertine: THREE.MeshStandardMaterial;
   almasik: THREE.MeshStandardMaterial;
   industrialBrick: THREE.MeshStandardMaterial;
   terracottaRoof: THREE.MeshStandardMaterial;
+  terracottaRidge: THREE.MeshStandardMaterial;
+  slateRoof: THREE.MeshStandardMaterial;
+  aegeanBlueRoof: THREE.MeshStandardMaterial;
   leadDome: THREE.MeshStandardMaterial;
   whitePlaster: THREE.MeshStandardMaterial;
   creamPlaster: THREE.MeshStandardMaterial;
   peachPlaster: THREE.MeshStandardMaterial;
+  terracottaPlaster: THREE.MeshStandardMaterial;
+  sagePlaster: THREE.MeshStandardMaterial;
+  skyBluePlaster: THREE.MeshStandardMaterial;
+  ochrePlaster: THREE.MeshStandardMaterial;
   mustardYellow: THREE.MeshStandardMaterial;
   darkTimber: THREE.MeshStandardMaterial;
+  shutterWood: THREE.MeshStandardMaterial;
   brass: THREE.MeshStandardMaterial;
   wroughtIron: THREE.MeshStandardMaterial;
   water: THREE.MeshPhysicalMaterial;
@@ -26,6 +37,7 @@ export interface CityMaterialLibrary {
   lampBulb: THREE.MeshStandardMaterial;
   railSteel: THREE.MeshStandardMaterial;
   signpostFace: THREE.MeshStandardMaterial;
+  stripedAwningMap: THREE.CanvasTexture;
   dispose: () => void;
 }
 
@@ -36,11 +48,11 @@ export function createCityMaterials(
   const asphalt = new THREE.MeshStandardMaterial({
     map: textures.asphalt,
     roughness: 0.88,
-    metalness: 0.04,
+    metalness: 0.03,
   });
 
   const roadStripe = new THREE.MeshStandardMaterial({
-    color: 0xe9dec8,
+    color: 0xf6eedc,
     roughness: 0.72,
     metalness: 0.02,
     polygonOffset: true,
@@ -51,19 +63,25 @@ export function createCityMaterials(
   const cobble = new THREE.MeshStandardMaterial({
     map: textures.cobblestone,
     roughness: 0.84,
-    metalness: 0.05,
+    metalness: 0.04,
   });
 
   const sidewalk = new THREE.MeshStandardMaterial({
-    color: 0xd6cab6,
-    roughness: 0.86,
+    color: 0xe6dac4,
+    roughness: 0.84,
     metalness: 0.02,
   });
 
   const plaza = new THREE.MeshStandardMaterial({
     map: textures.plazaTile,
     roughness: 0.78,
-    metalness: 0.05,
+    metalness: 0.04,
+  });
+
+  const dirtPath = new THREE.MeshStandardMaterial({
+    map: textures.dirtPath,
+    roughness: 0.92,
+    metalness: 0.0,
   });
 
   const ground = new THREE.MeshStandardMaterial({
@@ -72,105 +90,173 @@ export function createCityMaterials(
     metalness: 0.0,
   });
 
+  const wheatField = new THREE.MeshStandardMaterial({
+    map: textures.wheatField,
+    roughness: 0.92,
+    metalness: 0.0,
+  });
+
+  const lavenderField = new THREE.MeshStandardMaterial({
+    map: textures.lavenderField,
+    roughness: 0.92,
+    metalness: 0.0,
+  });
+
   const travertine = new THREE.MeshStandardMaterial({
     map: textures.travertine,
-    roughness: 0.82,
+    roughness: 0.8,
     metalness: 0.04,
   });
 
   const almasik = new THREE.MeshStandardMaterial({
     map: textures.almasik,
-    roughness: 0.84,
+    roughness: 0.82,
     metalness: 0.04,
   });
 
   const industrialBrick = new THREE.MeshStandardMaterial({
     map: textures.industrialBrick,
-    roughness: 0.86,
+    roughness: 0.84,
     metalness: 0.04,
   });
 
   const terracottaRoof = new THREE.MeshStandardMaterial({
     map: textures.terracottaRoof,
-    roughness: 0.78,
-    metalness: 0.05,
-  });
-
-  const leadDome = new THREE.MeshStandardMaterial({
-    color: 0x6f7b82,
-    roughness: 0.36,
-    metalness: 0.62,
-  });
-
-  const whitePlaster = new THREE.MeshStandardMaterial({
-    color: 0xf0e7d8,
-    roughness: 0.85,
-    metalness: 0.02,
-  });
-
-  const creamPlaster = new THREE.MeshStandardMaterial({
-    color: 0xe6d4b5,
-    roughness: 0.83,
-    metalness: 0.02,
-  });
-
-  const peachPlaster = new THREE.MeshStandardMaterial({
-    color: 0xdfb99b,
-    roughness: 0.83,
-    metalness: 0.02,
-  });
-
-  const mustardYellow = new THREE.MeshStandardMaterial({
-    color: 0xdda83c,
-    roughness: 0.78,
+    roughness: 0.74,
     metalness: 0.04,
   });
 
-  const darkTimber = new THREE.MeshStandardMaterial({
-    color: 0x5c3d28,
+  const terracottaRidge = new THREE.MeshStandardMaterial({
+    color: 0xb64c2e,
     roughness: 0.76,
     metalness: 0.04,
   });
 
+  const slateRoof = new THREE.MeshStandardMaterial({
+    map: textures.slateRoof,
+    roughness: 0.66,
+    metalness: 0.16,
+  });
+
+  const aegeanBlueRoof = new THREE.MeshStandardMaterial({
+    map: textures.aegeanBlueRoof,
+    roughness: 0.62,
+    metalness: 0.06,
+  });
+
+  const leadDome = new THREE.MeshStandardMaterial({
+    color: 0x6a7c87,
+    roughness: 0.36,
+    metalness: 0.58,
+  });
+
+  const whitePlaster = new THREE.MeshStandardMaterial({
+    color: 0xf9f1e4,
+    map: textures.stuccoGrain,
+    roughness: 0.84,
+    metalness: 0.02,
+  });
+
+  const creamPlaster = new THREE.MeshStandardMaterial({
+    color: 0xefe0be,
+    map: textures.stuccoGrain,
+    roughness: 0.82,
+    metalness: 0.02,
+  });
+
+  const peachPlaster = new THREE.MeshStandardMaterial({
+    color: 0xebb796,
+    map: textures.stuccoGrain,
+    roughness: 0.82,
+    metalness: 0.02,
+  });
+
+  const terracottaPlaster = new THREE.MeshStandardMaterial({
+    color: 0xdc8868,
+    map: textures.stuccoGrain,
+    roughness: 0.82,
+    metalness: 0.02,
+  });
+
+  const sagePlaster = new THREE.MeshStandardMaterial({
+    color: 0xbcca9f,
+    map: textures.stuccoGrain,
+    roughness: 0.84,
+    metalness: 0.02,
+  });
+
+  const skyBluePlaster = new THREE.MeshStandardMaterial({
+    color: 0x9ab9c9,
+    map: textures.stuccoGrain,
+    roughness: 0.82,
+    metalness: 0.02,
+  });
+
+  const ochrePlaster = new THREE.MeshStandardMaterial({
+    color: 0xe6bb6a,
+    map: textures.stuccoGrain,
+    roughness: 0.8,
+    metalness: 0.03,
+  });
+
+  const mustardYellow = new THREE.MeshStandardMaterial({
+    color: 0xe5b044,
+    map: textures.stuccoGrain,
+    roughness: 0.76,
+    metalness: 0.04,
+  });
+
+  const darkTimber = new THREE.MeshStandardMaterial({
+    color: 0x64432a,
+    roughness: 0.74,
+    metalness: 0.04,
+  });
+
+  const shutterWood = new THREE.MeshStandardMaterial({
+    color: 0x5c7863,
+    roughness: 0.76,
+    metalness: 0.03,
+  });
+
   const brass = new THREE.MeshStandardMaterial({
-    color: 0xd4a857,
-    roughness: 0.25,
-    metalness: 0.88,
+    color: 0xd9ac59,
+    roughness: 0.26,
+    metalness: 0.86,
   });
 
   const wroughtIron = new THREE.MeshStandardMaterial({
-    color: 0x2b2f33,
-    roughness: 0.42,
-    metalness: 0.72,
+    color: 0x35322e,
+    roughness: 0.44,
+    metalness: 0.68,
   });
 
   const water = new THREE.MeshPhysicalMaterial({
-    color: 0x4ba3b3,
-    roughness: 0.08,
-    metalness: 0.05,
-    transmission: isSoftwareGl ? 0 : 0.65,
+    color: 0x579ea8,
+    roughness: 0.09,
+    metalness: 0.06,
+    transmission: isSoftwareGl ? 0 : 0.62,
     transparent: true,
-    opacity: isSoftwareGl ? 0.78 : 0.92,
+    opacity: isSoftwareGl ? 0.84 : 0.92,
     ior: 1.33,
-    thickness: 0.6,
+    thickness: 0.65,
   });
 
   const glassAtrium = new THREE.MeshPhysicalMaterial({
-    color: 0xb7dce8,
+    color: 0xc2e2ec,
     roughness: 0.1,
     metalness: 0.1,
     transmission: isSoftwareGl ? 0 : 0.65,
     transparent: true,
-    opacity: isSoftwareGl ? 0.55 : 0.82,
+    opacity: isSoftwareGl ? 0.58 : 0.84,
     ior: 1.48,
   });
 
   const windowLit = new THREE.MeshStandardMaterial({
-    color: 0x3b4d5e,
-    emissive: new THREE.Color(0xffbe66),
-    emissiveIntensity: 0.08,
+    color: 0x3f4e5c,
+    emissive: new THREE.Color(0xffc670),
+    emissiveIntensity: 0.14,
     roughness: 0.22,
-    metalness: 0.15,
+    metalness: 0.14,
   });
 
   const lampBulb = new THREE.MeshStandardMaterial({
@@ -199,17 +285,28 @@ export function createCityMaterials(
     cobble,
     sidewalk,
     plaza,
+    dirtPath,
     ground,
+    wheatField,
+    lavenderField,
     travertine,
     almasik,
     industrialBrick,
     terracottaRoof,
+    terracottaRidge,
+    slateRoof,
+    aegeanBlueRoof,
     leadDome,
     whitePlaster,
     creamPlaster,
     peachPlaster,
+    terracottaPlaster,
+    sagePlaster,
+    skyBluePlaster,
+    ochrePlaster,
     mustardYellow,
     darkTimber,
+    shutterWood,
     brass,
     wroughtIron,
     water,
@@ -226,17 +323,28 @@ export function createCityMaterials(
     cobble,
     sidewalk,
     plaza,
+    dirtPath,
     ground,
+    wheatField,
+    lavenderField,
     travertine,
     almasik,
     industrialBrick,
     terracottaRoof,
+    terracottaRidge,
+    slateRoof,
+    aegeanBlueRoof,
     leadDome,
     whitePlaster,
     creamPlaster,
     peachPlaster,
+    terracottaPlaster,
+    sagePlaster,
+    skyBluePlaster,
+    ochrePlaster,
     mustardYellow,
     darkTimber,
+    shutterWood,
     brass,
     wroughtIron,
     water,
@@ -245,6 +353,7 @@ export function createCityMaterials(
     lampBulb,
     railSteel,
     signpostFace,
+    stripedAwningMap: textures.stripedAwning,
     dispose: () => {
       all.forEach((m) => m.dispose());
     },

@@ -6,11 +6,17 @@ export type PaintFinish = 'gloss' | 'matte';
 
 export type TimeOfDay = 'morning' | 'noon' | 'golden' | 'evening';
 
+export type SeasonType = 'spring' | 'summer' | 'autumn' | 'winter';
+
 export type WeatherType = 'clear' | 'rain' | 'snow' | 'storm';
 
 export type LofiTrackId = 'aegean' | 'rainy_piano' | 'night_lofi' | 'ambient_only';
 
-export type CameraPreset = 'isometric' | 'close' | 'overview';
+export type CameraPreset = 'isometric' | 'close' | 'overview' | 'first_person';
+
+export type ExplorationMode = 'vehicle' | 'walk';
+
+export type HeldTreatType = 'none' | 'coffee' | 'simit' | 'kumpir' | 'keskek' | 'icecream';
 
 export type StreetInteractionType = 'musicians' | 'lokma' | 'vendor';
 
@@ -26,10 +32,23 @@ export type RoomFurnitureId =
   | 'teatable'
   | 'wallart';
 
+export type AvatarHairStyle = 'kasket' | 'short' | 'long' | 'bun';
+
+export interface AvatarConfig {
+  skinColor: string;
+  shirtColor: string;
+  pantsColor: string;
+  hairStyle: AvatarHairStyle;
+  hairColor: string;
+}
+
 export interface FurnitureSlotPlacement {
   id: RoomFurnitureId;
   enabled: boolean;
   slotIndex: number;
+  x?: number;
+  z?: number;
+  rotY?: number;
 }
 
 export interface CozyRoomState {
@@ -38,6 +57,8 @@ export interface CozyRoomState {
   lampOn: boolean;
   petType: PetType;
   petAffection: number;
+  avatarPlaced?: boolean;
+  avatarConfig?: AvatarConfig;
   furniture: FurnitureSlotPlacement[];
 }
 
@@ -68,6 +89,33 @@ export interface LandmarkDef {
   architectureNote: string;
   rewardCoins: number;
   doorPosition?: [number, number];
+}
+
+export interface NpcActionOption {
+  id: string;
+  label: string;
+  cost: number;
+  treat: HeldTreatType;
+  startsWalk?: boolean;
+  resultMessage: string;
+}
+
+export interface BuildingNpcDef {
+  id: string;
+  landmarkId: string;
+  buildingName: string;
+  name: string;
+  role: string;
+  position: [number, number];
+  facingRad: number;
+  shirtColor: string;
+  pantsColor: string;
+  hatStyle: 'cap' | 'headscarf' | 'chef' | 'none';
+  hatColor: string;
+  propType: 'icecream_cart' | 'simit_tray' | 'coffee_tray' | 'keskek_pot' | 'notebook' | 'none';
+  greeting: string;
+  walkChatLines?: string[];
+  actions: NpcActionOption[];
 }
 
 export interface ErrandDef {
@@ -106,6 +154,7 @@ export interface PlayerHudSnapshot {
   currentDistrict: string;
   currentStreet: string;
   nearbyLandmark: LandmarkDef | null;
+  nearbyNpc: BuildingNpcDef | null;
   nearAncientSignpost: boolean;
   nearPlayerHome: boolean;
   nearbyStreetInteraction: NearbyStreetInteraction | null;
@@ -113,6 +162,9 @@ export interface PlayerHudSnapshot {
   distanceToActiveErrand: number | null;
   playerPos: [number, number];
   headingRad: number;
+  companionName: string | null;
+  heldTreat: HeldTreatType;
+  solarClock?: string;
 }
 
 export interface ColliderBox {

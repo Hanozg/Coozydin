@@ -1,20 +1,35 @@
-import { useEffect, useRef, useState } from 'react';
+import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
   Calendar,
   CloudRain,
+  Coffee,
   DoorOpen,
+  Gamepad2,
   Heart,
   LampDesk,
+  Move,
   Music,
   Paintbrush,
   PawPrint,
+  RotateCcw,
   RotateCw,
+  Sparkles,
+  User,
   Volume2,
   VolumeX,
 } from 'lucide-react';
 import {
+  AVATAR_HAIR_STYLES,
+  AVATAR_SHIRT_SWATCHES,
+  AVATAR_SKIN_SWATCHES,
+  DEFAULT_AVATAR_CONFIG,
+  DEFAULT_COZY_ROOM_STATE,
   FURNITURE_CATALOG,
   LOFI_TRACKS,
   ROOM_WALL_SWATCHES,
@@ -22,6 +37,8 @@ import {
 } from '../data/efelerData';
 import { audioEngine } from '../game/audioEngine';
 import {
+  AvatarConfig,
+  AvatarHairStyle,
   CozyRoomState,
   LofiTrackId,
   PetType,
@@ -44,6 +61,11 @@ interface CozyRoomViewProps {
   onExitHome: () => void;
 }
 
+type NearbyRoomInteractable = {
+  id: 'armchair' | 'desk' | 'turntable' | 'teatable' | 'bookshelf' | 'cat' | 'dog';
+  label: string;
+};
+
 function detectSoftwareWebGL(): boolean {
   try {
     const probeCanvas = document.createElement('canvas');
@@ -61,20 +83,20 @@ function detectSoftwareWebGL(): boolean {
 
 const SLOT_COORDS: Record<RoomFurnitureId, [number, number, number][]> = {
   armchair: [
-    [-2.1, 0, -1.7, 0.45],
-    [1.9, 0, -1.8, -0.45],
-    [-2.0, 0, 1.8, 1.15],
-  ].map(([x, y, z]) => [x, y, z]),
+    [-2.1, 0, -1.7],
+    [1.9, 0, -1.8],
+    [-2.0, 0, 1.8],
+  ],
   desk: [
-    [2.1, 0, -2.5, 0],
-    [-2.1, 0, -2.5, 0],
-    [2.5, 0, 1.2, -Math.PI / 2],
-  ].map(([x, y, z]) => [x, y, z]),
+    [2.1, 0, -2.5],
+    [-2.1, 0, -2.5],
+    [2.5, 0, 1.2],
+  ],
   bookshelf: [
-    [-3.35, 0, -0.5, Math.PI / 2],
-    [-3.35, 0, 2.0, Math.PI / 2],
-    [0.2, 0, -3.35, 0],
-  ].map(([x, y, z]) => [x, y, z]),
+    [-3.35, 0, -0.5],
+    [-3.35, 0, 2.0],
+    [0.2, 0, -3.35],
+  ],
   rug: [
     [0, 0.02, 0.3],
     [-0.7, 0.02, 0.6],
@@ -112,6 +134,31 @@ const SLOT_ROTATIONS: Record<RoomFurnitureId, number[]> = {
   teatable: [0, 0.4, -0.3],
   wallart: [0, 0, 0],
 };
+
+const FURNITURE_RADII: Partial<Record<RoomFurnitureId, number>> = {
+  armchair: 0.72,
+  desk: 0.92,
+  bookshelf: 0.65,
+  plant: 0.48,
+  turntable: 0.55,
+  teatable: 0.62,
+};
+
+function resolveFurnitureTransform(
+  id: RoomFurnitureId,
+  placement?: { slotIndex: number; x?: number; z?: number; rotY?: number }
+): { x: number; y: number; z: number; rotY: number } {
+  const coords = SLOT_COORDS[id];
+  const rots = SLOT_ROTATIONS[id];
+  const idx = (placement?.slotIndex ?? 0) % coords.length;
+  const base = coords[idx];
+  return {
+    x: typeof placement?.x === 'number' ? placement.x : base[0],
+    y: base[1],
+    z: typeof placement?.z === 'number' ? placement.z : base[2],
+    rotY: typeof placement?.rotY === 'number' ? placement.rotY : rots[idx % rots.length],
+  };
+}
 
 function createCatRig(): {
   group: THREE.Group;
@@ -239,6 +286,174 @@ function createDogRig(): {
   return { group, tail, hitMesh };
 }
 
+interface AvatarRig {
+  root: THREE.Group;
+  bodyPivot: THREE.Group;
+  leftLegPivot: THREE.Group;
+  rightLegPivot: THREE.Group;
+  leftArmPivot: THREE.Group;
+  rightArmPivot: THREE.Group;
+  applyConfig: (cfg: AvatarConfig) => void;
+}
+
+function createAvatarRig(initial: AvatarConfig): AvatarRig {
+  const root = new THREE.Group();
+
+  const shadowMat = new THREE.MeshBasicMaterial({
+    color: 0x1e150e,
+    transparent: true,
+    opacity: 0.28,
+    depthWrite: false,
+  });
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.36, 18), shadowMat);
+  shadow.rotation.x = -Math.PI / 2;
+  shadow.position.y = 0.025;
+  root.add(shadow);
+
+  const bodyPivot = new THREE.Group();
+  root.add(bodyPivot);
+
+  const skinMat = new THREE.MeshStandardMaterial({ color: initial.skinColor, roughness: 0.72 });
+  const shirtMat = new THREE.MeshStandardMaterial({ color: initial.shirtColor, roughness: 0.78 });
+  const vestMat = new THREE.MeshStandardMaterial({ color: 0x4b3527, roughness: 0.8 });
+  const pantsMat = new THREE.MeshStandardMaterial({ color: initial.pantsColor, roughness: 0.84 });
+  const shoeMat = new THREE.MeshStandardMaterial({ color: 0x2d2118, roughness: 0.7 });
+  const hairMat = new THREE.MeshStandardMaterial({ color: initial.hairColor, roughness: 0.85 });
+  const capMat = new THREE.MeshStandardMaterial({ color: 0x3f4c59, roughness: 0.82 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x211914, roughness: 0.4 });
+
+  // Legs
+  const makeLeg = (lx: number) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(lx, 0.46, 0);
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.4, 0.17), pantsMat);
+    leg.position.y = -0.2;
+    leg.castShadow = true;
+    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.1, 0.24), shoeMat);
+    shoe.position.set(0, -0.41, 0.03);
+    shoe.castShadow = true;
+    pivot.add(leg, shoe);
+    bodyPivot.add(pivot);
+    return pivot;
+  };
+  const leftLegPivot = makeLeg(-0.11);
+  const rightLegPivot = makeLeg(0.11);
+
+  // Torso + Cozy Aegean Vest Accent
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.5, 0.26), shirtMat);
+  torso.position.y = 0.72;
+  torso.castShadow = true;
+  bodyPivot.add(torso);
+
+  const vestL = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.44, 0.28), vestMat);
+  vestL.position.set(-0.12, 0.72, 0);
+  const vestR = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.44, 0.28), vestMat);
+  vestR.position.set(0.12, 0.72, 0);
+  bodyPivot.add(vestL, vestR);
+
+  // Arms
+  const makeArm = (ax: number) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(ax, 0.92, 0);
+    const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.34, 0.14), shirtMat);
+    sleeve.position.y = -0.17;
+    sleeve.castShadow = true;
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.1, 0.11), skinMat);
+    hand.position.y = -0.37;
+    pivot.add(sleeve, hand);
+    bodyPivot.add(pivot);
+    return pivot;
+  };
+  const leftArmPivot = makeArm(-0.29);
+  const rightArmPivot = makeArm(0.29);
+
+  // Head
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.35, 0.34), skinMat);
+  head.position.set(0, 1.16, 0);
+  head.castShadow = true;
+  bodyPivot.add(head);
+
+  [-0.08, 0.08].forEach((ex) => {
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.055, 0.03), eyeMat);
+    eye.position.set(ex, 1.17, 0.175);
+    bodyPivot.add(eye);
+  });
+
+  // 4 Swappable Hair/Cap Styles
+  const hairGroups: Record<AvatarHairStyle, THREE.Group> = {
+    kasket: new THREE.Group(),
+    short: new THREE.Group(),
+    long: new THREE.Group(),
+    bun: new THREE.Group(),
+  };
+
+  // Kasket (Aegean Flat Cap)
+  {
+    const crown = new THREE.Mesh(new THREE.BoxGeometry(0.39, 0.12, 0.39), capMat);
+    crown.position.set(0, 1.36, 0.01);
+    const brim = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.04, 0.18), capMat);
+    brim.position.set(0, 1.31, 0.22);
+    const backHair = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.16, 0.1), hairMat);
+    backHair.position.set(0, 1.24, -0.16);
+    hairGroups.kasket.add(crown, brim, backHair);
+  }
+
+  // Short
+  {
+    const top = new THREE.Mesh(new THREE.BoxGeometry(0.39, 0.12, 0.37), hairMat);
+    top.position.set(0, 1.35, -0.01);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.22, 0.12), hairMat);
+    back.position.set(0, 1.22, -0.15);
+    hairGroups.short.add(top, back);
+  }
+
+  // Long
+  {
+    const top = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.12, 0.38), hairMat);
+    top.position.set(0, 1.35, -0.01);
+    const drape = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.44, 0.15), hairMat);
+    drape.position.set(0, 1.1, -0.16);
+    [-0.18, 0.18].forEach((sx) => {
+      const side = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.36, 0.18), hairMat);
+      side.position.set(sx, 1.12, -0.02);
+      hairGroups.long.add(side);
+    });
+    hairGroups.long.add(top, drape);
+  }
+
+  // Bun
+  {
+    const top = new THREE.Mesh(new THREE.BoxGeometry(0.39, 0.11, 0.37), hairMat);
+    top.position.set(0, 1.35, -0.01);
+    const bun = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), hairMat);
+    bun.position.set(0, 1.38, -0.19);
+    hairGroups.bun.add(top, bun);
+  }
+
+  Object.values(hairGroups).forEach((hg) => bodyPivot.add(hg));
+
+  const applyConfig = (cfg: AvatarConfig) => {
+    skinMat.color.set(cfg.skinColor);
+    shirtMat.color.set(cfg.shirtColor);
+    pantsMat.color.set(cfg.pantsColor);
+    hairMat.color.set(cfg.hairColor);
+    (Object.keys(hairGroups) as AvatarHairStyle[]).forEach((style) => {
+      hairGroups[style].visible = style === cfg.hairStyle;
+    });
+  };
+  applyConfig(initial);
+
+  return {
+    root,
+    bodyPivot,
+    leftLegPivot,
+    rightLegPivot,
+    leftArmPivot,
+    rightArmPivot,
+    applyConfig,
+  };
+}
+
 export function CozyRoomView({
   roomState,
   weather,
@@ -255,38 +470,73 @@ export function CozyRoomView({
 }: CozyRoomViewProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [editOpen, setEditOpen] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<'furniture' | 'style' | 'pets' | 'atmosphere'>('furniture');
-  const [petToast, setPetToast] = useState<string | null>(null);
+  const [placementMode, setPlacementMode] = useState(false);
+  const [selectedFurniture, setSelectedFurniture] = useState<RoomFurnitureId>('armchair');
+  const [drawerTab, setDrawerTab] = useState<
+    'furniture' | 'avatar' | 'style' | 'pets' | 'atmosphere'
+  >('furniture');
+  const [roomToast, setRoomToast] = useState<string | null>(null);
+  const [nearbyInteractable, setNearbyInteractable] = useState<NearbyRoomInteractable | null>(null);
+  const [isSitting, setIsSitting] = useState(false);
+  const [touchPadOpen, setTouchPadOpen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768;
+  });
+
+  const avatarConfig: AvatarConfig = {
+    ...DEFAULT_AVATAR_CONFIG,
+    ...(roomState.avatarConfig || {}),
+  };
+  const avatarPlaced = roomState.avatarPlaced ?? true;
 
   const roomStateRef = useRef(roomState);
   const weatherRef = useRef(weather);
   const lofiTrackRef = useRef(lofiTrack);
+  const placementModeRef = useRef(placementMode);
+  const selectedFurnitureRef = useRef(selectedFurniture);
+  const isSittingRef = useRef(isSitting);
+
+  roomStateRef.current = roomState;
+  weatherRef.current = weather;
+  lofiTrackRef.current = lofiTrack;
+  placementModeRef.current = placementMode;
+  selectedFurnitureRef.current = selectedFurniture;
+  isSittingRef.current = isSitting;
+
   const callbacksRef = useRef({
     onOpenAgenda,
     onChangeRoomState,
     onChangeLofiTrack,
   });
-
-  roomStateRef.current = roomState;
-  weatherRef.current = weather;
-  lofiTrackRef.current = lofiTrack;
   callbacksRef.current = {
     onOpenAgenda,
     onChangeRoomState,
     onChangeLofiTrack,
   };
 
+  const avatarWalkRef = useRef({
+    x: 0.2,
+    z: 1.5,
+    rotY: Math.PI,
+    targetX: null as number | null,
+    targetZ: null as number | null,
+  });
+
+  const touchMoveRef = useRef({
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+  });
+
   const petBounceRef = useRef({ cat: 0, dog: 0 });
+  const teaSipRef = useRef(0);
   const toastTimerRef = useRef<number | null>(null);
 
-  const showPetHeart = (pet: 'cat' | 'dog', nextAffection: number) => {
-    setPetToast(
-      pet === 'cat'
-        ? `Pamuk (Kedi) mırıldandı! · Sevgi Puanı: ${nextAffection}`
-        : `Efe (Köpek) neşeyle kuyruk salladı! · Sevgi Puanı: ${nextAffection}`
-    );
+  const showToast = (msg: string) => {
+    setRoomToast(msg);
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = window.setTimeout(() => setPetToast(null), 2600);
+    toastTimerRef.current = window.setTimeout(() => setRoomToast(null), 2800);
   };
 
   useEffect(() => {
@@ -294,6 +544,67 @@ export function CozyRoomView({
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
   }, []);
+
+  const triggerInteractionRef = useRef<(id: NearbyRoomInteractable['id']) => void>(() => {});
+  triggerInteractionRef.current = (id: NearbyRoomInteractable['id']) => {
+    const st = roomStateRef.current;
+    if (id === 'armchair') {
+      const nextSit = !isSittingRef.current;
+      setIsSitting(nextSit);
+      if (nextSit) {
+        const tf = resolveFurnitureTransform(
+          'armchair',
+          st.furniture.find((f) => f.id === 'armchair')
+        );
+        avatarWalkRef.current.x = tf.x;
+        avatarWalkRef.current.z = tf.z + Math.cos(tf.rotY) * 0.08;
+        avatarWalkRef.current.rotY = tf.rotY;
+        avatarWalkRef.current.targetX = null;
+        avatarWalkRef.current.targetZ = null;
+        audioEngine.playDiscoveryChime();
+        showToast('Okuma koltuğuna yerleştin, kitabını ve çayını keyifle yudumla!');
+      } else {
+        const tf = resolveFurnitureTransform(
+          'armchair',
+          st.furniture.find((f) => f.id === 'armchair')
+        );
+        avatarWalkRef.current.x = tf.x + Math.sin(tf.rotY) * 0.9;
+        avatarWalkRef.current.z = tf.z + Math.cos(tf.rotY) * 0.9;
+        showToast('Koltuktan kalktın.');
+      }
+    } else if (id === 'desk') {
+      audioEngine.playDiscoveryChime();
+      callbacksRef.current.onOpenAgenda();
+    } else if (id === 'turntable') {
+      const idx = LOFI_TRACKS.findIndex((t) => t.id === lofiTrackRef.current);
+      const nextTrack = LOFI_TRACKS[(idx + 1) % LOFI_TRACKS.length];
+      callbacksRef.current.onChangeLofiTrack(nextTrack.id);
+      showToast(`Pikap plağı değişti: ${nextTrack.label}`);
+    } else if (id === 'teatable') {
+      teaSipRef.current = 1.0;
+      audioEngine.playDiscoveryChime();
+      showToast('Tavşan kanı Ege çayı yudumlandı — zihnin dinlendi!');
+    } else if (id === 'bookshelf') {
+      const notes = [
+        'Kitaplıktan not: “Tralleis Antik Kenti’ndeki Üç Gözler MS 2. yüzyıldan kalmadır.”',
+        'Kitaplıktan not: “Aydın inciri güneşte kurutulur ve Ege rüzgarıyla tatlanır.”',
+        'Kitaplıktan not: “Zeybek oyunu Efeler’in vakar ve dinginliğini simgeler.”',
+      ];
+      showToast(notes[Math.floor(Math.random() * notes.length)]);
+    } else if (id === 'cat') {
+      petBounceRef.current.cat = 1.0;
+      audioEngine.playPetSound('cat');
+      const nextAff = st.petAffection + 1;
+      callbacksRef.current.onChangeRoomState({ ...st, petAffection: nextAff });
+      showToast(`Pamuk (Kedi) mırıldandı! · Sevgi Puanı: ${nextAff}`);
+    } else if (id === 'dog') {
+      petBounceRef.current.dog = 1.0;
+      audioEngine.playPetSound('dog');
+      const nextAff = st.petAffection + 1;
+      callbacksRef.current.onChangeRoomState({ ...st, petAffection: nextAff });
+      showToast(`Efe (Köpek) neşeyle kuyruk salladı! · Sevgi Puanı: ${nextAff}`);
+    }
+  };
 
   useEffect(() => {
     const container = mountRef.current;
@@ -314,23 +625,27 @@ export function CozyRoomView({
     renderer.domElement.style.display = 'block';
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
+    renderer.domElement.style.touchAction = 'none';
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#1B1815');
+    scene.background = new THREE.Color('#271E17');
 
     const pmrem = new THREE.PMREMGenerator(renderer);
     const envRT = pmrem.fromScene(new RoomEnvironment(), 0.04);
     scene.environment = envRT.texture;
     pmrem.dispose();
 
+    const getRoomFrustum = (asp: number) =>
+      asp < 1 ? 10.2 / Math.max(0.65, Math.pow(asp, 0.45)) : 10.2;
+
     const aspect = container.clientWidth / Math.max(1, container.clientHeight);
-    const baseFrustum = 10.2;
+    const initialFrustum = getRoomFrustum(aspect);
     const camera = new THREE.OrthographicCamera(
-      (-baseFrustum * aspect) / 2,
-      (baseFrustum * aspect) / 2,
-      baseFrustum / 2,
-      -baseFrustum / 2,
+      (-initialFrustum * aspect) / 2,
+      (initialFrustum * aspect) / 2,
+      initialFrustum / 2,
+      -initialFrustum / 2,
       -40,
       80
     );
@@ -364,10 +679,18 @@ export function CozyRoomView({
     floor.receiveShadow = true;
     roomGroup.add(floor);
 
+    // Invisible Floor Raycast Plane at y = 0 for click-to-walk & click-to-place furniture
+    const floorHitPlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(7.6, 7.6),
+      new THREE.MeshBasicMaterial({ visible: false })
+    );
+    floorHitPlane.rotation.x = -Math.PI / 2;
+    floorHitPlane.position.y = 0.02;
+    roomGroup.add(floorHitPlane);
+
     const wallMat = new THREE.MeshStandardMaterial({ color: '#EADEC9', roughness: 0.88 });
     const trimMat = new THREE.MeshStandardMaterial({ color: 0x5d432f, roughness: 0.72 });
 
-    // Back Wall (-Z) & Left Wall (-X)
     const backWall = new THREE.Mesh(new THREE.BoxGeometry(8.2, 4.4, 0.32), wallMat);
     backWall.position.set(0, 2.2, -3.94);
     backWall.receiveShadow = true;
@@ -378,7 +701,6 @@ export function CozyRoomView({
     leftWall.receiveShadow = true;
     roomGroup.add(leftWall);
 
-    // Wooden Baseboards
     const baseBack = new THREE.Mesh(new THREE.BoxGeometry(8.0, 0.22, 0.08), trimMat);
     baseBack.position.set(0, 0.11, -3.76);
     const baseLeft = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, 8.0), trimMat);
@@ -395,14 +717,13 @@ export function CozyRoomView({
     windowSky.position.set(-1.35, 2.45, -3.65);
     roomGroup.add(windowSky);
 
-    // Window mullions
     const mullionV = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.65, 0.12), trimMat);
     mullionV.position.set(-1.35, 2.45, -3.62);
     const mullionH = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.08, 0.12), trimMat);
     mullionH.position.set(-1.35, 2.45, -3.62);
     roomGroup.add(mullionV, mullionH);
 
-    // Mini Weather Particles visible inside the Window Pane
+    // Mini Weather Particles inside Window Pane
     const winDropCount = 36;
     const winDropGeo = new THREE.BoxGeometry(0.03, 0.18, 0.02);
     const winDropMat = new THREE.MeshBasicMaterial({ color: 0xe6f2ff });
@@ -416,6 +737,25 @@ export function CozyRoomView({
       phase: Math.random() * Math.PI * 2,
     }));
     const wDummy = new THREE.Object3D();
+
+    // Selection & Walk Target Floor Rings
+    const selectionRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.68, 0.84, 32),
+      new THREE.MeshBasicMaterial({ color: 0xe39b38, side: THREE.DoubleSide })
+    );
+    selectionRing.rotation.x = -Math.PI / 2;
+    selectionRing.position.y = 0.045;
+    selectionRing.visible = false;
+    roomGroup.add(selectionRing);
+
+    const walkMarker = new THREE.Mesh(
+      new THREE.RingGeometry(0.24, 0.34, 24),
+      new THREE.MeshBasicMaterial({ color: 0x61b88a, side: THREE.DoubleSide })
+    );
+    walkMarker.rotation.x = -Math.PI / 2;
+    walkMarker.position.y = 0.04;
+    walkMarker.visible = false;
+    roomGroup.add(walkMarker);
 
     // 8 Customizable Furniture Pieces
     const woodMat = new THREE.MeshStandardMaterial({ color: 0x735036, roughness: 0.76 });
@@ -431,6 +771,7 @@ export function CozyRoomView({
     });
 
     const clickables: THREE.Object3D[] = [];
+    const furnitureHitMeshes: THREE.Mesh[] = [];
     const furnitureGroups: Record<RoomFurnitureId, THREE.Group> = {
       armchair: new THREE.Group(),
       desk: new THREE.Group(),
@@ -440,6 +781,18 @@ export function CozyRoomView({
       turntable: new THREE.Group(),
       teatable: new THREE.Group(),
       wallart: new THREE.Group(),
+    };
+
+    const addFurnitureHitbox = (id: RoomFurnitureId, w: number, h: number, d: number, y: number) => {
+      const hit = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, d),
+        new THREE.MeshBasicMaterial({ visible: false })
+      );
+      hit.position.y = y;
+      hit.userData.furnitureId = id;
+      furnitureGroups[id].add(hit);
+      furnitureHitMeshes.push(hit);
+      return hit;
     };
 
     // 1. Armchair
@@ -460,10 +813,12 @@ export function CozyRoomView({
       pillow.position.set(0, 0.62, -0.2);
       pillow.rotation.x = -0.25;
       g.add(seat, back, pillow);
+      const hit = addFurnitureHitbox('armchair', 1.25, 1.15, 1.15, 0.58);
+      hit.userData.roomAction = 'armchair';
+      clickables.push(hit);
     }
 
     // 2. Desk + Open Agenda + Desk Lamp
-    let agendaMesh: THREE.Mesh;
     {
       const g = furnitureGroups.desk;
       const top = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.1, 0.92), woodMat);
@@ -480,7 +835,6 @@ export function CozyRoomView({
         g.add(leg);
       });
 
-      // Open Agenda Notebook (Clickable!)
       const agendaCover = new THREE.Mesh(
         new THREE.BoxGeometry(0.58, 0.04, 0.4),
         new THREE.MeshStandardMaterial({ color: 0x3b6e8c, roughness: 0.7 })
@@ -491,15 +845,14 @@ export function CozyRoomView({
         new THREE.MeshStandardMaterial({ color: 0xf7efe0, roughness: 0.85 })
       );
       agendaPages.position.set(-0.22, 0.96, 0.08);
-      agendaMesh = new THREE.Mesh(
+      const agendaHit = new THREE.Mesh(
         new THREE.BoxGeometry(0.75, 0.35, 0.6),
         new THREE.MeshBasicMaterial({ visible: false })
       );
-      agendaMesh.position.set(-0.22, 1.05, 0.08);
-      agendaMesh.userData.roomAction = 'agenda';
-      clickables.push(agendaMesh);
+      agendaHit.position.set(-0.22, 1.05, 0.08);
+      agendaHit.userData.roomAction = 'agenda';
+      clickables.push(agendaHit);
 
-      // Desk Lamp (Clickable!)
       const lampBase = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.08, 12), brassMat);
       lampBase.position.set(0.58, 0.97, -0.18);
       const lampNeck = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.45, 8), brassMat);
@@ -514,7 +867,8 @@ export function CozyRoomView({
       lampHit.userData.roomAction = 'lamp';
       clickables.push(lampHit);
 
-      g.add(top, agendaCover, agendaPages, agendaMesh, lampBase, lampNeck, lampShade, lampHit);
+      g.add(top, agendaCover, agendaPages, agendaHit, lampBase, lampNeck, lampShade, lampHit);
+      addFurnitureHitbox('desk', 1.9, 1.2, 1.0, 0.6);
     }
 
     // 3. Bookshelf
@@ -540,6 +894,9 @@ export function CozyRoomView({
           g.add(book);
         }
       }
+      const hit = addFurnitureHitbox('bookshelf', 1.5, 2.3, 0.6, 1.15);
+      hit.userData.roomAction = 'bookshelf';
+      clickables.push(hit);
     }
 
     // 4. Woven Aegean Rug
@@ -553,6 +910,7 @@ export function CozyRoomView({
         new THREE.MeshStandardMaterial({ color: 0x3b6e8c, roughness: 0.9 })
       );
       g.add(outer, inner, center);
+      addFurnitureHitbox('rug', 3.4, 0.2, 2.4, 0.08);
     }
 
     // 5. Olive Tree in Terracotta Pot
@@ -573,9 +931,10 @@ export function CozyRoomView({
       crown.position.y = 1.48;
       crown.castShadow = true;
       g.add(pot, trunk, crown);
+      addFurnitureHitbox('plant', 0.9, 1.9, 0.9, 0.95);
     }
 
-    // 6. Lo-Fi Turntable & Vinyl Stand (Clickable!)
+    // 6. Lo-Fi Turntable & Vinyl Stand
     let vinylDisc: THREE.Mesh;
     {
       const g = furnitureGroups.turntable;
@@ -594,14 +953,10 @@ export function CozyRoomView({
       vinylDisc.position.set(-0.06, 0.98, 0);
       const label = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.025, 14), brassMat);
       label.position.set(-0.06, 0.985, 0);
-      const hit = new THREE.Mesh(
-        new THREE.BoxGeometry(1.0, 1.25, 0.65),
-        new THREE.MeshBasicMaterial({ visible: false })
-      );
-      hit.position.y = 0.65;
+      const hit = addFurnitureHitbox('turntable', 1.0, 1.25, 0.65, 0.65);
       hit.userData.roomAction = 'turntable';
       clickables.push(hit);
-      g.add(cabinet, deck, vinylDisc, label, hit);
+      g.add(cabinet, deck, vinylDisc, label);
     }
 
     // 7. Turkish Tea Tray Table
@@ -622,6 +977,9 @@ export function CozyRoomView({
       const teapot = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), brassMat);
       teapot.position.set(-0.1, 0.56, -0.04);
       g.add(table, leg, tray, teaGlass, teapot);
+      const hit = addFurnitureHitbox('teatable', 1.15, 0.85, 1.15, 0.42);
+      hit.userData.roomAction = 'teatable';
+      clickables.push(hit);
     }
 
     // 8. Tralleis Wall Art Frame
@@ -639,9 +997,19 @@ export function CozyRoomView({
       );
       archTint.position.set(0, -0.05, 0.055);
       g.add(frame, canvas, archTint);
+      addFurnitureHitbox('wallart', 1.5, 1.1, 0.35, 0);
     }
 
     Object.values(furnitureGroups).forEach((fg) => roomGroup.add(fg));
+
+    // Player Avatar Rig
+    const initialAvatarCfg: AvatarConfig = {
+      ...DEFAULT_AVATAR_CONFIG,
+      ...(roomStateRef.current.avatarConfig || {}),
+    };
+    const avatarRig = createAvatarRig(initialAvatarCfg);
+    avatarRig.root.position.set(avatarWalkRef.current.x, 0, avatarWalkRef.current.z);
+    roomGroup.add(avatarRig.root);
 
     // Interactive Pets
     const catRig = createCatRig();
@@ -660,6 +1028,9 @@ export function CozyRoomView({
 
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
+    const heldKeys = new Set<string>();
+    let draggingFurniture = false;
+    let pointerDownPos = { x: 0, y: 0 };
 
     const updatePointer = (clientX: number, clientY: number) => {
       const rect = renderer.domElement.getBoundingClientRect();
@@ -667,75 +1038,231 @@ export function CozyRoomView({
       pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     };
 
-    const onPointerMove = (e: PointerEvent) => {
-      updatePointer(e.clientX, e.clientY);
-      raycaster.setFromCamera(pointer, camera);
-      const hits = raycaster.intersectObjects(clickables, false).filter((h) => {
-        let p: THREE.Object3D | null = h.object;
-        while (p) {
-          if (!p.visible) return false;
-          p = p.parent;
-        }
-        return true;
-      });
-      renderer.domElement.style.cursor = hits.length > 0 ? 'pointer' : 'default';
+    const isHierarchyVisible = (obj: THREE.Object3D) => {
+      let p: THREE.Object3D | null = obj;
+      while (p) {
+        if (!p.visible) return false;
+        p = p.parent;
+      }
+      return true;
     };
 
-    const onPointerClick = (e: MouseEvent) => {
+    const moveSelectedFurnitureToFloorPoint = (pt: THREE.Vector3) => {
+      const selId = selectedFurnitureRef.current;
+      const st = roomStateRef.current;
+      const clampedX = THREE.MathUtils.clamp(Math.round(pt.x * 10) / 10, -3.3, 3.3);
+      const clampedZ = THREE.MathUtils.clamp(Math.round(pt.z * 10) / 10, -3.3, 3.3);
+
+      const nextFurniture = st.furniture.map((f) => {
+        if (f.id !== selId) return f;
+        if (selId === 'wallart') {
+          return {
+            ...f,
+            enabled: true,
+            x: THREE.MathUtils.clamp(clampedX, -2.8, 2.8),
+            z: -3.72,
+            rotY: 0,
+          };
+        }
+        return {
+          ...f,
+          enabled: true,
+          x: clampedX,
+          z: clampedZ,
+        };
+      });
+      callbacksRef.current.onChangeRoomState({ ...st, furniture: nextFurniture });
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      pointerDownPos = { x: e.clientX, y: e.clientY };
+      if (!placementModeRef.current) return;
       updatePointer(e.clientX, e.clientY);
       raycaster.setFromCamera(pointer, camera);
-      const hits = raycaster.intersectObjects(clickables, false).filter((h) => {
-        let p: THREE.Object3D | null = h.object;
-        while (p) {
-          if (!p.visible) return false;
-          p = p.parent;
-        }
-        return true;
-      });
-      if (hits.length === 0) return;
-      const action = hits[0].object.userData.roomAction as string;
-      const st = roomStateRef.current;
 
-      if (action === 'agenda') {
-        audioEngine.playDiscoveryChime();
-        callbacksRef.current.onOpenAgenda();
-      } else if (action === 'lamp') {
-        callbacksRef.current.onChangeRoomState({ ...st, lampOn: !st.lampOn });
-      } else if (action === 'turntable') {
-        const idx = LOFI_TRACKS.findIndex((t) => t.id === lofiTrackRef.current);
-        const nextTrack = LOFI_TRACKS[(idx + 1) % LOFI_TRACKS.length].id;
-        callbacksRef.current.onChangeLofiTrack(nextTrack);
-      } else if (action === 'pet-cat') {
-        petBounceRef.current.cat = 1.0;
-        audioEngine.playPetSound('cat');
-        const nextAff = st.petAffection + 1;
-        callbacksRef.current.onChangeRoomState({ ...st, petAffection: nextAff });
-        showPetHeart('cat', nextAff);
-      } else if (action === 'pet-dog') {
-        petBounceRef.current.dog = 1.0;
-        audioEngine.playPetSound('dog');
-        const nextAff = st.petAffection + 1;
-        callbacksRef.current.onChangeRoomState({ ...st, petAffection: nextAff });
-        showPetHeart('dog', nextAff);
+      const fHits = raycaster
+        .intersectObjects(furnitureHitMeshes, false)
+        .filter((h) => isHierarchyVisible(h.object));
+      if (fHits.length > 0) {
+        const fId = fHits[0].object.userData.furnitureId as RoomFurnitureId;
+        setSelectedFurniture(fId);
+        draggingFurniture = true;
+        return;
+      }
+
+      const floorHits = raycaster.intersectObject(floorHitPlane, false);
+      if (floorHits.length > 0) {
+        draggingFurniture = true;
+        moveSelectedFurnitureToFloorPoint(floorHits[0].point);
       }
     };
 
+    const onPointerMove = (e: PointerEvent) => {
+      updatePointer(e.clientX, e.clientY);
+      raycaster.setFromCamera(pointer, camera);
+
+      if (placementModeRef.current && draggingFurniture) {
+        const floorHits = raycaster.intersectObject(floorHitPlane, false);
+        if (floorHits.length > 0) {
+          moveSelectedFurnitureToFloorPoint(floorHits[0].point);
+        }
+        renderer.domElement.style.cursor = 'grabbing';
+        return;
+      }
+
+      if (placementModeRef.current) {
+        const fHits = raycaster
+          .intersectObjects(furnitureHitMeshes, false)
+          .filter((h) => isHierarchyVisible(h.object));
+        renderer.domElement.style.cursor = fHits.length > 0 ? 'grab' : 'crosshair';
+        return;
+      }
+
+      const hits = raycaster
+        .intersectObjects(clickables, false)
+        .filter((h) => isHierarchyVisible(h.object));
+      renderer.domElement.style.cursor = hits.length > 0 ? 'pointer' : 'default';
+    };
+
+    const onPointerUp = () => {
+      draggingFurniture = false;
+    };
+
+    const onPointerClick = (e: MouseEvent) => {
+      if (Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y) > 8) return;
+      if (placementModeRef.current) return;
+
+      updatePointer(e.clientX, e.clientY);
+      raycaster.setFromCamera(pointer, camera);
+
+      // Priority 1: Direct click on interactive props/pets
+      const hits = raycaster
+        .intersectObjects(clickables, false)
+        .filter((h) => isHierarchyVisible(h.object));
+      if (hits.length > 0) {
+        const action = hits[0].object.userData.roomAction as string;
+        const st = roomStateRef.current;
+        if (action === 'agenda') {
+          triggerInteractionRef.current('desk');
+        } else if (action === 'lamp') {
+          callbacksRef.current.onChangeRoomState({ ...st, lampOn: !st.lampOn });
+          showToast(st.lampOn ? 'Masa lambası kapatıldı.' : 'Masa lambası açıldı.');
+        } else if (action === 'turntable') {
+          triggerInteractionRef.current('turntable');
+        } else if (action === 'armchair') {
+          triggerInteractionRef.current('armchair');
+        } else if (action === 'teatable') {
+          triggerInteractionRef.current('teatable');
+        } else if (action === 'bookshelf') {
+          triggerInteractionRef.current('bookshelf');
+        } else if (action === 'pet-cat') {
+          triggerInteractionRef.current('cat');
+        } else if (action === 'pet-dog') {
+          triggerInteractionRef.current('dog');
+        }
+        return;
+      }
+
+      // Priority 2: Click/Tap on Floor to Walk Avatar there!
+      if (roomStateRef.current.avatarPlaced ?? true) {
+        const floorHits = raycaster.intersectObject(floorHitPlane, false);
+        if (floorHits.length > 0) {
+          if (isSittingRef.current) setIsSitting(false);
+          avatarWalkRef.current.targetX = THREE.MathUtils.clamp(floorHits[0].point.x, -3.35, 3.35);
+          avatarWalkRef.current.targetZ = THREE.MathUtils.clamp(floorHits[0].point.z, -3.35, 3.35);
+        }
+      }
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (document.activeElement?.tagName === 'INPUT') return;
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+        e.preventDefault();
+      }
+      const wasDown = heldKeys.has(e.code);
+      heldKeys.add(e.code);
+
+      if (!wasDown && e.code === 'KeyE' && nearbyInteractableRef.current) {
+        triggerInteractionRef.current(nearbyInteractableRef.current.id);
+      } else if (!wasDown && e.code === 'KeyR' && placementModeRef.current) {
+        const selId = selectedFurnitureRef.current;
+        const st = roomStateRef.current;
+        callbacksRef.current.onChangeRoomState({
+          ...st,
+          furniture: st.furniture.map((f) => {
+            if (f.id !== selId) return f;
+            const cur = resolveFurnitureTransform(f.id, f);
+            return { ...f, rotY: cur.rotY + Math.PI / 4, enabled: true };
+          }),
+        });
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      heldKeys.delete(e.code);
+    };
+    const onBlur = () => {
+      heldKeys.clear();
+      touchMoveRef.current = { up: false, down: false, left: false, right: false };
+    };
+
+    let pinchStartDist = 0;
+    let pinchStartZoom = 1;
+    const getTouchDist = (t1: Touch, t2: Touch) =>
+      Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        pinchStartDist = getTouchDist(e.touches[0], e.touches[1]);
+        pinchStartZoom = camera.zoom;
+      }
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && pinchStartDist > 10) {
+        e.preventDefault();
+        const dist = getTouchDist(e.touches[0], e.touches[1]);
+        camera.zoom = THREE.MathUtils.clamp(pinchStartZoom * (dist / pinchStartDist), 0.78, 2.2);
+        camera.updateProjectionMatrix();
+      }
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) pinchStartDist = 0;
+    };
+    const onWheel = (e: WheelEvent) => {
+      camera.zoom = THREE.MathUtils.clamp(camera.zoom - e.deltaY * 0.0008, 0.78, 2.2);
+      camera.updateProjectionMatrix();
+    };
+
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
     renderer.domElement.addEventListener('click', onPointerClick);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
+    renderer.domElement.addEventListener('wheel', onWheel, { passive: true });
+    renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: true });
+    renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+    renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: true });
+    renderer.domElement.addEventListener('touchcancel', onTouchEnd, { passive: true });
 
     const onResize = () => {
       if (!container) return;
       const w = container.clientWidth;
       const h = Math.max(1, container.clientHeight);
       const asp = w / h;
-      camera.left = (-baseFrustum * asp) / 2;
-      camera.right = (baseFrustum * asp) / 2;
-      camera.top = baseFrustum / 2;
-      camera.bottom = -baseFrustum / 2;
+      const frustum = getRoomFrustum(asp);
+      camera.left = (-frustum * asp) / 2;
+      camera.right = (frustum * asp) / 2;
+      camera.top = frustum / 2;
+      camera.bottom = -frustum / 2;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
     };
     window.addEventListener('resize', onResize);
+
+    const nearbyInteractableRef = { current: null as NearbyRoomInteractable | null };
+    let lastNearbyId: string | null = null;
+    let lastAvatarSig = '';
 
     const clock = new THREE.Clock();
     let frameId = 0;
@@ -775,16 +1302,247 @@ export function CozyRoomView({
       lampPoint.intensity = THREE.MathUtils.damp(lampPoint.intensity, st.lampOn ? 4.8 : 0, 6, dt);
       lampShadeMat.emissiveIntensity = st.lampOn ? 1.15 : 0.08;
 
-      // Sync Furniture Visibility & Slot Positions
+      // Sync Furniture Positions & Rotations
       for (const item of st.furniture) {
         const grp = furnitureGroups[item.id];
         grp.visible = item.enabled;
-        const coords = SLOT_COORDS[item.id];
-        const slot = coords[item.slotIndex % coords.length];
-        grp.position.set(slot[0], slot[1], slot[2]);
-        grp.rotation.y = SLOT_ROTATIONS[item.id][item.slotIndex % SLOT_ROTATIONS[item.id].length];
+        const tf = resolveFurnitureTransform(item.id, item);
+        grp.position.set(tf.x, tf.y, tf.z);
+        grp.rotation.y = tf.rotY;
         if (item.id === 'desk') {
-          lampPoint.position.set(slot[0] + 0.5, 1.9, slot[2]);
+          lampPoint.position.set(tf.x + 0.5, 1.9, tf.z);
+        }
+      }
+
+      // Highlight selected furniture in Placement Mode
+      if (placementModeRef.current) {
+        const selId = selectedFurnitureRef.current;
+        const selPlacement = st.furniture.find((f) => f.id === selId);
+        const tf = resolveFurnitureTransform(selId, selPlacement);
+        selectionRing.visible = selPlacement?.enabled ?? true;
+        selectionRing.position.set(tf.x, 0.045, selId === 'wallart' ? -3.45 : tf.z);
+        selectionRing.scale.setScalar(1.0 + Math.sin(elapsed * 4.5) * 0.06);
+      } else {
+        selectionRing.visible = false;
+      }
+
+      // Sync Avatar Config & Walking/Sitting Animation
+      const showAvatar = st.avatarPlaced ?? true;
+      avatarRig.root.visible = showAvatar;
+      if (showAvatar) {
+        const cfg: AvatarConfig = {
+          ...DEFAULT_AVATAR_CONFIG,
+          ...(st.avatarConfig || {}),
+        };
+        const sig = `${cfg.skinColor}|${cfg.shirtColor}|${cfg.pantsColor}|${cfg.hairStyle}|${cfg.hairColor}`;
+        if (sig !== lastAvatarSig) {
+          lastAvatarSig = sig;
+          avatarRig.applyConfig(cfg);
+        }
+
+        const av = avatarWalkRef.current;
+        let moveX = 0;
+        let moveZ = 0;
+        if (!placementModeRef.current) {
+          const up = heldKeys.has('KeyW') || heldKeys.has('ArrowUp') || touchMoveRef.current.up;
+          const down =
+            heldKeys.has('KeyS') || heldKeys.has('ArrowDown') || touchMoveRef.current.down;
+          const left =
+            heldKeys.has('KeyA') || heldKeys.has('ArrowLeft') || touchMoveRef.current.left;
+          const right =
+            heldKeys.has('KeyD') || heldKeys.has('ArrowRight') || touchMoveRef.current.right;
+
+          // Isometric screen-aligned directions
+          if (up) {
+            moveX -= 1;
+            moveZ -= 1;
+          }
+          if (down) {
+            moveX += 1;
+            moveZ += 1;
+          }
+          if (left) {
+            moveX -= 1;
+            moveZ += 1;
+          }
+          if (right) {
+            moveX += 1;
+            moveZ -= 1;
+          }
+        }
+
+        let isMoving = false;
+        if (moveX !== 0 || moveZ !== 0) {
+          if (isSittingRef.current) setIsSitting(false);
+          av.targetX = null;
+          av.targetZ = null;
+          const len = Math.hypot(moveX, moveZ);
+          moveX /= len;
+          moveZ /= len;
+          isMoving = true;
+        } else if (av.targetX !== null && av.targetZ !== null && !isSittingRef.current) {
+          const dx = av.targetX - av.x;
+          const dz = av.targetZ - av.z;
+          const dist = Math.hypot(dx, dz);
+          if (dist < 0.14) {
+            av.targetX = null;
+            av.targetZ = null;
+          } else {
+            moveX = dx / dist;
+            moveZ = dz / dist;
+            isMoving = true;
+          }
+        }
+
+        if (isMoving) {
+          const walkSpeed = 2.45;
+          let nx = THREE.MathUtils.clamp(av.x + moveX * walkSpeed * dt, -3.35, 3.35);
+          let nz = THREE.MathUtils.clamp(av.z + moveZ * walkSpeed * dt, -3.35, 3.35);
+
+          // Collide against solid floor furniture
+          for (const item of st.furniture) {
+            if (!item.enabled) continue;
+            const r = FURNITURE_RADII[item.id];
+            if (!r) continue;
+            const tf = resolveFurnitureTransform(item.id, item);
+            const dx = nx - tf.x;
+            const dz = nz - tf.z;
+            const dist = Math.hypot(dx, dz);
+            const minDist = r + 0.28;
+            if (dist < minDist && dist > 0.001) {
+              nx = tf.x + (dx / dist) * minDist;
+              nz = tf.z + (dz / dist) * minDist;
+            }
+          }
+
+          av.x = THREE.MathUtils.clamp(nx, -3.35, 3.35);
+          av.z = THREE.MathUtils.clamp(nz, -3.35, 3.35);
+          const targetRot = Math.atan2(moveX, moveZ);
+          let diff = targetRot - av.rotY;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          av.rotY += diff * Math.min(1, dt * 12);
+        }
+
+        // Walk marker display
+        if (av.targetX !== null && av.targetZ !== null && !isSittingRef.current) {
+          walkMarker.visible = true;
+          walkMarker.position.set(av.targetX, 0.04, av.targetZ);
+          walkMarker.scale.setScalar(1.0 + Math.sin(elapsed * 6) * 0.12);
+        } else {
+          walkMarker.visible = false;
+        }
+
+        avatarRig.root.position.set(av.x, 0, av.z);
+        avatarRig.root.rotation.y = av.rotY;
+
+        teaSipRef.current = Math.max(0, teaSipRef.current - dt * 1.4);
+
+        if (isSittingRef.current) {
+          avatarRig.bodyPivot.position.y = -0.18;
+          avatarRig.leftLegPivot.rotation.x = -1.35;
+          avatarRig.rightLegPivot.rotation.x = -1.35;
+          avatarRig.leftArmPivot.rotation.x = -0.45;
+          avatarRig.rightArmPivot.rotation.x = -0.45 - Math.sin(teaSipRef.current * Math.PI) * 0.7;
+        } else if (isMoving) {
+          const stride = Math.sin(elapsed * 11.5) * 0.65;
+          avatarRig.bodyPivot.position.y = Math.abs(Math.sin(elapsed * 11.5)) * 0.045;
+          avatarRig.leftLegPivot.rotation.x = stride;
+          avatarRig.rightLegPivot.rotation.x = -stride;
+          avatarRig.leftArmPivot.rotation.x = -stride * 0.75;
+          avatarRig.rightArmPivot.rotation.x = stride * 0.75;
+        } else {
+          avatarRig.bodyPivot.position.y = Math.sin(elapsed * 2.2) * 0.015;
+          avatarRig.leftLegPivot.rotation.x = THREE.MathUtils.damp(
+            avatarRig.leftLegPivot.rotation.x,
+            0,
+            10,
+            dt
+          );
+          avatarRig.rightLegPivot.rotation.x = THREE.MathUtils.damp(
+            avatarRig.rightLegPivot.rotation.x,
+            0,
+            10,
+            dt
+          );
+          avatarRig.leftArmPivot.rotation.x = THREE.MathUtils.damp(
+            avatarRig.leftArmPivot.rotation.x,
+            0,
+            10,
+            dt
+          );
+          avatarRig.rightArmPivot.rotation.x = THREE.MathUtils.damp(
+            avatarRig.rightArmPivot.rotation.x,
+            -Math.sin(teaSipRef.current * Math.PI) * 0.9,
+            10,
+            dt
+          );
+        }
+
+        // Determine nearest interactive object in Gezinti Mode
+        let closest: NearbyRoomInteractable | null = null;
+        let closestDist = 1.65;
+        if (!placementModeRef.current) {
+          const checks: [NearbyRoomInteractable['id'], number, number, string, boolean][] = [];
+          for (const item of st.furniture) {
+            if (!item.enabled) continue;
+            const tf = resolveFurnitureTransform(item.id, item);
+            if (item.id === 'armchair') {
+              checks.push([
+                'armchair',
+                tf.x,
+                tf.z,
+                isSittingRef.current ? 'Koltuktan Kalk' : 'Koltuğa Otur',
+                true,
+              ]);
+            } else if (item.id === 'desk') {
+              checks.push(['desk', tf.x, tf.z, 'Ajanda & Takvimi Aç', true]);
+            } else if (item.id === 'turntable') {
+              checks.push(['turntable', tf.x, tf.z, 'Lo-Fi Plağı Değiştir', true]);
+            } else if (item.id === 'teatable') {
+              checks.push(['teatable', tf.x, tf.z, 'Tavşan Kanı Çay İç', true]);
+            } else if (item.id === 'bookshelf') {
+              checks.push(['bookshelf', tf.x, tf.z, 'Kitaba Göz At', true]);
+            }
+          }
+          if (catRig.group.visible) {
+            checks.push([
+              'cat',
+              catRig.group.position.x,
+              catRig.group.position.z,
+              'Pamuk’u Sev',
+              true,
+            ]);
+          }
+          if (dogRig.group.visible) {
+            checks.push([
+              'dog',
+              dogRig.group.position.x,
+              dogRig.group.position.z,
+              'Efe’yi Sev',
+              true,
+            ]);
+          }
+
+          for (const [id, tx, tz, label] of checks) {
+            const d = Math.hypot(av.x - tx, av.z - tz);
+            if (d < closestDist) {
+              closestDist = d;
+              closest = { id, label };
+            }
+          }
+        }
+        nearbyInteractableRef.current = closest;
+        const nextId = closest ? `${closest.id}:${closest.label}` : null;
+        if (nextId !== lastNearbyId) {
+          lastNearbyId = nextId;
+          setNearbyInteractable(closest);
+        }
+      } else {
+        walkMarker.visible = false;
+        if (lastNearbyId !== null) {
+          lastNearbyId = null;
+          setNearbyInteractable(null);
         }
       }
 
@@ -873,8 +1631,18 @@ export function CozyRoomView({
       cancelAnimationFrame(frameId);
       clearTimeout(frameId);
       window.removeEventListener('resize', onResize);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+      renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
       renderer.domElement.removeEventListener('click', onPointerClick);
+      renderer.domElement.removeEventListener('wheel', onWheel);
+      renderer.domElement.removeEventListener('touchstart', onTouchStart);
+      renderer.domElement.removeEventListener('touchmove', onTouchMove);
+      renderer.domElement.removeEventListener('touchend', onTouchEnd);
+      renderer.domElement.removeEventListener('touchcancel', onTouchEnd);
 
       roomGroup.traverse((obj) => {
         if ((obj as THREE.Mesh).isMesh) {
@@ -902,72 +1670,223 @@ export function CozyRoomView({
     onChangeRoomState({
       ...roomState,
       furniture: roomState.furniture.map((f) =>
-        f.id === id ? { ...f, slotIndex: (f.slotIndex + 1) % 3, enabled: true } : f
+        f.id === id
+          ? {
+              ...f,
+              slotIndex: (f.slotIndex + 1) % 3,
+              x: undefined,
+              z: undefined,
+              rotY: undefined,
+              enabled: true,
+            }
+          : f
       ),
     });
   };
+
+  const rotateFurniture = (id: RoomFurnitureId) => {
+    onChangeRoomState({
+      ...roomState,
+      furniture: roomState.furniture.map((f) => {
+        if (f.id !== id) return f;
+        const cur = resolveFurnitureTransform(f.id, f);
+        return { ...f, rotY: cur.rotY + Math.PI / 4, enabled: true };
+      }),
+    });
+  };
+
+  const resetRoomLayout = () => {
+    onChangeRoomState({
+      ...roomState,
+      furniture: DEFAULT_COZY_ROOM_STATE.furniture.map((item) => ({ ...item })),
+    });
+    showToast('Oda eşya düzeni varsayılana sıfırlandı.');
+  };
+
+  const updateAvatarConfig = (patch: Partial<AvatarConfig>) => {
+    onChangeRoomState({
+      ...roomState,
+      avatarPlaced: true,
+      avatarConfig: { ...avatarConfig, ...patch },
+    });
+  };
+
+  const bindPadButton = (dir: 'up' | 'down' | 'left' | 'right') => ({
+    onPointerDown: (e: ReactPointerEvent<HTMLButtonElement>) => {
+      e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      touchMoveRef.current[dir] = true;
+    },
+    onPointerUp: (e: ReactPointerEvent<HTMLButtonElement>) => {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+      touchMoveRef.current[dir] = false;
+    },
+    onPointerCancel: () => {
+      touchMoveRef.current[dir] = false;
+    },
+    onLostPointerCapture: () => {
+      touchMoveRef.current[dir] = false;
+    },
+  });
+
+  const selectedLabel =
+    FURNITURE_CATALOG.find((c) => c.id === selectedFurniture)?.label || 'Eşya';
 
   return (
     <div className="relative w-full h-full">
       <div ref={mountRef} className="w-full h-full" />
 
-      {/* Cozy Room HUD Overlay (Zero backdrop-filter, zero pills) */}
-      <div className="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-4 md:p-6">
+      {/* Cozy Room HUD Overlay (Storybook Warm Parchment, Mobile Friendly) */}
+      <div className="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-3 sm:p-4 md:p-6 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         {/* Top Row */}
-        <div className="flex items-start justify-between gap-4">
-          <div className="pointer-events-auto rounded-xl bg-[#181612]/90 border border-[#F5EFE6]/12 px-4 py-3 text-[#F5EFE6]">
-            <div className="font-display text-base md:text-lg font-semibold leading-tight">
-              Sıcak Yuvam · Efeler Evi
+        <div className="flex items-start justify-between gap-2 sm:gap-4">
+          <div className="pointer-events-auto rounded-2xl bg-[#F7EEDC]/96 border-2 border-[#B99464] px-3 py-2 sm:px-4 sm:py-3 text-[#3A2618] shadow-md max-w-[58vw] sm:max-w-lg">
+            <div className="font-display text-sm sm:text-base md:text-lg font-bold leading-tight truncate">
+              Sıcak Yuvam · {placementMode ? 'Eşya Yerleştirme Modu' : 'Gezinti & Yaşam'}
             </div>
-            <div className="flex flex-wrap items-center gap-x-2 text-xs text-[#C7BEB0] mt-1">
+            <div className="flex flex-wrap items-center gap-x-1.5 sm:gap-x-2 text-[11px] sm:text-xs text-[#6B5038] mt-0.5 sm:mt-1 font-medium">
               <span>{WEATHER_OPTIONS.find((w) => w.id === weather)?.label}</span>
               <span aria-hidden="true">·</span>
-              <span>{LOFI_TRACKS.find((t) => t.id === lofiTrack)?.label}</span>
+              <span className="truncate">{LOFI_TRACKS.find((t) => t.id === lofiTrack)?.label}</span>
               <span aria-hidden="true">·</span>
-              <span className="font-mono-num text-[#E8A08B]">
-                Sevgi Puanı: {roomState.petAffection}
+              <span className="font-mono-num text-[#B84C27] font-semibold">
+                Sevgi: {roomState.petAffection}
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 pointer-events-auto">
+          <div className="flex items-center gap-1.5 sm:gap-2 pointer-events-auto shrink-0">
             <button
               type="button"
               onClick={onOpenAgenda}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#181612]/90 hover:bg-[#26211B] border border-[#F5EFE6]/12 text-xs font-medium text-[#F5EFE6] transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-xl bg-[#F7EEDC]/96 hover:bg-[#EFE0C3] border-2 border-[#B99464] text-xs font-semibold text-[#3A2618] shadow-md transition-colors whitespace-nowrap cursor-pointer"
             >
-              <Calendar className="w-3.5 h-3.5 text-[#D99B43]" aria-hidden="true" />
-              <span>Ajanda &amp; Takvim</span>
+              <Calendar className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
+              <span className="hidden sm:inline">Ajanda &amp; Takvim</span>
+              <span className="sm:hidden">Ajanda</span>
             </button>
 
             <button
               type="button"
               onClick={onExitHome}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#D99B43] hover:bg-[#E4AC59] text-[#181612] text-xs font-semibold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-xl bg-[#C85A32] hover:bg-[#B44D28] border-2 border-[#FAF2E2]/80 text-[#FAF2E2] text-xs font-semibold shadow-md transition-colors whitespace-nowrap cursor-pointer"
             >
               <DoorOpen className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Efeler Sokağına Çık</span>
+              <span className="hidden sm:inline">Efeler Sokağına Çık</span>
+              <span className="sm:hidden">Sokağa Çık</span>
             </button>
           </div>
         </div>
 
-        {/* Pet Interaction Toast */}
-        {petToast && (
-          <div className="self-center rounded-xl bg-[#1F1B16]/95 border border-[#E8A08B]/40 px-4 py-2 text-xs font-medium text-[#F5EFE6] flex items-center gap-2 shadow-xl">
-            <Heart className="w-3.5 h-3.5 text-[#E88A78]" aria-hidden="true" />
-            <span>{petToast}</span>
-          </div>
-        )}
+        {/* Center Status Toast or Placement Helper */}
+        <div className="self-center flex flex-col items-center gap-2">
+          {roomToast && (
+            <div className="rounded-xl bg-[#F7EEDC]/98 border-2 border-[#C85A32]/70 px-4 py-2 text-xs font-semibold text-[#3A2618] flex items-center gap-2 shadow-xl text-center max-w-md">
+              <Heart className="w-3.5 h-3.5 text-[#C85A32] shrink-0" aria-hidden="true" />
+              <span>{roomToast}</span>
+            </div>
+          )}
 
-        {/* Bottom Room Customization Drawer & Control Bar */}
-        <div className="flex flex-col items-center gap-2.5">
+          {placementMode && (
+            <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-2 rounded-2xl bg-[#F7EEDC]/96 border-2 border-[#C85A32]/65 px-3.5 py-2 text-xs text-[#3A2618] shadow-lg">
+              <span className="font-semibold text-[#B84C27]">
+                Seçili: {selectedLabel}
+              </span>
+              <span className="hidden sm:inline text-[#6B5038]">
+                (Zemine dokun/sürükle ile taşı)
+              </span>
+              <button
+                type="button"
+                onClick={() => rotateFurniture(selectedFurniture)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#EDE0C6] hover:bg-[#E2D1B2] border border-[#B99464]/60 font-semibold cursor-pointer"
+              >
+                <RotateCw className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
+                <span>45° Döndür</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPlacementMode(false)}
+                className="px-2.5 py-1 rounded-lg bg-[#5D8A48] text-[#FAF2E2] font-semibold cursor-pointer"
+              >
+                Bitti
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom Area: Contextual Prompt + Mobile Walk Pad + Customization Drawer & Bar */}
+        <div className="flex flex-col items-center gap-2 sm:gap-2.5 max-w-full">
+          {/* Proximity Interact Prompt */}
+          {!placementMode && nearbyInteractable && (
+            <button
+              type="button"
+              onClick={() => triggerInteractionRef.current(nearbyInteractable.id)}
+              className="pointer-events-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#C85A32] hover:bg-[#B44D28] border-2 border-[#FAF2E2]/85 text-[#FAF2E2] text-xs sm:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
+            >
+              {nearbyInteractable.id === 'teatable' ? (
+                <Coffee className="w-4 h-4" aria-hidden="true" />
+              ) : (
+                <Sparkles className="w-4 h-4" aria-hidden="true" />
+              )}
+              <span>[E] {nearbyInteractable.label}</span>
+            </button>
+          )}
+
+          {/* Compact Touch Walk Pad when Avatar is placed */}
+          {touchPadOpen && !placementMode && avatarPlaced && !editOpen && (
+            <div className="w-full flex items-end justify-between px-1 sm:px-3">
+              <div className="pointer-events-auto grid grid-cols-3 gap-1 w-32">
+                <div />
+                <button
+                  type="button"
+                  aria-label="Yukarı Yürü"
+                  {...bindPadButton('up')}
+                  className="h-10 rounded-xl bg-[#F7EEDC]/92 active:bg-[#E2D0AF] border-2 border-[#B99464] text-[#3A2618] flex items-center justify-center touch-none select-none cursor-pointer"
+                >
+                  <ArrowUp className="w-4 h-4" aria-hidden="true" />
+                </button>
+                <div />
+                <button
+                  type="button"
+                  aria-label="Sola Yürü"
+                  {...bindPadButton('left')}
+                  className="h-10 rounded-xl bg-[#F7EEDC]/92 active:bg-[#E2D0AF] border-2 border-[#B99464] text-[#3A2618] flex items-center justify-center touch-none select-none cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Aşağı Yürü"
+                  {...bindPadButton('down')}
+                  className="h-10 rounded-xl bg-[#F7EEDC]/92 active:bg-[#E2D0AF] border-2 border-[#B99464] text-[#3A2618] flex items-center justify-center touch-none select-none cursor-pointer"
+                >
+                  <ArrowDown className="w-4 h-4" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Sağa Yürü"
+                  {...bindPadButton('right')}
+                  className="h-10 rounded-xl bg-[#F7EEDC]/92 active:bg-[#E2D0AF] border-2 border-[#B99464] text-[#3A2618] flex items-center justify-center touch-none select-none cursor-pointer"
+                >
+                  <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                </button>
+              </div>
+              <div className="rounded-xl bg-[#F7EEDC]/90 border border-[#B99464]/60 px-2.5 py-1.5 text-[11px] font-medium text-[#5B432F]">
+                Zemine dokunarak da yürüyebilirsin
+              </div>
+            </div>
+          )}
+
           {editOpen && (
-            <div className="pointer-events-auto w-full max-w-2xl rounded-2xl bg-[#181612]/95 border border-[#F5EFE6]/14 p-4 text-[#F5EFE6] shadow-2xl">
+            <div className="pointer-events-auto w-full max-w-2xl max-h-[42dvh] overflow-y-auto efeler-scroll rounded-2xl bg-[#F7EEDC]/98 border-2 border-[#B99464] p-3.5 sm:p-4 text-[#3A2618] shadow-2xl">
               {/* Tabs */}
-              <div className="flex flex-wrap items-center gap-1.5 pb-3 mb-3 border-b border-[#F5EFE6]/10">
+              <div className="flex flex-wrap items-center gap-1.5 pb-2.5 mb-3 border-b border-[#B99464]/40">
                 {(
                   [
-                    ['furniture', 'Eşyalar & Konum'],
+                    ['furniture', 'Eşya & Yerleşim'],
+                    ['avatar', 'Avatarım'],
                     ['style', 'Duvar & Zemin'],
                     ['pets', 'Can Dostlarım'],
                     ['atmosphere', 'Hava & Lo-Fi'],
@@ -977,10 +1896,10 @@ export function CozyRoomView({
                     key={id}
                     type="button"
                     onClick={() => setDrawerTab(id)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                       drawerTab === id
-                        ? 'bg-[#D99B43] text-[#181612]'
-                        : 'bg-[#25211B] text-[#CFC6B8] hover:text-[#F5EFE6]'
+                        ? 'bg-[#C85A32] text-[#FAF2E2]'
+                        : 'bg-[#EDE0C6] text-[#5B432F] hover:bg-[#E2D1B2]'
                     }`}
                   >
                     {label}
@@ -989,46 +1908,184 @@ export function CozyRoomView({
               </div>
 
               {drawerTab === 'furniture' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-                  {FURNITURE_CATALOG.map((item) => {
-                    const placement = roomState.furniture.find((f) => f.id === item.id);
-                    const enabled = placement?.enabled ?? true;
-                    const slotIdx = (placement?.slotIndex ?? 0) + 1;
-                    return (
-                      <div
-                        key={item.id}
-                        className="flex items-center justify-between gap-2 rounded-xl bg-[#24201A] border border-[#F5EFE6]/8 px-3 py-2"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => toggleFurniture(item.id)}
-                          className={`text-xs font-medium text-left cursor-pointer ${
-                            enabled ? 'text-[#F5EFE6]' : 'text-[#7F7669] line-through'
+                <div className="space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[#6B5038]">
+                    <span>
+                      Bir eşya seçip <strong>Serbest Taşı</strong> modunda odada dilediğin yere koyabilirsin.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={resetRoomLayout}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#EDE0C6] hover:bg-[#E2D1B2] border border-[#B99464]/45 text-[11px] font-semibold text-[#3A2618] cursor-pointer"
+                    >
+                      <RotateCcw className="w-3 h-3" aria-hidden="true" />
+                      <span>Düzeni Sıfırla</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {FURNITURE_CATALOG.map((item) => {
+                      const placement = roomState.furniture.find((f) => f.id === item.id);
+                      const enabled = placement?.enabled ?? true;
+                      const isSel = selectedFurniture === item.id;
+                      return (
+                        <div
+                          key={item.id}
+                          className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
+                            isSel
+                              ? 'bg-[#EFE0C3] border-[#C85A32]'
+                              : 'bg-[#FAF3E6] border-[#B99464]/45'
                           }`}
                         >
-                          {item.label}
-                        </button>
-                        <div className="flex items-center gap-1.5 shrink-0">
                           <button
                             type="button"
-                            onClick={() => cycleFurnitureSlot(item.id)}
-                            title="Yerini Değiştir"
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[#312B23] hover:bg-[#3D352B] text-[11px] text-[#E6DCCB] cursor-pointer"
+                            onClick={() => toggleFurniture(item.id)}
+                            title="Göster/Gizle"
+                            className={`text-xs font-semibold text-left cursor-pointer ${
+                              enabled ? 'text-[#3A2618]' : 'text-[#9A8570] line-through'
+                            }`}
                           >
-                            <RotateCw className="w-3 h-3" aria-hidden="true" />
-                            <span>Konum {slotIdx}</span>
+                            {item.label}
                           </button>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedFurniture(item.id);
+                                setPlacementMode(true);
+                                setEditOpen(false);
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[#C85A32] hover:bg-[#B44D28] text-[11px] font-semibold text-[#FAF2E2] cursor-pointer"
+                            >
+                              <Move className="w-3 h-3" aria-hidden="true" />
+                              <span>Taşı</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => rotateFurniture(item.id)}
+                              title="Döndür"
+                              className="p-1 rounded-md bg-[#EDE0C6] hover:bg-[#E2D1B2] border border-[#B99464]/45 text-[#3A2618] cursor-pointer"
+                            >
+                              <RotateCw className="w-3 h-3 text-[#B84C27]" aria-hidden="true" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => cycleFurnitureSlot(item.id)}
+                              title="Hazır Konum"
+                              className="px-1.5 py-1 rounded-md bg-[#EDE0C6] hover:bg-[#E2D1B2] border border-[#B99464]/45 text-[11px] font-semibold text-[#3A2618] cursor-pointer"
+                            >
+                              #{(placement?.slotIndex ?? 0) + 1}
+                            </button>
+                          </div>
                         </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {drawerTab === 'avatar' && (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs text-[#6B5038]">
+                      Avatarını odaya yerleştirip WASD, dokunmatik tuşlar veya zemine tıklayarak yürütebilirsin.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextPlaced = !avatarPlaced;
+                        if (nextPlaced) {
+                          avatarWalkRef.current.x = 0.2;
+                          avatarWalkRef.current.z = 1.5;
+                          avatarWalkRef.current.targetX = null;
+                          avatarWalkRef.current.targetZ = null;
+                        }
+                        onChangeRoomState({ ...roomState, avatarPlaced: nextPlaced });
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                        avatarPlaced
+                          ? 'bg-[#5D8A48] text-[#FAF2E2]'
+                          : 'bg-[#EDE0C6] text-[#3A2618]'
+                      }`}
+                    >
+                      {avatarPlaced ? 'Avatar Odada (Gizle)' : 'Avatarı Odaya Yerleştir'}
+                    </button>
+                  </div>
+
+                  <div>
+                    <div className="text-[11px] font-semibold text-[#6B5038] mb-1.5">
+                      Saç &amp; Şapka Stili
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {AVATAR_HAIR_STYLES.map((hs) => (
+                        <button
+                          key={hs.id}
+                          type="button"
+                          onClick={() => updateAvatarConfig({ hairStyle: hs.id })}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                            avatarConfig.hairStyle === hs.id
+                              ? 'bg-[#C85A32] text-[#FAF2E2]'
+                              : 'bg-[#EDE0C6] text-[#5B432F]'
+                          }`}
+                        >
+                          {hs.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-5">
+                    <div>
+                      <div className="text-[11px] font-semibold text-[#6B5038] mb-1.5">
+                        Kıyafet Rengi
                       </div>
-                    );
-                  })}
+                      <div className="flex items-center gap-2">
+                        {AVATAR_SHIRT_SWATCHES.map((sw) => (
+                          <button
+                            key={sw.id}
+                            type="button"
+                            title={sw.name}
+                            onClick={() => updateAvatarConfig({ shirtColor: sw.hex })}
+                            className={`w-6 h-6 rounded-full border-2 cursor-pointer ${
+                              avatarConfig.shirtColor === sw.hex
+                                ? 'border-[#3A2618] scale-110'
+                                : 'border-[#B99464]/60'
+                            }`}
+                            style={{ backgroundColor: sw.hex }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-[11px] font-semibold text-[#6B5038] mb-1.5">
+                        Ten Tonu
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {AVATAR_SKIN_SWATCHES.map((sw) => (
+                          <button
+                            key={sw.id}
+                            type="button"
+                            title={sw.name}
+                            onClick={() => updateAvatarConfig({ skinColor: sw.hex })}
+                            className={`w-6 h-6 rounded-full border-2 cursor-pointer ${
+                              avatarConfig.skinColor === sw.hex
+                                ? 'border-[#3A2618] scale-110'
+                                : 'border-[#B99464]/60'
+                            }`}
+                            style={{ backgroundColor: sw.hex }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
               {drawerTab === 'style' && (
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div>
-                    <div className="text-[11px] text-[#BEB5A6] mb-1.5">Duvar Rengi</div>
+                    <div className="text-[11px] font-semibold text-[#6B5038] mb-1.5">Duvar Rengi</div>
                     <div className="flex items-center gap-2">
                       {ROOM_WALL_SWATCHES.map((sw) => (
                         <button
@@ -1038,8 +2095,8 @@ export function CozyRoomView({
                           onClick={() => onChangeRoomState({ ...roomState, wallColor: sw.hex })}
                           className={`w-7 h-7 rounded-full border-2 cursor-pointer ${
                             roomState.wallColor === sw.hex
-                              ? 'border-[#F5EFE6] scale-110'
-                              : 'border-[#F5EFE6]/25'
+                              ? 'border-[#3A2618] scale-110'
+                              : 'border-[#B99464]/60'
                           }`}
                           style={{ backgroundColor: sw.hex }}
                         />
@@ -1048,8 +2105,8 @@ export function CozyRoomView({
                   </div>
 
                   <div>
-                    <div className="text-[11px] text-[#BEB5A6] mb-1.5">Zemin Dokusu</div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="text-[11px] font-semibold text-[#6B5038] mb-1.5">Zemin Dokusu</div>
+                    <div className="flex flex-wrap items-center gap-1.5">
                       {(
                         [
                           ['oak', 'Sıcak Meşe'],
@@ -1061,10 +2118,10 @@ export function CozyRoomView({
                           key={tone}
                           type="button"
                           onClick={() => onChangeRoomState({ ...roomState, floorTone: tone })}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer ${
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
                             roomState.floorTone === tone
-                              ? 'bg-[#D99B43] text-[#181612]'
-                              : 'bg-[#26221C] text-[#CFC6B8]'
+                              ? 'bg-[#C85A32] text-[#FAF2E2]'
+                              : 'bg-[#EDE0C6] text-[#5B432F]'
                           }`}
                         >
                           {label}
@@ -1077,7 +2134,7 @@ export function CozyRoomView({
 
               {drawerTab === 'pets' && (
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     {(
                       [
                         ['cat', 'Sadece Pamuk (Kedi)'],
@@ -1089,18 +2146,18 @@ export function CozyRoomView({
                         key={p}
                         type="button"
                         onClick={() => onChangeRoomState({ ...roomState, petType: p })}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer ${
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
                           roomState.petType === p
-                            ? 'bg-[#D99B43] text-[#181612]'
-                            : 'bg-[#26221C] text-[#CFC6B8]'
+                            ? 'bg-[#C85A32] text-[#FAF2E2]'
+                            : 'bg-[#EDE0C6] text-[#5B432F]'
                         }`}
                       >
                         {label}
                       </button>
                     ))}
                   </div>
-                  <div className="text-xs text-[#C7BEB0]">
-                    Odadaki dostlarımıza tıklayarak sevebilirsiniz.
+                  <div className="text-xs text-[#6B5038] font-medium">
+                    Yanlarına yürüyüp [E] ile veya dokunarak sevebilirsin.
                   </div>
                 </div>
               )}
@@ -1108,17 +2165,19 @@ export function CozyRoomView({
               {drawerTab === 'atmosphere' && (
                 <div className="space-y-3">
                   <div>
-                    <div className="text-[11px] text-[#BEB5A6] mb-1.5">Pencere Dışı Hava Durumu</div>
+                    <div className="text-[11px] font-semibold text-[#6B5038] mb-1.5">
+                      Pencere Dışı Hava Durumu
+                    </div>
                     <div className="flex flex-wrap items-center gap-1.5">
                       {WEATHER_OPTIONS.map((w) => (
                         <button
                           key={w.id}
                           type="button"
                           onClick={() => onChangeWeather(w.id)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer ${
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
                             weather === w.id
-                              ? 'bg-[#D99B43] text-[#181612]'
-                              : 'bg-[#26221C] text-[#CFC6B8]'
+                              ? 'bg-[#C85A32] text-[#FAF2E2]'
+                              : 'bg-[#EDE0C6] text-[#5B432F]'
                           }`}
                         >
                           {w.label}
@@ -1127,17 +2186,19 @@ export function CozyRoomView({
                     </div>
                   </div>
                   <div>
-                    <div className="text-[11px] text-[#BEB5A6] mb-1.5">Lo-Fi Müzik Kanalı</div>
+                    <div className="text-[11px] font-semibold text-[#6B5038] mb-1.5">
+                      Lo-Fi Müzik Kanalı
+                    </div>
                     <div className="flex flex-wrap items-center gap-1.5">
                       {LOFI_TRACKS.map((t) => (
                         <button
                           key={t.id}
                           type="button"
                           onClick={() => onChangeLofiTrack(t.id)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer ${
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
                             lofiTrack === t.id
-                              ? 'bg-[#61B88A] text-[#181612]'
-                              : 'bg-[#26221C] text-[#CFC6B8]'
+                              ? 'bg-[#5D8A48] text-[#FAF2E2]'
+                              : 'bg-[#EDE0C6] text-[#5B432F]'
                           }`}
                         >
                           {t.label}
@@ -1151,17 +2212,33 @@ export function CozyRoomView({
           )}
 
           {/* Bottom Bar */}
-          <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-2 rounded-2xl bg-[#181612]/92 border border-[#F5EFE6]/12 px-3 py-2 text-[#F5EFE6] shadow-xl">
+          <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 rounded-2xl bg-[#F7EEDC]/96 border-2 border-[#B99464] px-2.5 sm:px-3 py-1.5 sm:py-2 text-[#3A2618] shadow-lg max-w-[96vw] overflow-x-auto efeler-scroll">
+            <button
+              type="button"
+              onClick={() => {
+                setPlacementMode((v) => !v);
+                setEditOpen(false);
+              }}
+              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                placementMode
+                  ? 'bg-[#C85A32] text-[#FAF2E2]'
+                  : 'bg-[#EDE0C6] hover:bg-[#E2D1B2] text-[#3A2618]'
+              }`}
+            >
+              <Move className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Eşya Yerleştir</span>
+            </button>
+
             <button
               type="button"
               onClick={() => {
                 setDrawerTab('furniture');
                 setEditOpen((o) => !o);
               }}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                editOpen && drawerTab !== 'atmosphere'
-                  ? 'bg-[#D99B43] text-[#181612]'
-                  : 'bg-[#24201A] hover:bg-[#302A22] text-[#E6DCCB]'
+              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                editOpen && drawerTab === 'furniture'
+                  ? 'bg-[#C85A32] text-[#FAF2E2]'
+                  : 'bg-[#EDE0C6] hover:bg-[#E2D1B2] text-[#3A2618]'
               }`}
             >
               <Paintbrush className="w-3.5 h-3.5" aria-hidden="true" />
@@ -1170,17 +2247,33 @@ export function CozyRoomView({
 
             <button
               type="button"
+              onClick={() => {
+                setDrawerTab('avatar');
+                setEditOpen(true);
+              }}
+              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                editOpen && drawerTab === 'avatar'
+                  ? 'bg-[#5D8A48] text-[#FAF2E2]'
+                  : 'bg-[#EDE0C6] hover:bg-[#E2D1B2] text-[#3A2618]'
+              }`}
+            >
+              <User className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
+              <span>Avatarım</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() =>
                 onChangeRoomState({ ...roomState, lampOn: !roomState.lampOn })
               }
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 roomState.lampOn
-                  ? 'bg-[#D99B43]/20 border border-[#D99B43]/45 text-[#F3D19C]'
-                  : 'bg-[#24201A] text-[#A89F91]'
+                  ? 'bg-[#EFE0C3] border-[#C85A32]/50 text-[#B84C27]'
+                  : 'bg-[#EDE0C6] border-[#B99464]/50 text-[#6B5038]'
               }`}
             >
               <LampDesk className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Masa Lambası</span>
+              <span>Lamba</span>
             </button>
 
             <button
@@ -1189,9 +2282,9 @@ export function CozyRoomView({
                 setDrawerTab('pets');
                 setEditOpen(true);
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#24201A] hover:bg-[#302A22] text-xs font-medium text-[#E6DCCB] transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#EDE0C6] hover:bg-[#E2D1B2] text-xs font-semibold text-[#3A2618] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
             >
-              <PawPrint className="w-3.5 h-3.5 text-[#E8A08B]" aria-hidden="true" />
+              <PawPrint className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
               <span>Dostlarım</span>
             </button>
 
@@ -1201,20 +2294,35 @@ export function CozyRoomView({
                 setDrawerTab('atmosphere');
                 setEditOpen(true);
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#24201A] hover:bg-[#302A22] text-xs font-medium text-[#E6DCCB] transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#EDE0C6] hover:bg-[#E2D1B2] text-xs font-semibold text-[#3A2618] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
             >
-              <CloudRain className="w-3.5 h-3.5 text-[#8FBCE6]" aria-hidden="true" />
+              <CloudRain className="w-3.5 h-3.5 text-[#3B6E8C]" aria-hidden="true" />
               <span>Hava &amp; Lo-Fi</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTouchPadOpen((v) => !v)}
+              title="Yürüme Tuşları"
+              aria-label="Yürüme Tuşları"
+              className={`p-1.5 rounded-xl border transition-colors shrink-0 cursor-pointer ${
+                touchPadOpen
+                  ? 'bg-[#EFE0C3] border-[#C85A32]/60 text-[#B84C27]'
+                  : 'bg-[#EDE0C6] border-[#B99464]/50 text-[#8A735D]'
+              }`}
+            >
+              <Gamepad2 className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
 
             <button
               type="button"
               onClick={onToggleMusic}
               title="Lo-Fi Müziği Aç/Kapat"
-              className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+              aria-label="Müziği Aç/Kapat"
+              className={`p-1.5 rounded-xl border transition-colors shrink-0 cursor-pointer ${
                 musicEnabled && !isMuted
-                  ? 'bg-[#2A2620] border-[#D99B43]/35 text-[#D99B43]'
-                  : 'bg-[#24201A] border-[#F5EFE6]/10 text-[#8B8274]'
+                  ? 'bg-[#EFE0C3] border-[#C85A32]/60 text-[#B84C27]'
+                  : 'bg-[#EDE0C6] border-[#B99464]/50 text-[#8A735D]'
               }`}
             >
               <Music className="w-3.5 h-3.5" aria-hidden="true" />
@@ -1224,12 +2332,13 @@ export function CozyRoomView({
               type="button"
               onClick={onToggleMute}
               title="Tüm Sesler"
-              className="p-1.5 rounded-lg bg-[#24201A] hover:bg-[#2F2A22] border border-[#F5EFE6]/10 text-[#E6DCCB] transition-colors cursor-pointer"
+              aria-label="Sesi Aç/Kapat"
+              className="p-1.5 rounded-xl bg-[#EDE0C6] hover:bg-[#E2D1B2] border border-[#B99464]/50 text-[#3A2618] transition-colors shrink-0 cursor-pointer"
             >
               {isMuted ? (
-                <VolumeX className="w-3.5 h-3.5 text-[#C86D5B]" aria-hidden="true" />
+                <VolumeX className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
               ) : (
-                <Volume2 className="w-3.5 h-3.5 text-[#89C490]" aria-hidden="true" />
+                <Volume2 className="w-3.5 h-3.5 text-[#4B743B]" aria-hidden="true" />
               )}
             </button>
           </div>

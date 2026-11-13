@@ -101,17 +101,17 @@ export function AgendaModal({
   const selectedLabel = `${selD} ${MONTH_NAMES_TR[(selM || 1) - 1]} ${selY}`;
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-[#12100C]/80 p-4">
-      <div className="w-full max-w-4xl max-h-[88vh] flex flex-col rounded-2xl bg-[#1A1713] border border-[#F5EFE6]/15 text-[#F5EFE6] shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-[#2E1E12]/65 p-3 sm:p-4">
+      <div className="w-full max-w-4xl max-h-[92dvh] flex flex-col rounded-2xl bg-[#F7EEDC] border-2 border-[#B99464] text-[#3A2618] shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#F5EFE6]/10">
-          <div className="flex items-center gap-3">
-            <Calendar className="w-5 h-5 text-[#D99B43]" aria-hidden="true" />
-            <div>
-              <h2 className="font-display text-lg font-bold tracking-tight">
+        <div className="flex items-center justify-between px-4 py-3.5 sm:px-6 sm:py-4 border-b border-[#B99464]/45 bg-[#EFE0C3]">
+          <div className="flex items-center gap-3 min-w-0">
+            <Calendar className="w-5 h-5 text-[#B84C27] shrink-0" aria-hidden="true" />
+            <div className="min-w-0">
+              <h2 className="font-display text-base sm:text-lg font-bold tracking-tight truncate">
                 Kişisel Ajanda &amp; Takvim
               </h2>
-              <p className="text-xs text-[#BEB5A6]">
+              <p className="text-[11px] sm:text-xs text-[#6B5038] truncate">
                 Günlük notlarınızı, planlarınızı ve sakin düşüncelerinizi saklayın
               </p>
             </div>
@@ -121,39 +121,39 @@ export function AgendaModal({
             type="button"
             onClick={onClose}
             aria-label="Ajandayı Kapat"
-            className="p-2 rounded-lg bg-[#27221B] hover:bg-[#332C23] text-[#E6DCCB] transition-colors cursor-pointer"
+            className="p-2 rounded-lg bg-[#E2D0AF] hover:bg-[#D7C29B] text-[#3A2618] transition-colors cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
 
         {/* Body: Left Monthly Calendar + Right Daily Notes */}
-        <div className="flex-1 overflow-y-auto grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-[#F5EFE6]/10">
+        <div className="flex-1 overflow-y-auto efeler-scroll grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-[#B99464]/35">
           {/* Calendar Column */}
-          <div className="p-5">
-            <div className="flex items-center justify-between mb-4">
+          <div className="p-4 sm:p-5">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
               <button
                 type="button"
                 onClick={handlePrevMonth}
                 aria-label="Önceki Ay"
-                className="p-1.5 rounded-lg bg-[#25211B] hover:bg-[#322C24] border border-[#F5EFE6]/10 transition-colors cursor-pointer"
+                className="p-2 rounded-lg bg-[#EDE0C6] hover:bg-[#E2D1B2] border border-[#B99464]/50 transition-colors cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" aria-hidden="true" />
               </button>
-              <div className="font-display text-base font-semibold">
+              <div className="font-display text-base font-bold text-[#3A2618]">
                 {MONTH_NAMES_TR[viewMonth]} {viewYear}
               </div>
               <button
                 type="button"
                 onClick={handleNextMonth}
                 aria-label="Sonraki Ay"
-                className="p-1.5 rounded-lg bg-[#25211B] hover:bg-[#322C24] border border-[#F5EFE6]/10 transition-colors cursor-pointer"
+                className="p-2 rounded-lg bg-[#EDE0C6] hover:bg-[#E2D1B2] border border-[#B99464]/50 transition-colors cursor-pointer"
               >
                 <ChevronRight className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 
-            <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-[#A89F91] mb-2">
+            <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-[#6B5038] mb-2">
               {WEEKDAYS_TR.map((wd) => (
                 <div key={wd} className="py-1">
                   {wd}
@@ -164,7 +164,7 @@ export function AgendaModal({
             <div className="grid grid-cols-7 gap-1.5">
               {calendarCells.map((day, idx) => {
                 if (day === null) {
-                  return <div key={`empty-${idx}`} className="h-10" />;
+                  return <div key={`empty-${idx}`} className="h-10 sm:h-11" />;
                 }
                 const key = toDateKey(viewYear, viewMonth, day);
                 const dayNotes = notesByDate.get(key) || [];
@@ -176,19 +176,19 @@ export function AgendaModal({
                     key={key}
                     type="button"
                     onClick={() => setSelectedDateKey(key)}
-                    className={`h-10 rounded-lg border flex flex-col items-center justify-center relative transition-colors cursor-pointer font-mono-num text-xs ${
+                    className={`h-10 sm:h-11 rounded-lg border flex flex-col items-center justify-center relative transition-colors cursor-pointer font-mono-num text-xs ${
                       isSelected
-                        ? 'bg-[#D99B43] border-[#D99B43] text-[#181612] font-bold'
+                        ? 'bg-[#C85A32] border-[#A74522] text-[#FAF2E2] font-bold'
                         : isToday
-                          ? 'bg-[#2A241B] border-[#D99B43]/50 text-[#F5EFE6]'
-                          : 'bg-[#221E18] border-[#F5EFE6]/8 text-[#E6DCCB] hover:bg-[#2C2720]'
+                          ? 'bg-[#EFE0C3] border-[#C85A32]/70 text-[#3A2618] font-semibold'
+                          : 'bg-[#FAF3E6] border-[#B99464]/45 text-[#3A2618] hover:bg-[#EDE0C6]'
                     }`}
                   >
                     <span>{day}</span>
                     {dayNotes.length > 0 && (
                       <span
                         className={`w-1.5 h-1.5 rounded-full mt-0.5 ${
-                          isSelected ? 'bg-[#181612]' : 'bg-[#89C490]'
+                          isSelected ? 'bg-[#FAF2E2]' : 'bg-[#5D8A48]'
                         }`}
                       />
                     )}
@@ -199,15 +199,15 @@ export function AgendaModal({
           </div>
 
           {/* Daily Notes Column */}
-          <div className="p-5 flex flex-col">
+          <div className="p-4 sm:p-5 flex flex-col">
             <div className="flex items-baseline justify-between mb-3">
               <div>
-                <div className="text-[11px] uppercase tracking-wider text-[#D99B43] font-semibold">
+                <div className="text-[11px] uppercase tracking-wider text-[#B84C27] font-semibold">
                   Seçili Gün
                 </div>
-                <h3 className="font-display text-lg font-semibold">{selectedLabel}</h3>
+                <h3 className="font-display text-lg font-bold text-[#3A2618]">{selectedLabel}</h3>
               </div>
-              <span className="font-mono-num text-xs text-[#A89F91]">
+              <span className="font-mono-num text-xs text-[#6B5038] font-medium">
                 {selectedNotes.length} Not
               </span>
             </div>
@@ -218,27 +218,27 @@ export function AgendaModal({
                 value={draftText}
                 onChange={(e) => setDraftText(e.target.value)}
                 placeholder="Bugün için not veya yapılacak ekle..."
-                className="flex-1 px-3.5 py-2 rounded-xl bg-[#25211B] border border-[#F5EFE6]/12 text-sm text-[#F5EFE6] placeholder:text-[#8E8577] focus:outline-none focus:border-[#D99B43]"
+                className="flex-1 min-w-0 px-3.5 py-2.5 rounded-xl bg-[#FAF3E6] border border-[#B99464]/65 text-base sm:text-sm text-[#3A2618] placeholder:text-[#8A735D] focus:outline-none focus:border-[#C85A32]"
               />
               <button
                 type="submit"
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#D99B43] hover:bg-[#E4AC59] text-[#181612] text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-[#C85A32] hover:bg-[#B44D28] text-[#FAF2E2] text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
                 <Plus className="w-4 h-4" aria-hidden="true" />
                 <span>Ekle</span>
               </button>
             </form>
 
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+            <div className="flex-1 overflow-y-auto efeler-scroll space-y-2 pr-1">
               {selectedNotes.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-[#F5EFE6]/12 p-6 text-center text-xs text-[#A89F91]">
+                <div className="rounded-xl border border-dashed border-[#B99464]/60 bg-[#FAF3E6]/60 p-6 text-center text-xs text-[#6B5038]">
                   Bu tarih için henüz not yok. Lo-Fi eşliğinde gününüzü planlayabilirsiniz.
                 </div>
               ) : (
                 selectedNotes.map((note) => (
                   <div
                     key={note.id}
-                    className="flex items-center justify-between gap-3 rounded-xl bg-[#221E18] border border-[#F5EFE6]/10 px-3.5 py-2.5"
+                    className="flex items-center justify-between gap-3 rounded-xl bg-[#FAF3E6] border border-[#B99464]/50 px-3.5 py-2.5"
                   >
                     <button
                       type="button"
@@ -248,15 +248,15 @@ export function AgendaModal({
                       <span
                         className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
                           note.done
-                            ? 'bg-[#61B88A] border-[#61B88A] text-[#181612]'
-                            : 'border-[#F5EFE6]/25 bg-[#1A1713]'
+                            ? 'bg-[#5D8A48] border-[#5D8A48] text-[#FAF2E2]'
+                            : 'border-[#B99464] bg-[#F7EEDC]'
                         }`}
                       >
                         {note.done && <Check className="w-3.5 h-3.5" aria-hidden="true" />}
                       </span>
                       <span
                         className={`text-sm break-words ${
-                          note.done ? 'line-through text-[#8E8577]' : 'text-[#F5EFE6]'
+                          note.done ? 'line-through text-[#9A8570]' : 'text-[#3A2618]'
                         }`}
                       >
                         {note.text}
@@ -266,7 +266,7 @@ export function AgendaModal({
                       type="button"
                       onClick={() => onDeleteNote(note.id)}
                       aria-label="Notu Sil"
-                      className="p-1.5 rounded-lg text-[#A89F91] hover:text-[#E07A68] hover:bg-[#2E2820] transition-colors cursor-pointer shrink-0"
+                      className="p-1.5 rounded-lg text-[#7D644E] hover:text-[#B84C27] hover:bg-[#EDE0C6] transition-colors cursor-pointer shrink-0"
                     >
                       <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                     </button>

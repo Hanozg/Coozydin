@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { ColliderBox, LandmarkDef } from '../types/game';
 import { CityMaterialLibrary } from './materials';
+import { createGableRoofGeometry, createHipRoofGeometry } from './roofGeometry';
+import { getSurfaceHeightAt, getTerrainHeightAt } from './terrain';
 
 export interface BuiltLandmark {
   def: LandmarkDef;
@@ -37,7 +39,7 @@ function makeDiscoveryRing(x: number, z: number): THREE.Mesh {
     polygonOffsetFactor: -2,
   });
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(x, 0.08, z);
+  mesh.position.set(x, getSurfaceHeightAt(x, z) + 0.09, z);
   return mesh;
 }
 
@@ -48,6 +50,11 @@ function buildTralleis(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandma
   const group = new THREE.Group();
   const [lx, , lz] = def.position;
   group.position.set(lx, 0, lz);
+
+  const skirt = new THREE.Mesh(new THREE.BoxGeometry(17.4, 3.2, 9.4), mats.travertine);
+  skirt.position.y = -1.55;
+  skirt.receiveShadow = true;
+  group.add(skirt);
 
   const base1 = new THREE.Mesh(new THREE.BoxGeometry(17, 0.6, 9), mats.travertine);
   base1.position.y = 0.3;
@@ -252,8 +259,15 @@ function buildNasuhPasa(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandm
     wall.receiveShadow = true;
     group.add(wall);
 
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(w + 0.5, 0.9, d + 0.5), mats.terracottaRoof);
-    roof.position.set(x, h + 0.65, z);
+    const eave = new THREE.Mesh(new THREE.BoxGeometry(w + 0.55, 0.16, d + 0.55), mats.darkTimber);
+    eave.position.set(x, h + 0.25, z);
+    group.add(eave);
+
+    const roof = new THREE.Mesh(
+      createHipRoofGeometry(w + 0.6, d + 0.6, 1.35),
+      mats.terracottaRoof
+    );
+    roof.position.set(x, h + 0.32, z);
     roof.castShadow = true;
     group.add(roof);
   };
@@ -400,8 +414,12 @@ function buildCihanoglu(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandm
   medrese.castShadow = true;
   group.add(medrese);
 
-  const medRoof = new THREE.Mesh(new THREE.BoxGeometry(11.9, 0.7, 3.8), mats.terracottaRoof);
-  medRoof.position.set(0.5, 4.35, 4.6);
+  const medRoof = new THREE.Mesh(
+    createHipRoofGeometry(12.2, 4.1, 1.35),
+    mats.terracottaRoof
+  );
+  medRoof.position.set(0.5, 4.0, 4.6);
+  medRoof.castShadow = true;
   group.add(medRoof);
 
   const tower = new THREE.Mesh(new THREE.BoxGeometry(3.4, 11.2, 3.4), mats.travertine);
@@ -449,23 +467,91 @@ function buildKentMeydani(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLan
   curbRing.position.y = 0.25;
   group.add(curbRing);
 
-  // Reflecting Pools (West & East wings of the plaza)
+  // Central Garden Lawn Ring + Sandy Park Paths (Storybook Park Look)
+  const parkRingMat = new THREE.MeshStandardMaterial({ color: 0x8ea354, roughness: 0.92 });
+  const parkLawnRing = new THREE.Mesh(
+    new THREE.RingGeometry(5.6, 13.8, 40),
+    parkRingMat
+  );
+  parkLawnRing.rotation.x = -Math.PI / 2;
+  parkLawnRing.position.y = 0.255;
+  parkLawnRing.receiveShadow = true;
+  group.add(parkLawnRing);
+
+  // Diagonal Warm Sandstone / Dirt Park Cross Paths
+  [Math.PI * 0.25, -Math.PI * 0.25].forEach((ang) => {
+    const pathStrip = new THREE.Mesh(new THREE.BoxGeometry(27.5, 0.04, 2.2), mats.dirtPath);
+    pathStrip.position.y = 0.265;
+    pathStrip.rotation.y = ang;
+    pathStrip.receiveShadow = true;
+    group.add(pathStrip);
+  });
+
+  // Reflecting Pools (West & East wings of the plaza) with Fountain Spouts
   [-9.5, 9.5].forEach((px) => {
     const rim = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.35, 7.6), mats.travertine);
     rim.position.set(px, 0.28, -1.0);
+    rim.castShadow = true;
     group.add(rim);
 
     const pool = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.12, 7.0), mats.water);
     pool.position.set(px, 0.44, -1.0);
     group.add(pool);
+
+    // Ornate Fountain Bowl
+    const spoutPedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.44, 0.75, 10), mats.travertine);
+    spoutPedestal.position.set(px, 0.65, -1.0);
+    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.4, 0.25, 12), mats.travertine);
+    bowl.position.set(px, 1.05, -1.0);
+    const waterJet = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.08, 0.24, 0.65, 8),
+      new THREE.MeshStandardMaterial({ color: 0xd9f4fa, transparent: true, opacity: 0.72, roughness: 0.1 })
+    );
+    waterJet.position.set(px, 1.42, -1.0);
+    group.add(spoutPedestal, bowl, waterJet);
   });
 
-  // Wooden Shade Pergolas & Benches around the northern rim
-  [-7.5, 7.5].forEach((bx) => {
+  // Cozy Wooden Octagonal Gazebo / Shade Pergola at Northern Plaza Edge
+  const gazebo = new THREE.Group();
+  gazebo.position.set(-7.5, 0.24, -10.8);
+  const gBase = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.4, 0.22, 8), mats.travertine);
+  gBase.position.y = 0.11;
+  gazebo.add(gBase);
+  for (let i = 0; i < 6; i++) {
+    const a = (i * Math.PI * 2) / 6;
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 2.1, 6), mats.darkTimber);
+    post.position.set(Math.cos(a) * 1.75, 1.15, Math.sin(a) * 1.75);
+    post.castShadow = true;
+    gazebo.add(post);
+  }
+  const gRoof = new THREE.Mesh(new THREE.ConeGeometry(2.55, 1.25, 8), mats.terracottaRoof);
+  gRoof.position.y = 2.75;
+  gRoof.castShadow = true;
+  gazebo.add(gRoof);
+  group.add(gazebo);
+
+  // Wooden Shade Benches & Flower Beds
+  [7.5].forEach((bx) => {
     const bench = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.45, 0.9), mats.darkTimber);
     bench.position.set(bx, 0.46, -10.5);
     bench.castShadow = true;
     group.add(bench);
+  });
+  const shrubMat = new THREE.MeshStandardMaterial({ color: 0x5d8542, roughness: 0.85 });
+  const bloomMat = new THREE.MeshStandardMaterial({ color: 0xd96857, roughness: 0.78 });
+  [
+    [-11.8, -6.8],
+    [11.8, -6.8],
+    [-11.8, 5.2],
+    [11.8, 5.2],
+  ].forEach(([fx, fz]) => {
+    const bush = new THREE.Mesh(new THREE.IcosahedronGeometry(0.75, 1), shrubMat);
+    bush.scale.set(1.3, 0.75, 1.3);
+    bush.position.set(fx, 0.55, fz);
+    bush.castShadow = true;
+    const flower = new THREE.Mesh(new THREE.IcosahedronGeometry(0.32, 1), bloomMat);
+    flower.position.set(fx + 0.3, 0.85, fz - 0.2);
+    group.add(bush, flower);
   });
 
   // Central Stepped Monument Plinth (shifted slightly north to z=-2 so Fig Tree shines at z=+9.5)
@@ -543,11 +629,22 @@ function buildSariBelediye(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLa
   topCornice.position.set(0.8, 6.95, 0);
   group.add(topCornice);
 
-  // Symmetrical Terracotta Hip Roof
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(12.6, 1.5, 10.8), mats.terracottaRoof);
-  roof.position.set(0.8, 7.9, 0);
+  // Symmetrical Pitched Terracotta Hip Roof with Timber Eave
+  const eaveBand = new THREE.Mesh(new THREE.BoxGeometry(12.6, 0.18, 10.8), mats.darkTimber);
+  eaveBand.position.set(0.8, 7.22, 0);
+  group.add(eaveBand);
+
+  const roof = new THREE.Mesh(
+    createHipRoofGeometry(12.8, 11.0, 2.55),
+    mats.terracottaRoof
+  );
+  roof.position.set(0.8, 7.3, 0);
   roof.castShadow = true;
   group.add(roof);
+
+  const belediyeRidge = new THREE.Mesh(new THREE.BoxGeometry(5.8, 0.22, 0.24), mats.terracottaRidge);
+  belediyeRidge.position.set(0.8, 9.88, 0);
+  group.add(belediyeRidge);
 
   // Western Entrance Portico facing Hükümet Bulvarı (-X)
   const porticoRoof = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.4, 4.8), mats.creamPlaster);
@@ -689,8 +786,12 @@ function buildForumAvm(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandma
     wing.receiveShadow = true;
     group.add(wing);
 
-    const trim = new THREE.Mesh(new THREE.BoxGeometry(22.4, 0.45, 6.0), mats.terracottaRoof);
-    trim.position.set(0, 6.1, wz);
+    const trim = new THREE.Mesh(
+      createHipRoofGeometry(22.6, 6.2, 1.35),
+      mats.terracottaRoof
+    );
+    trim.position.set(0, 5.95, wz);
+    trim.castShadow = true;
     group.add(trim);
 
     // Shopfront glass bays
@@ -772,14 +873,19 @@ function buildTrenGari(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandma
   clockFace.position.set(0, 5.8, -3.95);
   group.add(clockFace);
 
-  const wingRoof = new THREE.Mesh(new THREE.BoxGeometry(20.8, 1.3, 6.8), mats.terracottaRoof);
-  wingRoof.position.set(0, 6.25, -0.5);
+  const wingRoof = new THREE.Mesh(
+    createGableRoofGeometry(21.0, 7.0, 2.2),
+    mats.terracottaRoof
+  );
+  wingRoof.position.set(0, 5.65, -0.5);
   wingRoof.castShadow = true;
   group.add(wingRoof);
 
-  const centerRoof = new THREE.Mesh(new THREE.ConeGeometry(4.8, 2.2, 4), mats.terracottaRoof);
-  centerRoof.rotation.y = Math.PI / 4;
-  centerRoof.position.set(0, 8.1, -0.5);
+  const centerRoof = new THREE.Mesh(
+    createHipRoofGeometry(7.0, 7.6, 2.4),
+    mats.terracottaRoof
+  );
+  centerRoof.position.set(0, 7.05, -0.5);
   centerRoof.castShadow = true;
   group.add(centerRoof);
 
@@ -804,6 +910,12 @@ function buildTrenGari(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandma
 
   const railZ1 = 10.4;
   const railZ2 = 11.8;
+  // Gravel Ballast Bed under Railway Tracks
+  const ballast = new THREE.Mesh(new THREE.BoxGeometry(165, 0.16, 3.6), mats.dirtPath);
+  ballast.position.set(0, 0.08, (railZ1 + railZ2) / 2);
+  ballast.receiveShadow = true;
+  group.add(ballast);
+
   [railZ1, railZ2].forEach((rz) => {
     const rail = new THREE.Mesh(new THREE.BoxGeometry(165, 0.16, 0.16), mats.railSteel);
     rail.position.set(0, 0.25, rz);
@@ -816,25 +928,273 @@ function buildTrenGari(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandma
     group.add(sleeper);
   }
 
-  const locoMat = new THREE.MeshStandardMaterial({ color: 0x2a4538, roughness: 0.45, metalness: 0.4 });
-  const loco = new THREE.Mesh(new THREE.BoxGeometry(7.2, 2.8, 2.2), locoMat);
-  loco.position.set(-5.5, 1.8, 11.1);
-  loco.castShadow = true;
-  group.add(loco);
-
-  const funnel = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.36, 1.3, 10), mats.wroughtIron);
-  funnel.position.set(-8.1, 3.5, 11.1);
-  group.add(funnel);
-
-  const coachMat = new THREE.MeshStandardMaterial({ color: 0x8f4e32, roughness: 0.6 });
-  const coach = new THREE.Mesh(new THREE.BoxGeometry(9.2, 2.9, 2.25), coachMat);
-  coach.position.set(4.5, 1.85, 11.1);
-  coach.castShadow = true;
-  group.add(coach);
-
   const ringMesh = makeDiscoveryRing(lx, lz - 7.5);
   const colliders: ColliderBox[] = [];
   addBoxCollider(colliders, lx, lz + 1.5, 22, 13);
+
+  return { def, group, ringMesh, colliders };
+}
+
+/**
+ * 11. Orta Mahalle Tarihi Dokusu, Mahalle Çeşmesi & Taş Kahvehane
+ */
+function buildOrtaMahalle(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandmark {
+  const group = new THREE.Group();
+  const [lx, , lz] = def.position;
+  group.position.set(lx, 0, lz);
+
+  // Cobblestone Hillside Terrace Courtyard + Retaining Stone Skirt
+  const terraceSkirt = new THREE.Mesh(new THREE.BoxGeometry(21.6, 2.8, 19.6), mats.travertine);
+  terraceSkirt.position.y = -1.35;
+  terraceSkirt.receiveShadow = true;
+  group.add(terraceSkirt);
+
+  const courtyard = new THREE.Mesh(new THREE.BoxGeometry(21, 0.34, 19), mats.cobble);
+  courtyard.position.y = 0.17;
+  courtyard.receiveShadow = true;
+  group.add(courtyard);
+
+  const curb = new THREE.Mesh(new THREE.BoxGeometry(21.6, 0.24, 19.6), mats.travertine);
+  curb.position.y = 0.12;
+  group.add(curb);
+
+  // Historic Stone Bakery & Neighborhood Kahvehane (West-North Side)
+  const cafeBody = new THREE.Mesh(new THREE.BoxGeometry(7.6, 4.8, 6.4), mats.ochrePlaster);
+  cafeBody.position.set(-4.6, 2.7, -3.8);
+  cafeBody.castShadow = true;
+  cafeBody.receiveShadow = true;
+  group.add(cafeBody);
+
+  const cafeCumba = new THREE.Mesh(new THREE.BoxGeometry(8.1, 2.2, 6.9), mats.whitePlaster);
+  cafeCumba.position.set(-4.6, 4.1, -3.8);
+  cafeCumba.castShadow = true;
+  group.add(cafeCumba);
+
+  const cafeRoof = new THREE.Mesh(
+    createGableRoofGeometry(8.6, 7.4, 2.1),
+    mats.terracottaRoof
+  );
+  cafeRoof.position.set(-4.6, 5.2, -3.8);
+  cafeRoof.castShadow = true;
+  group.add(cafeRoof);
+
+  const ovenChimney = new THREE.Mesh(
+    new THREE.BoxGeometry(0.95, 2.2, 0.95),
+    mats.industrialBrick
+  );
+  ovenChimney.position.set(-7.2, 6.2, -5.2);
+  ovenChimney.castShadow = true;
+  group.add(ovenChimney);
+
+  const awningMat = new THREE.MeshStandardMaterial({
+    color: 0xb64b36,
+    map: mats.stripedAwningMap,
+    roughness: 0.78,
+  });
+  const cafeAwning = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.14, 1.8), awningMat);
+  cafeAwning.position.set(-4.6, 2.55, 0.25);
+  cafeAwning.rotation.x = 0.24;
+  cafeAwning.castShadow = true;
+  group.add(cafeAwning);
+
+  [-6.8, -4.6, -2.4].forEach((wx) => {
+    const win = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.05, 0.14), mats.windowLit);
+    win.position.set(wx, 4.1, -0.32);
+    group.add(win);
+  });
+
+  // Outdoor Wooden Kahvehane Tables & Low Tabure Stools
+  [-6.2, -3.0].forEach((tx) => {
+    const tableTop = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.08, 12), mats.darkTimber);
+    tableTop.position.set(tx, 0.75, 2.4);
+    tableTop.castShadow = true;
+    const tableLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.55, 8), mats.darkTimber);
+    tableLeg.position.set(tx, 0.45, 2.4);
+    group.add(tableTop, tableLeg);
+
+    [-0.75, 0.75].forEach((sx) => {
+      const stool = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.36, 0.34), mats.creamPlaster);
+      stool.position.set(tx + sx, 0.42, 2.4);
+      group.add(stool);
+    });
+  });
+
+  // Traditional Carved Marble Mahalle Çeşmesi (East Pavilion)
+  const cesmeWall = new THREE.Mesh(new THREE.BoxGeometry(2.6, 3.6, 1.2), mats.travertine);
+  cesmeWall.position.set(4.5, 2.0, -2.2);
+  cesmeWall.castShadow = true;
+  group.add(cesmeWall);
+
+  const cesmeArch = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2.1, 1.32), mats.creamPlaster);
+  cesmeArch.position.set(4.5, 1.45, -2.2);
+  group.add(cesmeArch);
+
+  const cesmeCap = new THREE.Mesh(new THREE.ConeGeometry(2.0, 0.9, 4), mats.terracottaRoof);
+  cesmeCap.rotation.y = Math.PI / 4;
+  cesmeCap.position.set(4.5, 4.25, -2.2);
+  cesmeCap.castShadow = true;
+  group.add(cesmeCap);
+
+  const trough = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.55, 1.15), mats.travertine);
+  trough.position.set(4.5, 0.55, -1.1);
+  const troughWater = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.14, 0.8), mats.water);
+  troughWater.position.set(4.5, 0.78, -1.1);
+  group.add(trough, troughWater);
+
+  // Grapevine Wooden Pergola Arbor (South-East Terrace)
+  const vineMat = new THREE.MeshStandardMaterial({ color: 0x5d8a48, roughness: 0.84 });
+  const pergola = new THREE.Group();
+  pergola.position.set(4.2, 0.28, 4.8);
+  [-2.6, 2.6].forEach((px) => {
+    [-1.4, 1.4].forEach((pz) => {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 2.6, 8), mats.darkTimber);
+      post.position.set(px, 1.3, pz);
+      post.castShadow = true;
+      pergola.add(post);
+    });
+  });
+  for (let bx = -2.6; bx <= 2.6; bx += 1.3) {
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.16, 3.4), mats.darkTimber);
+    beam.position.set(bx, 2.65, 0);
+    pergola.add(beam);
+  }
+  const vineCanopy = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.24, 3.2), vineMat);
+  vineCanopy.position.set(0, 2.82, 0);
+  vineCanopy.castShadow = true;
+  pergola.add(vineCanopy);
+  group.add(pergola);
+
+  const ringMesh = makeDiscoveryRing(lx - 12.2, lz);
+  const colliders: ColliderBox[] = [];
+  addBoxCollider(colliders, lx - 4.6, lz - 3.8, 7.6, 6.4);
+  addBoxCollider(colliders, lx + 4.5, lz - 1.8, 2.8, 2.4);
+
+  return { def, group, ringMesh, colliders };
+}
+
+/**
+ * 12. ADÜ — Aydın Adnan Menderes Üniversitesi Aytepe Kampüsü
+ */
+function buildUniversite(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandmark {
+  const group = new THREE.Group();
+  const [lx, , lz] = def.position;
+  group.position.set(lx, 0, lz);
+
+  // Wide Campus Green Lawn, Retaining Hill Skirt & Travertine Quad Paths
+  const campusSkirt = new THREE.Mesh(new THREE.BoxGeometry(28.4, 3.6, 24.4), mats.travertine);
+  campusSkirt.position.y = -1.75;
+  campusSkirt.receiveShadow = true;
+  group.add(campusSkirt);
+
+  const lawnMat = new THREE.MeshStandardMaterial({ color: 0x6f964e, roughness: 0.9 });
+  const campusBase = new THREE.Mesh(new THREE.BoxGeometry(28, 0.22, 24), lawnMat);
+  campusBase.position.y = 0.11;
+  campusBase.receiveShadow = true;
+  group.add(campusBase);
+
+  const quadWalkEW = new THREE.Mesh(new THREE.BoxGeometry(26, 0.26, 3.6), mats.plaza);
+  quadWalkEW.position.set(-1.0, 0.14, 0);
+  quadWalkEW.receiveShadow = true;
+  const quadWalkNS = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.26, 21), mats.plaza);
+  quadWalkNS.position.set(-1.5, 0.14, 0);
+  quadWalkNS.receiveShadow = true;
+  group.add(quadWalkEW, quadWalkNS);
+
+  // Monumental ADÜ Campus Stone Entrance Archway (West Side facing Doğu Bulvarı)
+  [-3.2, 3.2].forEach((az) => {
+    const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.5, 5.2, 1.5), mats.travertine);
+    pillar.position.set(-12.5, 2.7, az);
+    pillar.castShadow = true;
+    group.add(pillar);
+  });
+  const archLintel = new THREE.Mesh(new THREE.BoxGeometry(1.7, 1.2, 8.6), mats.creamPlaster);
+  archLintel.position.set(-12.5, 5.6, 0);
+  archLintel.castShadow = true;
+  const crestPlate = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.72, 3.6), mats.brass);
+  crestPlate.position.set(-12.5, 5.65, 0);
+  group.add(archLintel, crestPlate);
+
+  // Classical Campus Rectorate & Faculty Building (North-East)
+  const rectorate = new THREE.Mesh(new THREE.BoxGeometry(14.5, 6.2, 7.6), mats.creamPlaster);
+  rectorate.position.set(3.2, 3.3, -6.4);
+  rectorate.castShadow = true;
+  rectorate.receiveShadow = true;
+  group.add(rectorate);
+
+  const rectorateRoof = new THREE.Mesh(
+    createHipRoofGeometry(15.2, 8.3, 2.2),
+    mats.terracottaRoof
+  );
+  rectorateRoof.position.set(3.2, 6.4, -6.4);
+  rectorateRoof.castShadow = true;
+  group.add(rectorateRoof);
+
+  // Portico Columns & Flag Pole
+  [-3.4, -1.1, 1.1, 3.4].forEach((cx) => {
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.25, 4.2, 10), mats.whitePlaster);
+    col.position.set(3.2 + cx, 2.3, -2.1);
+    col.castShadow = true;
+    group.add(col);
+  });
+  const porticoCap = new THREE.Mesh(new THREE.BoxGeometry(8.2, 0.45, 1.8), mats.travertine);
+  porticoCap.position.set(3.2, 4.55, -2.1);
+  group.add(porticoCap);
+
+  [-2.5, 0, 2.5, 5.0, 7.5].forEach((wx) => {
+    [2.1, 4.8].forEach((wy) => {
+      const win = new THREE.Mesh(new THREE.BoxGeometry(1.05, 1.25, 0.14), mats.windowLit);
+      win.position.set(wx, wy, -2.56);
+      group.add(win);
+    });
+  });
+
+  // Domed Central Campus Library (South-East)
+  const libBase = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 4.7, 4.6, 8), mats.peachPlaster);
+  libBase.position.set(5.6, 2.5, 5.8);
+  libBase.castShadow = true;
+  libBase.receiveShadow = true;
+  group.add(libBase);
+
+  const libGlassDrum = new THREE.Mesh(
+    new THREE.CylinderGeometry(3.6, 3.6, 1.4, 16),
+    mats.glassAtrium
+  );
+  libGlassDrum.position.set(5.6, 5.4, 5.8);
+  group.add(libGlassDrum);
+
+  const libDome = new THREE.Mesh(
+    new THREE.SphereGeometry(3.55, 22, 14, 0, Math.PI * 2, 0, Math.PI * 0.52),
+    mats.leadDome
+  );
+  libDome.position.set(5.6, 6.0, 5.8);
+  libDome.castShadow = true;
+  group.add(libDome);
+
+  // Outdoor Stepped Student Amphitheater (South-West Lawn)
+  for (let tier = 0; tier < 3; tier++) {
+    const step = new THREE.Mesh(
+      new THREE.CylinderGeometry(3.8 - tier * 0.9, 4.0 - tier * 0.9, 0.35, 12, 1, false, 0, Math.PI),
+      mats.travertine
+    );
+    step.position.set(-5.2, 0.35 + tier * 0.32, 6.8);
+    step.rotation.y = Math.PI * 0.25;
+    step.receiveShadow = true;
+    group.add(step);
+  }
+
+  // Campus Bicycle Parking Rack
+  for (let b = 0; b < 3; b++) {
+    const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.05, 6, 12, Math.PI), mats.wroughtIron);
+    hoop.position.set(-8.0 + b * 1.1, 0.24, -4.6);
+    group.add(hoop);
+  }
+
+  const ringMesh = makeDiscoveryRing(lx - 15.5, lz);
+  const colliders: ColliderBox[] = [];
+  addBoxCollider(colliders, lx + 3.2, lz - 6.4, 14.5, 7.6);
+  addBoxCollider(colliders, lx + 5.6, lz + 5.8, 8.8, 8.8);
+  addBoxCollider(colliders, lx - 12.5, lz - 3.2, 1.7, 1.7);
+  addBoxCollider(colliders, lx - 12.5, lz + 3.2, 1.7, 1.7);
 
   return { def, group, ringMesh, colliders };
 }
@@ -844,29 +1204,50 @@ export function buildAllLandmarks(
   mats: CityMaterialLibrary
 ): BuiltLandmark[] {
   return defs.map((def) => {
+    let built: BuiltLandmark;
     switch (def.id) {
       case 'tralleis':
-        return buildTralleis(def, mats);
+        built = buildTralleis(def, mats);
+        break;
       case 'beycamii':
-        return buildBeyCamii(def, mats);
+        built = buildBeyCamii(def, mats);
+        break;
       case 'nasuhpasa':
-        return buildNasuhPasa(def, mats);
+        built = buildNasuhPasa(def, mats);
+        break;
       case 'ramazanpasa':
-        return buildRamazanPasa(def, mats);
+        built = buildRamazanPasa(def, mats);
+        break;
       case 'cihanoglu':
-        return buildCihanoglu(def, mats);
+        built = buildCihanoglu(def, mats);
+        break;
       case 'kentmeydani':
-        return buildKentMeydani(def, mats);
+        built = buildKentMeydani(def, mats);
+        break;
       case 'saribelediye':
-        return buildSariBelediye(def, mats);
+        built = buildSariBelediye(def, mats);
+        break;
       case 'tekstilpark':
-        return buildTekstilPark(def, mats);
+        built = buildTekstilPark(def, mats);
+        break;
       case 'forumaydin':
-        return buildForumAvm(def, mats);
+        built = buildForumAvm(def, mats);
+        break;
       case 'trengari':
-        return buildTrenGari(def, mats);
+        built = buildTrenGari(def, mats);
+        break;
+      case 'ortamahalle':
+        built = buildOrtaMahalle(def, mats);
+        break;
+      case 'universite':
+        built = buildUniversite(def, mats);
+        break;
       default:
-        return buildKentMeydani(def, mats);
+        built = buildKentMeydani(def, mats);
+        break;
     }
+    const [lx, , lz] = def.position;
+    built.group.position.y = getTerrainHeightAt(lx, lz);
+    return built;
   });
 }

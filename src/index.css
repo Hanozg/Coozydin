@@ -11,13 +11,20 @@
   body,
   #root {
     width: 100%;
-    height: 100%;
+    height: 100dvh;
     margin: 0;
     padding: 0;
     overflow: hidden;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
     font-family: var(--font-sans);
-    background-color: #181612;
-    color: #f5efe6;
+    background-color: #ead0aa;
+    color: #3a2618;
+  }
+
+  button,
+  a {
+    touch-action: manipulation;
   }
 }
 
@@ -30,14 +37,17 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Custom sleek scrollbar for Journal modal */
+/* Custom sleek scrollbar for modals */
+.efeler-scroll {
+  -webkit-overflow-scrolling: touch;
+}
 .efeler-scroll::-webkit-scrollbar {
   width: 6px;
 }
 .efeler-scroll::-webkit-scrollbar-track {
-  background: rgba(245, 239, 230, 0.05);
+  background: rgba(58, 38, 24, 0.08);
 }
 .efeler-scroll::-webkit-scrollbar-thumb {
-  background: rgba(217, 155, 67, 0.35);
+  background: rgba(185, 148, 100, 0.55);
   border-radius: 3px;
 }
