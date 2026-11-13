@@ -1,0 +1,8 @@
+{
+  "name": "Efeler: Aydın Yolları",
+  "description": "Aydın Efeler ilçesinin tarihi dokusunu ve sokaklarını özelleştirilebilir araç, bisiklet ve motosikletlerle keşfedebileceğiniz huzurlu izometrik şehir oyunu.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
