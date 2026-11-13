@@ -32,6 +32,7 @@ import {
 } from './livingWorld';
 import { CityMaterialLibrary } from './materials';
 import { BuildingNpcSystem, createBuildingNpcSystem } from './cityNpcs';
+import { PerchSystem } from './perchSystem';
 import { createGableRoofGeometry } from './roofGeometry';
 import {
   createSeasonalFoliageSystem,
@@ -66,6 +67,8 @@ export interface BuiltCity {
   foliage: SeasonalFoliageSystem;
   homeRingMesh: THREE.Mesh;
   interactiveClickables: THREE.Object3D[];
+  perches: PerchSystem;
+  crumbSpots: Array<[number, number, number]>;
   update: (dt: number, elapsed: number) => void;
   updateAtmosphere: (dt: number, elapsed: number, state: SeasonalAtmosphereState) => void;
   dispose: () => void;
@@ -215,7 +218,60 @@ function createStoneArchBridgeGeometry(): THREE.BufferGeometry {
 export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
   const group = new THREE.Group();
   const colliders: ColliderBox[] = [];
+  const perches = new PerchSystem();
+  const crumbSpots: Array<[number, number, number]> = [];
   const localDisposables: { dispose: () => void }[] = [];
+
+  const registerHousePerches = (
+    idPrefix: string,
+    cx: number,
+    gy: number,
+    cz: number,
+    w: number,
+    d: number,
+    h: number,
+    variant: number,
+    rotY = 0
+  ) => {
+    const ridgeAlongZ = variant % 2 === 0;
+    const peakH = Math.max(1.9, (ridgeAlongZ ? w : d) * 0.42 + (variant % 2) * 0.25);
+    const ridgeY = gy + h + 0.22 + peakH + 0.14;
+    const cosR = Math.cos(rotY);
+    const sinR = Math.sin(rotY);
+    const toWorld = (lx: number, wy: number, lz: number) =>
+      new THREE.Vector3(cx + lx * cosR + lz * sinR, wy, cz - lx * sinR + lz * cosR);
+
+    if (ridgeAlongZ) {
+      perches.addStaticSegment(
+        `${idPrefix}_ridge`,
+        toWorld(0, ridgeY, -d * 0.48),
+        toWorld(0, ridgeY, d * 0.48),
+        0.16,
+        'stone'
+      );
+    } else {
+      perches.addStaticSegment(
+        `${idPrefix}_ridge`,
+        toWorld(-w * 0.48, ridgeY, 0),
+        toWorld(w * 0.48, ridgeY, 0),
+        0.16,
+        'stone'
+      );
+    }
+
+    // Front porch eave ridge perch
+    const porchW = Math.min(w * 0.78, 4.4);
+    const porchZ = d / 2 + 0.75;
+    const porchY = gy + 0.54 + 2.15 + 0.85 + 0.12;
+    perches.addStaticSegment(
+      `${idPrefix}_porch`,
+      toWorld(-porchW * 0.42, porchY, porchZ),
+      toWorld(porchW * 0.42, porchY, porchZ),
+      0.13,
+      'wood'
+    );
+    return peakH;
+  };
 
   // 1. Sculpted 3D Horizon Terrain (Flat Efeler Plain -> Northern Foothills -> ADÜ Aytepe Hill + Tabakhane Channel)
   const terrainGeo = new THREE.PlaneGeometry(520, 520, 160, 160);
@@ -473,6 +529,23 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
       });
     });
 
+    // Bridge parapet perches for Sparrow
+    const deckY = baseY + 1.38;
+    perches.addStaticSegment(
+      `bridge_${bz}_n`,
+      new THREE.Vector3(cx - 4.8, deckY, bz - 4.3),
+      new THREE.Vector3(cx + 4.8, deckY, bz - 4.3),
+      0.16,
+      'stone'
+    );
+    perches.addStaticSegment(
+      `bridge_${bz}_s`,
+      new THREE.Vector3(cx - 4.8, deckY, bz + 4.3),
+      new THREE.Vector3(cx + 4.8, deckY, bz + 4.3),
+      0.16,
+      'stone'
+    );
+
     group.add(bridgeGroup);
   });
 
@@ -544,6 +617,7 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
     maxX: millX + 3.2,
     minZ: millZ - 2.7,
     maxZ: millZ + 2.7,
+    maxY: millY + 5.2,
   });
 
   // Shared seasonal palette & diorama house materials (used by hillside cottage, Sıcak Yuvam & townhouses)
@@ -580,6 +654,14 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
   builtCottage.group.position.set(cottageX, cottageY, cottageZ);
   builtCottage.group.rotation.y = 0.22;
   group.add(builtCottage.group);
+  registerHousePerches('cottage', cottageX, cottageY, cottageZ, 5.8, 4.6, 3.6, 2, 0.22);
+  colliders.push({
+    minX: cottageX - 3.1,
+    maxX: cottageX + 3.1,
+    minZ: cottageZ - 2.6,
+    maxZ: cottageZ + 2.6,
+    maxY: cottageY + 4.9,
+  });
 
   // 5. Terrain-Conforming Mediterranean Road Network + Bridge Arches + Zebra Crosswalks
   const roadW = 8.4;
@@ -722,6 +804,7 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
   builtHome.group.position.set(hx, homeY, hz);
   builtHome.group.rotation.y = Math.PI / 2;
   group.add(builtHome.group);
+  const homePeak = registerHousePerches('player_home', hx, homeY, hz, 6.0, 5.4, 4.4, 0, Math.PI / 2);
   chimneyOrigins.push([
     hx + builtHome.chimneyTopLocal[2],
     homeY + builtHome.chimneyTopLocal[1],
@@ -732,7 +815,9 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
     maxX: hx + 4.0,
     minZ: hz - 3.2,
     maxZ: hz + 3.2,
+    maxY: homeY + 4.4 + homePeak * 0.55,
   });
+  crumbSpots.push([hx + 3.6, homeY + 3.85, hz]);
 
   const homeRingMesh = new THREE.Mesh(
     new THREE.RingGeometry(1.15, 1.55, 32),
@@ -799,12 +884,18 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
       ]);
     }
 
+    const peakH = registerHousePerches(`house_${x}_${z}`, x, gy, z, w, d, h, variant, rotY);
+
     colliders.push({
       minX: x - w / 2 - 0.3,
       maxX: x + w / 2 + 0.3,
       minZ: z - d / 2 - 0.3,
       maxZ: z + d / 2 + 1.0,
+      maxY: gy + h + peakH * 0.55,
     });
+    if (variant % 4 === 1) {
+      crumbSpots.push([x, gy + h + peakH + 0.65, z]);
+    }
   };
 
   // Dense Mediterranean Townhouse Clusters + Orta Mahalle East-Bank & Aytepe Hillside Rows
@@ -1067,18 +1158,54 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
   const bulbInst = new THREE.InstancedMesh(bulbGeo, mats.lampBulb, lampCoords.length);
 
   lampCoords.forEach(([x, z], i) => {
-    dummy.position.set(x, getSurfaceHeightAt(x, z), z);
+    const sy = getSurfaceHeightAt(x, z);
+    dummy.position.set(x, sy, z);
     dummy.rotation.set(0, 0, 0);
     dummy.scale.set(1, 1, 1);
     dummy.updateMatrix();
     poleInst.setMatrixAt(i, dummy.matrix);
     bulbInst.setMatrixAt(i, dummy.matrix);
+    perches.addStaticSegment(
+      `lamp_${i}`,
+      new THREE.Vector3(x - 0.32, sy + 4.32, z),
+      new THREE.Vector3(x + 0.32, sy + 4.32, z),
+      0.14,
+      'metal'
+    );
   });
   poleInst.instanceMatrix.needsUpdate = true;
   bulbInst.instanceMatrix.needsUpdate = true;
   poleInst.computeBoundingSphere();
   bulbInst.computeBoundingSphere();
   group.add(poleInst, bulbInst);
+
+  // Broadleaf tree canopy perches + Kent Meydanı / Tabakhane / landmark crumb treats
+  broadleafSpots.forEach((t, idx) => {
+    const ty = getSurfaceHeightAt(t.x, t.z) + 3.9 * t.heightScale;
+    perches.addStaticSegment(
+      `tree_${idx}`,
+      new THREE.Vector3(t.x - 1.1, ty, t.z),
+      new THREE.Vector3(t.x + 1.1, ty, t.z),
+      0.22,
+      'foliage'
+    );
+  });
+
+  // Curated rooftop, bridge, and plaza golden sesame & fig crumb spots
+  crumbSpots.push(
+    [0, getTerrainHeightAt(0, 12) + 6.9, 9.5], // Kent Meydanı Anıtı üstü
+    [-9.5, getTerrainHeightAt(-9.5, 11) + 1.55, 11], // Kent Meydanı Batı Havuz
+    [9.5, getTerrainHeightAt(9.5, 11) + 1.55, 11], // Kent Meydanı Doğu Havuz
+    [getTabakhaneCenterX(12), getSurfaceHeightAt(getTabakhaneCenterX(12), 12) + 1.85, 12 + 4.3], // Merkez Köprü
+    [getTabakhaneCenterX(-22), getSurfaceHeightAt(getTabakhaneCenterX(-22), -22) + 1.85, -22 - 4.3], // Çarşı Köprüsü
+    [getTabakhaneCenterX(-58), getSurfaceHeightAt(getTabakhaneCenterX(-58), -58) + 1.85, -58 + 4.3], // Kuzey Köprüsü
+    [18, getTerrainHeightAt(18, -14) + 10.2, -14], // Tarihi Sarı Belediye çatısı
+    [-38, getTerrainHeightAt(-38, -22) + 10.2, -22], // Bey Camii üstü
+    [0, getTerrainHeightAt(0, -80) + 9.8, -80], // Tralleis Üç Gözler kemer üstü
+    [76, getTerrainHeightAt(76, -40) + 3.4, -40 + 4.8], // Orta Mahalle asma çardağı
+    [-54, getTerrainHeightAt(-54, 48) + 9.2, 49.5], // Tarihi Tren Garı çatısı
+    [82, getTerrainHeightAt(82, -80) + 10.1, -74.2] // ADÜ Kütüphane kubbesi
+  );
 
   // 10f. Warm Cozy Pergola String Lights in Kent Meydanı & Orta Mahalle (east of Tabakhane)
   const garlandPoints: [number, number, number][] = [];
@@ -1092,6 +1219,13 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
   for (let gx = -2.2; gx <= 2.2; gx += 1.1) {
     garlandPoints.push([76 + 4.2 + gx, ortaBaseY + 3.05, -40 + 4.8 + 1.4]);
   }
+  perches.addStaticSegment(
+    'orta_pergola',
+    new THREE.Vector3(76 + 1.8, ortaBaseY + 3.12, -40 + 4.8),
+    new THREE.Vector3(76 + 6.6, ortaBaseY + 3.12, -40 + 4.8),
+    0.16,
+    'wood'
+  );
   const garlandGeo = new THREE.SphereGeometry(0.11, 8, 6);
   const garlandInst = new THREE.InstancedMesh(garlandGeo, mats.lampBulb, garlandPoints.length);
   garlandPoints.forEach(([x, y, z], i) => {
@@ -1158,6 +1292,8 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
     foliage,
     homeRingMesh,
     interactiveClickables,
+    perches,
+    crumbSpots,
     update: (dt: number, elapsed: number) => {
       steamTrain.update(dt, elapsed);
       ambientTraffic.update(dt, elapsed);
@@ -1289,7 +1425,10 @@ export function buildEfelerCity(mats: CityMaterialLibrary): BuiltCity {
     dispose: () => {
       group.traverse((obj) => {
         if ((obj as THREE.Mesh).isMesh) {
-          (obj as THREE.Mesh).geometry.dispose();
+          const geo = (obj as THREE.Mesh).geometry;
+          if (!geo.userData?.isSharedHumanGeo) {
+            geo.dispose();
+          }
         }
       });
       foliage.dispose();

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ANCIENT_SIGNPOST_POSITIONS, LANDMARKS } from '../data/efelerData';
 import { ColliderBox, SeasonType } from '../types/game';
 import { CityMaterialLibrary } from './materials';
+import { createSculptedPedestrianGeos } from './sculptedHumans';
 import { getSurfaceHeightAt, getSurfaceSlopeAngles } from './terrain';
 
 /**
@@ -188,23 +189,30 @@ export interface PedestrianSystem {
 }
 
 const CLOTHING_PALETTE = [
-  0xd99b43, 0x3b6e8c, 0xb64b36, 0x586f4e, 0xe6d9c2, 0x7c4d6b, 0xc97b36, 0x4c7b7d,
+  0xc95242, 0x4e688c, 0xc7953e, 0x587d63, 0xad535d, 0x424a59, 0x826ba6, 0x543622,
 ];
 
 export function createPedestrianSystem(): PedestrianSystem {
   const group = new THREE.Group();
   const count = 64;
 
-  const bodyGeo = new THREE.CapsuleGeometry(0.16, 0.34, 4, 8);
-  bodyGeo.translate(0, 0.34, 0);
-  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.78 });
+  const { bodyGeo, headGeo } = createSculptedPedestrianGeos();
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    vertexColors: true,
+    roughness: 0.82,
+    metalness: 0.02,
+  });
   const bodyInst = new THREE.InstancedMesh(bodyGeo, bodyMat, count);
   bodyInst.castShadow = true;
   bodyInst.frustumCulled = false;
 
-  const headGeo = new THREE.SphereGeometry(0.135, 10, 8);
-  headGeo.translate(0, 0.74, 0);
-  const headMat = new THREE.MeshStandardMaterial({ color: 0xefd0b4, roughness: 0.72 });
+  const headMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    vertexColors: true,
+    roughness: 0.8,
+    metalness: 0.02,
+  });
   const headInst = new THREE.InstancedMesh(headGeo, headMat, count);
   headInst.castShadow = true;
   headInst.frustumCulled = false;
@@ -360,7 +368,7 @@ export function createPedestrianSystem(): PedestrianSystem {
         const bob = isMoving ? Math.abs(Math.sin(elapsed * 6.5 + a.phaseOffset)) * 0.06 : 0;
 
         dummy.position.set(a.x, getSurfaceHeightAt(a.x, a.z) + bob, a.z);
-        dummy.scale.setScalar(a.scale);
+        dummy.scale.setScalar(a.scale * 1.12);
         dummy.rotation.y = Math.atan2(a.targetX - a.x, a.targetZ - a.z);
         dummy.updateMatrix();
         bodyInst.setMatrixAt(i, dummy.matrix);

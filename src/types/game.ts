@@ -12,9 +12,9 @@ export type WeatherType = 'clear' | 'rain' | 'snow' | 'storm';
 
 export type LofiTrackId = 'aegean' | 'rainy_piano' | 'night_lofi' | 'ambient_only';
 
-export type CameraPreset = 'isometric' | 'close' | 'overview' | 'first_person';
+export type CameraPreset = 'isometric' | 'close' | 'overview' | 'first_person' | 'perspective';
 
-export type ExplorationMode = 'vehicle' | 'walk';
+export type ExplorationMode = 'vehicle' | 'walk' | 'sparrow';
 
 export type HeldTreatType = 'none' | 'coffee' | 'simit' | 'kumpir' | 'keskek' | 'icecream';
 
@@ -165,6 +165,9 @@ export interface PlayerHudSnapshot {
   companionName: string | null;
   heldTreat: HeldTreatType;
   solarClock?: string;
+  sparrowState?: 'perched' | 'grounded' | 'flying';
+  sparrowStamina?: number;
+  isDancingZeybek?: boolean;
 }
 
 export interface ColliderBox {
@@ -172,4 +175,5 @@ export interface ColliderBox {
   maxX: number;
   minZ: number;
   maxZ: number;
+  maxY?: number;
 }

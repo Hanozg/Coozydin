@@ -5,13 +5,16 @@ import {
   ArrowRight,
   ArrowUp,
   Bike,
+  Bird,
   BookOpen,
+  Camera,
   Car,
   ChevronDown,
   ChevronUp,
   CloudRain,
   Compass,
   Eye,
+  Feather,
   Footprints,
   Gamepad2,
   Home,
@@ -24,6 +27,7 @@ import {
   Sun,
   Volume2,
   VolumeX,
+  Wind,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
@@ -98,6 +102,7 @@ interface GameHUDProps {
   onPause: () => void;
   onDiscoverNearby: () => void;
   onHorn: () => void;
+  onChirp?: () => void;
   onTouchInput: (next: Partial<TouchDriveInput>) => void;
   onAdjustZoom: (delta: number) => void;
 }
@@ -138,6 +143,7 @@ export function GameHUD({
   onPause,
   onDiscoverNearby,
   onHorn,
+  onChirp,
   onTouchInput,
   onAdjustZoom,
 }: GameHUDProps) {
@@ -179,7 +185,7 @@ export function GameHUD({
 
   const setVehicleType = (type: VehicleType) => {
     onChangeVehicleConfig({ ...vehicleConfig, type });
-    if (explorationMode === 'walk') {
+    if (explorationMode !== 'vehicle') {
       onChangeExplorationMode('vehicle');
     }
   };
@@ -220,12 +226,12 @@ export function GameHUD({
             <span className="hidden sm:inline">{hud.currentDistrict}</span>
             <span className="hidden sm:inline" aria-hidden="true">·</span>
             {hud.solarClock && (
-              <>
+              <span className="inline-flex items-center gap-x-1.5 sm:gap-x-2">
                 <span className="font-mono-num text-[#3A2618] font-semibold">
                   {hud.solarClock}
                 </span>
                 <span aria-hidden="true">·</span>
-              </>
+              </span>
             )}
             <span className="font-mono-num text-[#3A2618] font-semibold">
               {hud.speedKmh} km/s
@@ -298,32 +304,87 @@ export function GameHUD({
           {activeErrand && errandTargetName && (
             <div className="rounded-xl bg-[#F7EEDC]/96 border-2 border-[#5D8A48]/70 px-3 py-1.5 sm:px-3.5 sm:py-2 text-right max-w-[52vw] sm:max-w-xs shadow-md">
               <div className="text-[10px] sm:text-[11px] text-[#456D36] font-semibold">
-                {errandPickedUp ? 'Teslimat' : 'Alım'}
+                <span key={errandPickedUp ? 'deliver' : 'pickup'}>
+                  {errandPickedUp ? 'Teslimat' : 'Alım'}
+                </span>
                 {hud.distanceToActiveErrand !== null && (
-                  <span className="font-mono-num"> · {hud.distanceToActiveErrand} m</span>
+                  <span className="font-mono-num">
+                    <span> · </span>
+                    <span>{hud.distanceToActiveErrand} m</span>
+                  </span>
                 )}
               </div>
               <div className="text-[11px] sm:text-xs text-[#3A2618] font-semibold truncate">
-                {activeErrand.title} → {errandTargetName}
+                <span>{activeErrand.title}</span>
+                <span> → </span>
+                <span>{errandTargetName}</span>
               </div>
             </div>
           )}
 
-          {(hud.heldTreat !== 'none' || hud.companionName || cameraPreset === 'first_person') && (
-            <div className="rounded-xl bg-[#F7EEDC]/96 border-2 border-[#B99464] px-3 py-1.5 text-right max-w-[58vw] sm:max-w-xs shadow-md space-y-0.5">
+          {(hud.heldTreat !== 'none' ||
+            hud.companionName ||
+            hud.isDancingZeybek ||
+            cameraPreset === 'first_person' ||
+            cameraPreset === 'perspective' ||
+            explorationMode === 'sparrow') && (
+            <div className="rounded-xl bg-[#F7EEDC]/96 border-2 border-[#B99464] px-3 py-1.5 text-right max-w-[62vw] sm:max-w-xs shadow-md space-y-1">
+              {hud.isDancingZeybek && (
+                <div className="text-[11px] font-bold text-[#B84C27]">
+                  ♪ Zeybek Oynanıyor · Kent Meydanı
+                </div>
+              )}
               {(hud.heldTreat !== 'none' || hud.companionName) && (
                 <div className="text-[11px] font-semibold text-[#3A2618]">
-                  {hud.heldTreat !== 'none' ? TREAT_LABELS[hud.heldTreat] : ''}
+                  {hud.heldTreat !== 'none' && (
+                    <span key={hud.heldTreat}>{TREAT_LABELS[hud.heldTreat]}</span>
+                  )}
                   {hud.companionName && (
                     <span className="text-[#4B743B]">
-                      {hud.heldTreat !== 'none' ? ' · ' : ''}Yürüyüş: {hud.companionName}
+                      {hud.heldTreat !== 'none' && <span> · </span>}
+                      <span>Yürüyüş: {hud.companionName}</span>
                     </span>
                   )}
                 </div>
               )}
-              {cameraPreset === 'first_person' && (
+              {explorationMode === 'sparrow' && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-end gap-2 text-[11px] font-semibold text-[#3A2618]">
+                    <span className="text-[#B84C27]">
+                      <span>Serçe · </span>
+                      <span key={hud.sparrowState ?? 'ground'}>
+                        {hud.sparrowState === 'flying'
+                          ? 'Uçuyor'
+                          : hud.sparrowState === 'perched'
+                            ? 'Tünemiş'
+                            : 'Yerde'}
+                      </span>
+                    </span>
+                    <span className="font-mono-num text-[#6B5038]">
+                      %{Math.round((hud.sparrowStamina ?? 1) * 100)}
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-[#E5D3B3] overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-[#C85A32] transition-[width] duration-150"
+                      style={{
+                        width: `${Math.max(4, Math.round((hud.sparrowStamina ?? 1) * 100))}%`,
+                      }}
+                    />
+                  </div>
+                  <div className="text-[10px] font-medium text-[#6B5038]">
+                    [Space] Kanat · [Shift] Dalış · [Q] Öt · Sürükle: Bak
+                  </div>
+                </div>
+              )}
+              {explorationMode !== 'sparrow' && cameraPreset === 'first_person' && (
                 <div className="text-[10px] font-medium text-[#6B5038]">
                   1. Şahıs Bakış · Etrafa bakmak için sürükle
+                </div>
+              )}
+              {explorationMode !== 'sparrow' && cameraPreset === 'perspective' && (
+                <div className="text-[10px] font-medium text-[#6B5038]">
+                  Omuz Arkası Bakış · Etrafa bakmak için sürükle
                 </div>
               )}
             </div>
@@ -335,7 +396,7 @@ export function GameHUD({
       {(recentlyDiscovered || errandToast) && (
         <div className="self-center pointer-events-auto rounded-2xl bg-[#F7EEDC]/98 border-2 border-[#C85A32]/75 px-5 py-3 text-center max-w-md shadow-xl">
           {recentlyDiscovered ? (
-            <>
+            <div key={`disc-${recentlyDiscovered.id}`}>
               <div className="text-xs text-[#B84C27] font-semibold">
                 Tarihi Yapı Keşfedildi · +{recentlyDiscovered.rewardCoins} İncir Puanı
               </div>
@@ -345,9 +406,11 @@ export function GameHUD({
               <div className="text-xs text-[#6B5038] mt-1 line-clamp-2">
                 {recentlyDiscovered.summary}
               </div>
-            </>
+            </div>
           ) : (
-            <div className="text-xs md:text-sm text-[#456D36] font-semibold">{errandToast}</div>
+            <div key="errand-toast" className="text-xs md:text-sm text-[#456D36] font-semibold">
+              {errandToast}
+            </div>
           )}
         </div>
       )}
@@ -356,6 +419,7 @@ export function GameHUD({
       <div className="flex flex-col items-center gap-2.5">
         {hud.nearbyStreetInteraction ? (
           <button
+            key="street-interaction"
             type="button"
             onClick={onDiscoverNearby}
             className="pointer-events-auto inline-flex items-center gap-2.5 px-5 py-2.5 rounded-xl bg-[#C85A32] hover:bg-[#B44D28] border-2 border-[#FAF2E2]/80 text-[#FAF2E2] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
@@ -365,6 +429,7 @@ export function GameHUD({
           </button>
         ) : hud.nearbyNpc ? (
           <button
+            key="nearby-npc"
             type="button"
             onClick={() => onInteractNpc(hud.nearbyNpc!)}
             className="pointer-events-auto inline-flex items-center gap-2.5 px-5 py-2.5 rounded-xl bg-[#C85A32] hover:bg-[#B44D28] border-2 border-[#FAF2E2]/80 text-[#FAF2E2] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
@@ -376,6 +441,7 @@ export function GameHUD({
           </button>
         ) : hud.nearPlayerHome ? (
           <button
+            key="near-home"
             type="button"
             onClick={onEnterHome}
             className="pointer-events-auto inline-flex items-center gap-2.5 px-5 py-2.5 rounded-xl bg-[#5D8A48] hover:bg-[#4F783C] border-2 border-[#FAF2E2]/80 text-[#FAF2E2] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
@@ -385,23 +451,35 @@ export function GameHUD({
           </button>
         ) : hud.nearbyLandmark && (nearbyIsUndiscovered || nearbyIsErrandPoint) ? (
           <button
+            key="nearby-landmark"
             type="button"
             onClick={onDiscoverNearby}
             className="pointer-events-auto inline-flex items-center gap-2.5 px-5 py-2.5 rounded-xl bg-[#C85A32] hover:bg-[#B44D28] border-2 border-[#FAF2E2]/80 text-[#FAF2E2] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
           >
             <Compass className="w-4 h-4" aria-hidden="true" />
             <span>
-              [E] {hud.nearbyLandmark.name} —{' '}
-              {nearbyIsErrandPoint
-                ? errandPickedUp
-                  ? 'Görevi Teslim Et'
-                  : 'Paketi Teslim Al'
-                : 'Yapıyı Keşfet'}
+              <span>[E] {hud.nearbyLandmark.name} — </span>
+              <span
+                key={
+                  nearbyIsErrandPoint
+                    ? errandPickedUp
+                      ? 'deliver'
+                      : 'pickup'
+                    : 'discover'
+                }
+              >
+                {nearbyIsErrandPoint
+                  ? errandPickedUp
+                    ? 'Görevi Teslim Et'
+                    : 'Paketi Teslim Al'
+                  : 'Yapıyı Keşfet'}
+              </span>
             </span>
           </button>
         ) : (
           hud.nearAncientSignpost && (
             <button
+              key="ancient-signpost"
               type="button"
               onClick={onDiscoverNearby}
               className="pointer-events-auto inline-flex items-center gap-2.5 px-5 py-2.5 rounded-xl bg-[#F7EEDC] hover:bg-[#EFE0C3] border-2 border-[#B99464] text-[#3A2618] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
@@ -433,7 +511,10 @@ export function GameHUD({
                     : 'bg-[#EDE0C6] text-[#5B432F] hover:bg-[#E2D1B2]'
                 }`}
               >
-                Oto Akış: {autoAtmosphere ? 'Açık' : 'Sabit'}
+                <span>Oto Akış: </span>
+                <span key={autoAtmosphere ? 'on' : 'off'}>
+                  {autoAtmosphere ? 'Açık' : 'Sabit'}
+                </span>
               </button>
             </div>
 
@@ -569,7 +650,10 @@ export function GameHUD({
                   }
                   className="px-3 py-1.5 rounded-lg bg-[#EDE0C6] hover:bg-[#E2D1B2] border border-[#B99464]/60 text-xs font-semibold text-[#3A2618] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                 >
-                  Boya: {vehicleConfig.finish === 'gloss' ? 'Parlak' : 'Mat'}
+                  <span>Boya: </span>
+                  <span key={vehicleConfig.finish}>
+                    {vehicleConfig.finish === 'gloss' ? 'Parlak' : 'Mat'}
+                  </span>
                 </button>
 
                 <button
@@ -586,11 +670,13 @@ export function GameHUD({
                       : 'bg-[#EDE0C6] border-[#B99464]/60 text-[#5B432F]'
                   }`}
                 >
-                  {vehicleConfig.type === 'car'
-                    ? 'Tavan Bavulu'
-                    : vehicleConfig.type === 'bicycle'
-                      ? 'İncir Sepeti'
-                      : 'Siperlik & Çanta'}
+                  <span key={vehicleConfig.type}>
+                    {vehicleConfig.type === 'car'
+                      ? 'Tavan Bavulu'
+                      : vehicleConfig.type === 'bicycle'
+                        ? 'İncir Sepeti'
+                        : 'Siperlik & Çanta'}
+                  </span>
                 </button>
 
                 <button
@@ -637,7 +723,7 @@ export function GameHUD({
               </button>
             </div>
 
-            {/* Center Quick Zoom, Walk & 1st-Person Buttons on Mobile */}
+            {/* Center Quick Mode, Camera & Zoom Buttons on Mobile */}
             <div className="pointer-events-auto flex items-center gap-1 rounded-2xl bg-[#F7EEDC]/92 border-2 border-[#B99464] p-1 shadow-md">
               <button
                 type="button"
@@ -655,6 +741,36 @@ export function GameHUD({
               </button>
               <button
                 type="button"
+                aria-label={explorationMode === 'sparrow' ? 'Araca Dön' : 'Serçe Modu'}
+                onClick={() =>
+                  onChangeExplorationMode(explorationMode === 'sparrow' ? 'vehicle' : 'sparrow')
+                }
+                className={`w-9 h-9 rounded-xl flex items-center justify-center touch-manipulation cursor-pointer ${
+                  explorationMode === 'sparrow'
+                    ? 'bg-[#B84C27] text-[#FAF2E2]'
+                    : 'bg-[#EDE0C6] text-[#3A2618]'
+                }`}
+              >
+                <Bird className="w-4 h-4" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                aria-label="Omuz Arkası Bakış"
+                onClick={() =>
+                  onChangeCameraPreset(
+                    cameraPreset === 'perspective' ? 'isometric' : 'perspective'
+                  )
+                }
+                className={`w-9 h-9 rounded-xl flex items-center justify-center touch-manipulation cursor-pointer ${
+                  cameraPreset === 'perspective'
+                    ? 'bg-[#5B3D28] text-[#FAF2E2]'
+                    : 'bg-[#EDE0C6] text-[#3A2618]'
+                }`}
+              >
+                <Camera className="w-4 h-4" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
                 aria-label="1. Şahıs Bakış Açısı"
                 onClick={() =>
                   onChangeCameraPreset(
@@ -669,7 +785,7 @@ export function GameHUD({
               >
                 <Eye className="w-4 h-4" aria-hidden="true" />
               </button>
-              {cameraPreset !== 'first_person' && (
+              {cameraPreset !== 'first_person' && cameraPreset !== 'perspective' && (
                 <>
                   <button
                     type="button"
@@ -691,28 +807,69 @@ export function GameHUD({
               )}
             </div>
 
-            {/* Right Gas & Brake/Reverse Pedals */}
-            <div className="pointer-events-auto flex items-end gap-2">
-              <button
-                type="button"
-                aria-label="Fren ve Geri"
-                {...bindDriveButton('backward')}
-                className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-[#F7EEDC]/94 active:bg-[#E2D0AF] active:scale-95 border-2 border-[#B99464] text-[#3A2618] shadow-lg flex items-center justify-center touch-none select-none cursor-pointer transition-transform"
-              >
-                <ArrowDown className="w-5 h-5" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                aria-label="İleri Gaz"
-                {...bindDriveButton('forward')}
-                className="w-15 h-15 sm:w-16 sm:h-16 rounded-2xl bg-[#C85A32]/96 active:bg-[#A64420] active:scale-95 border-2 border-[#FAF2E2]/85 text-[#FAF2E2] shadow-lg flex flex-col items-center justify-center touch-none select-none cursor-pointer transition-transform"
-              >
-                <ArrowUp className="w-6 h-6" aria-hidden="true" />
-                <span className="text-[10px] font-bold leading-none mt-0.5">
-                  {explorationMode === 'walk' ? 'YÜRÜ' : 'GAZ'}
-                </span>
-              </button>
-            </div>
+            {/* Right Flight / Gas & Brake Pedals */}
+            {explorationMode === 'sparrow' ? (
+              <div className="pointer-events-auto flex items-end gap-1.5">
+                <button
+                  type="button"
+                  aria-label="Serçe Ötüşü"
+                  onClick={() => (onChirp ? onChirp() : onHorn())}
+                  className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#F7EEDC]/94 active:bg-[#E2D0AF] active:scale-95 border-2 border-[#B99464] text-[#B84C27] shadow-lg flex flex-col items-center justify-center touch-manipulation select-none cursor-pointer transition-transform"
+                >
+                  <Sparkles className="w-4 h-4" aria-hidden="true" />
+                  <span className="text-[9px] font-bold leading-none mt-0.5">ÖT</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Dalış"
+                  {...bindDriveButton('dive')}
+                  className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#F7EEDC]/94 active:bg-[#E2D0AF] active:scale-95 border-2 border-[#B99464] text-[#3A2618] shadow-lg flex flex-col items-center justify-center touch-none select-none cursor-pointer transition-transform"
+                >
+                  <Wind className="w-4 h-4" aria-hidden="true" />
+                  <span className="text-[9px] font-bold leading-none mt-0.5">DAL</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Kanat Çırp"
+                  {...bindDriveButton('flap')}
+                  className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl bg-[#5D8A48]/95 active:bg-[#496F37] active:scale-95 border-2 border-[#FAF2E2]/85 text-[#FAF2E2] shadow-lg flex flex-col items-center justify-center touch-none select-none cursor-pointer transition-transform"
+                >
+                  <Feather className="w-5 h-5" aria-hidden="true" />
+                  <span className="text-[9px] font-bold leading-none mt-0.5">KANAT</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="İleri Uç ve Zıpla"
+                  {...bindDriveButton('forward')}
+                  className="w-14 h-14 sm:w-15 sm:h-15 rounded-2xl bg-[#C85A32]/96 active:bg-[#A64420] active:scale-95 border-2 border-[#FAF2E2]/85 text-[#FAF2E2] shadow-lg flex flex-col items-center justify-center touch-none select-none cursor-pointer transition-transform"
+                >
+                  <ArrowUp className="w-6 h-6" aria-hidden="true" />
+                  <span className="text-[10px] font-bold leading-none mt-0.5">UÇ</span>
+                </button>
+              </div>
+            ) : (
+              <div className="pointer-events-auto flex items-end gap-2">
+                <button
+                  type="button"
+                  aria-label="Fren ve Geri"
+                  {...bindDriveButton('backward')}
+                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-[#F7EEDC]/94 active:bg-[#E2D0AF] active:scale-95 border-2 border-[#B99464] text-[#3A2618] shadow-lg flex items-center justify-center touch-none select-none cursor-pointer transition-transform"
+                >
+                  <ArrowDown className="w-5 h-5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="İleri Gaz"
+                  {...bindDriveButton('forward')}
+                  className="w-15 h-15 sm:w-16 sm:h-16 rounded-2xl bg-[#C85A32]/96 active:bg-[#A64420] active:scale-95 border-2 border-[#FAF2E2]/85 text-[#FAF2E2] shadow-lg flex flex-col items-center justify-center touch-none select-none cursor-pointer transition-transform"
+                >
+                  <ArrowUp className="w-6 h-6" aria-hidden="true" />
+                  <span key={explorationMode} className="text-[10px] font-bold leading-none mt-0.5">
+                    {explorationMode === 'walk' ? 'YÜRÜ' : 'GAZ'}
+                  </span>
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -724,21 +881,21 @@ export function GameHUD({
             className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-t-xl bg-[#F7EEDC]/96 border-2 border-b-0 border-[#B99464] text-[11px] font-semibold text-[#6B5038] hover:text-[#3A2618] transition-colors cursor-pointer"
           >
             {dockCollapsed ? (
-              <>
+              <span key="collapsed" className="inline-flex items-center gap-1.5">
                 <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>Araç &amp; Ayarlar</span>
-              </>
+              </span>
             ) : (
-              <>
+              <span key="expanded" className="inline-flex items-center gap-1.5">
                 <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>Gizle</span>
-              </>
+              </span>
             )}
           </button>
 
           {!dockCollapsed && (
             <div className="flex items-center gap-1.5 sm:gap-2 rounded-2xl bg-[#F7EEDC]/96 border-2 border-[#B99464] px-2.5 sm:px-3 py-1.5 sm:py-2 text-[#3A2618] shadow-lg max-w-[96vw] overflow-x-auto efeler-scroll">
-              {/* Exploration Mode Switcher: Yürü vs Araç */}
+              {/* Exploration Mode Switcher: Yürü vs Araç vs Serçe */}
               <div className="flex items-center gap-1 p-0.5 rounded-xl bg-[#E8D8B9] shrink-0">
                 <button
                   type="button"
@@ -765,6 +922,19 @@ export function GameHUD({
                 >
                   <Car className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>Araç</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onChangeExplorationMode('sparrow')}
+                  title="Serçe Modu — Çatılarda Zıpla ve Uç [V]"
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    explorationMode === 'sparrow'
+                      ? 'bg-[#B84C27] text-[#FAF2E2]'
+                      : 'text-[#5B432F] hover:text-[#3A2618]'
+                  }`}
+                >
+                  <Bird className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>Serçe</span>
                 </button>
               </div>
 
@@ -836,9 +1006,10 @@ export function GameHUD({
                 }`}
               >
                 <CloudRain className="w-3.5 h-3.5 text-[#3B6E8C]" aria-hidden="true" />
-                <span>
-                  {SEASON_OPTIONS.find((s) => s.id === season)?.label} ·{' '}
-                  {WEATHER_OPTIONS.find((w) => w.id === weather)?.label}
+                <span className="inline-flex items-center gap-1">
+                  <span>{SEASON_OPTIONS.find((s) => s.id === season)?.label}</span>
+                  <span>·</span>
+                  <span>{WEATHER_OPTIONS.find((w) => w.id === weather)?.label}</span>
                 </span>
               </button>
 
@@ -868,6 +1039,7 @@ export function GameHUD({
                 {(
                   [
                     ['isometric', 'İzometrik'],
+                    ['perspective', 'Omuz Arkası'],
                     ['close', 'Yakın'],
                     ['overview', 'Geniş'],
                     ['first_person', '1. Şahıs'],
@@ -879,12 +1051,13 @@ export function GameHUD({
                     onClick={() => onChangeCameraPreset(preset)}
                     className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                       cameraPreset === preset
-                        ? preset === 'first_person'
+                        ? preset === 'first_person' || preset === 'perspective'
                           ? 'bg-[#C85A32] text-[#FAF2E2]'
                           : 'bg-[#5B3D28] text-[#FAF2E2]'
                         : 'text-[#6B5038] hover:text-[#3A2618]'
                     }`}
                   >
+                    {preset === 'perspective' && <Camera className="w-3 h-3" aria-hidden="true" />}
                     {preset === 'first_person' && <Eye className="w-3 h-3" aria-hidden="true" />}
                     <span>{label}</span>
                   </button>
@@ -893,14 +1066,22 @@ export function GameHUD({
 
               <span className="hidden sm:inline text-[#B99464]/60">|</span>
 
-              {/* Horn / Bell, Touch Pad Toggle & Audio Controls */}
+              {/* Horn / Bell / Chirp, Touch Pad Toggle & Audio Controls */}
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
-                  onClick={onHorn}
+                  onClick={() =>
+                    explorationMode === 'sparrow' && onChirp ? onChirp() : onHorn()
+                  }
                   className="px-2.5 py-1.5 rounded-xl bg-[#EDE0C6] hover:bg-[#E2D1B2] border border-[#B99464]/50 text-xs font-semibold text-[#3A2618] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                 >
-                  {vehicleConfig.type === 'bicycle' ? 'Zil' : 'Korna'}
+                  <span key={explorationMode === 'sparrow' ? 'chirp' : vehicleConfig.type}>
+                    {explorationMode === 'sparrow'
+                      ? 'Öt [Q]'
+                      : vehicleConfig.type === 'bicycle'
+                        ? 'Zil'
+                        : 'Korna'}
+                  </span>
                 </button>
 
                 <button
@@ -913,6 +1094,8 @@ export function GameHUD({
                           backward: false,
                           left: false,
                           right: false,
+                          flap: false,
+                          dive: false,
                         });
                       }
                       return !prev;
@@ -951,9 +1134,9 @@ export function GameHUD({
                   className="p-1.5 rounded-xl bg-[#EDE0C6] hover:bg-[#E2D1B2] border border-[#B99464]/50 text-[#3A2618] transition-colors cursor-pointer"
                 >
                   {isMuted ? (
-                    <VolumeX className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
+                    <VolumeX key="muted" className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
                   ) : (
-                    <Volume2 className="w-3.5 h-3.5 text-[#4B743B]" aria-hidden="true" />
+                    <Volume2 key="unmuted" className="w-3.5 h-3.5 text-[#4B743B]" aria-hidden="true" />
                   )}
                 </button>
               </div>

@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { ColliderBox, StreetInteractionType } from '../types/game';
 import { CityMaterialLibrary } from './materials';
+import { createSculptedHumanRig, SculptedHumanRig } from './sculptedHumans';
+import { SPARROW_PALETTE } from './sculptor';
 
 interface EfeDancerRig {
   pivot: THREE.Group;
-  body: THREE.Group;
-  armL: THREE.Group;
-  armR: THREE.Group;
+  rig: SculptedHumanRig;
   baseAngle: number;
 }
 
@@ -39,62 +39,23 @@ export interface LokmaStandRig {
 
 function createEfeDancer(): EfeDancerRig {
   const pivot = new THREE.Group();
-  const body = new THREE.Group();
-  pivot.add(body);
-
-  const navyMat = new THREE.MeshStandardMaterial({ color: 0x202b3d, roughness: 0.72 });
-  const shirtMat = new THREE.MeshStandardMaterial({ color: 0xf4eee3, roughness: 0.78 });
-  const sashMat = new THREE.MeshStandardMaterial({ color: 0x9e2b2b, roughness: 0.65 });
-  const goldMat = new THREE.MeshStandardMaterial({ color: 0xd4a857, roughness: 0.35, metalness: 0.6 });
-  const skinMat = new THREE.MeshStandardMaterial({ color: 0xedd0b4, roughness: 0.7 });
-
-  // Potur trousers / legs
-  const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.14, 0.56, 8), navyMat);
-  legs.position.y = 0.28;
-  legs.castShadow = true;
-  body.add(legs);
-
-  // Crimson waist sash (Kuşak)
-  const sash = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.19, 0.16, 8), sashMat);
-  sash.position.y = 0.6;
-  body.add(sash);
-
-  // Cepken embroidered vest
-  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.19, 0.42, 8), navyMat);
-  torso.position.y = 0.86;
-  torso.castShadow = true;
-  body.add(torso);
-
-  const trim = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.36, 0.43), goldMat);
-  trim.position.y = 0.86;
-  body.add(trim);
-
-  // Head & Red Fes with Dark Tassel
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), skinMat);
-  head.position.y = 1.22;
-  head.castShadow = true;
-  body.add(head);
-
-  const fes = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.155, 0.18, 10), sashMat);
-  fes.position.y = 1.38;
-  body.add(fes);
-
-  // Articulated White Sleeved Arms for Zeybek Wing Pose
-  const makeArm = (side: number) => {
-    const armPivot = new THREE.Group();
-    armPivot.position.set(side * 0.22, 1.0, 0);
-    const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.46, 7), shirtMat);
-    sleeve.position.set(0, -0.2, 0);
-    sleeve.castShadow = true;
-    armPivot.add(sleeve);
-    return armPivot;
-  };
-
-  const armL = makeArm(-1);
-  const armR = makeArm(1);
-  body.add(armL, armR);
-
-  return { pivot, body, armL, armR, baseAngle: 0 };
+  const rig = createSculptedHumanRig(
+    {
+      skinHex: 0xe3b690,
+      shirtHex: 0x202b3d,
+      sleeveHex: 0xf4eee3,
+      pantsHex: 0x202b3d,
+      sashHex: 0x9e2b2b,
+      goldTrim: true,
+      hairHex: 0x2c2018,
+      scarfHex: 0x202b3d,
+      hairStyle: 'short',
+      hatStyle: 'fes',
+    },
+    { forwardIsNegZ: false }
+  );
+  pivot.add(rig.root);
+  return { pivot, rig, baseAngle: 0 };
 }
 
 function makeClickProxy(
@@ -132,31 +93,29 @@ export function createStreetMusiciansZeybek(
   rugInner.position.y = 0.255;
   group.add(rugInner);
 
-  // Musician 1: Davulcu (with traditional wooden Davul drum)
+  // Musician 1: Davulcu & Musician 2: Zurna Player in Sparrow Sim sculpted style
   const buildMusician = (x: number, z: number, coatHex: number, isDrummer: boolean) => {
     const m = new THREE.Group();
     m.position.set(x, 0.25, z);
 
-    const coatMat = new THREE.MeshStandardMaterial({ color: coatHex, roughness: 0.78 });
-    const skinMat = new THREE.MeshStandardMaterial({ color: 0xefd0b4, roughness: 0.72 });
-
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.22, 0.85, 8), coatMat);
-    body.position.y = 0.45;
-    body.castShadow = true;
-    m.add(body);
-
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8), skinMat);
-    head.position.y = 1.02;
-    m.add(head);
-
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.1, 8), mats.darkTimber);
-    cap.position.y = 1.15;
-    m.add(cap);
+    const rig = createSculptedHumanRig(
+      {
+        skinHex: 0xe3b690,
+        shirtHex: coatHex,
+        pantsHex: 0x2e3b46,
+        hairHex: 0x3b2a22,
+        scarfHex: SPARROW_PALETTE.wallCreamTrim,
+        hairStyle: 'short',
+        hatStyle: 'newsboy',
+      },
+      { forwardIsNegZ: false }
+    );
+    m.add(rig.root);
 
     if (isDrummer) {
       const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.36, 12), mats.creamPlaster);
       drum.rotation.z = Math.PI / 2;
-      drum.position.set(0, 0.62, 0.3);
+      drum.position.set(0, 0.88, 0.3);
       drum.castShadow = true;
       m.add(drum);
       const drumRim = new THREE.Mesh(
@@ -164,21 +123,21 @@ export function createStreetMusiciansZeybek(
         mats.darkTimber
       );
       drumRim.rotation.z = Math.PI / 2;
-      drumRim.position.set(0, 0.62, 0.3);
+      drumRim.position.set(0, 0.88, 0.3);
       m.add(drumRim);
     } else {
       const zurna = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.055, 0.55, 8), mats.brass);
       zurna.rotation.x = Math.PI * 0.36;
-      zurna.position.set(0, 0.82, 0.28);
+      zurna.position.set(0, 1.16, 0.28);
       m.add(zurna);
     }
 
-    return m;
+    return { group: m, rig };
   };
 
   const drummer = buildMusician(-0.65, 0, 0x3b526b, true);
   const zurnaPlayer = buildMusician(0.65, 0.15, 0x6b4536, false);
-  group.add(drummer, zurnaPlayer);
+  group.add(drummer.group, zurnaPlayer.group);
 
   // Subtle glowing stage ring around musicians
   const stageRingGeo = new THREE.RingGeometry(2.1, 2.35, 32);
@@ -240,25 +199,20 @@ export function createStreetMusiciansZeybek(
         circleRotation += dt * 0.42;
         stageRingMat.emissiveIntensity = 1.2 + Math.sin(elapsed * 8) * 0.4;
 
-        // Musicians bob energetically with the 9/8 beat
-        drummer.position.y = 0.25 + Math.abs(Math.sin(elapsed * 7)) * 0.08;
-        zurnaPlayer.rotation.z = Math.sin(elapsed * 4.5) * 0.08;
+        // Musicians play energetically with the 9/8 beat
+        drummer.group.position.y = 0.25 + Math.abs(Math.sin(elapsed * 7)) * 0.08;
+        zurnaPlayer.group.rotation.z = Math.sin(elapsed * 4.5) * 0.08;
+        drummer.rig.updateWalk(0, dt, elapsed, true);
+        zurnaPlayer.rig.updateWalk(0, dt, elapsed, true);
 
-        // Efeler perform majestic Zeybek arms-wide + deep knee dip
+        // Efeler perform expressive 9/8 Zeybek choreography (kneeling dips & curved wing arms)
+        const danceTime = 11.5 - danceTimer;
         dancers.forEach((efe, idx) => {
           const ang = efe.baseAngle + circleRotation;
           const rad = 3.2 + Math.sin(elapsed * 2 + idx) * 0.15;
           efe.pivot.position.set(Math.cos(ang) * rad, 0.24, Math.sin(ang) * rad);
-          efe.pivot.rotation.y = -ang; // Face inward & step along circle
-
-          const beatPhase = elapsed * 3.2 + idx * 0.35;
-          const kneeDip = Math.max(0, Math.sin(beatPhase)) * 0.24;
-          efe.body.position.y = -kneeDip;
-          efe.body.rotation.x = kneeDip * 0.55;
-
-          const armLift = 1.38 + Math.sin(elapsed * 3.2 + idx) * 0.18;
-          efe.armL.rotation.z = THREE.MathUtils.damp(efe.armL.rotation.z, -armLift, 8, dt);
-          efe.armR.rotation.z = THREE.MathUtils.damp(efe.armR.rotation.z, armLift, 8, dt);
+          efe.pivot.rotation.y = -ang;
+          efe.rig.updateZeybek(dt, elapsed, danceTime, idx * 0.42);
         });
 
         // Festival golden sparkles swirling up
@@ -275,18 +229,16 @@ export function createStreetMusiciansZeybek(
         sparkInst.instanceMatrix.needsUpdate = true;
       } else {
         stageRingMat.emissiveIntensity = 0.28 + Math.sin(elapsed * 2) * 0.08;
-        drummer.position.y = 0.25;
-        zurnaPlayer.rotation.z = 0;
+        drummer.group.position.y = 0.25;
+        zurnaPlayer.group.rotation.z = 0;
+        drummer.rig.updateWalk(0, dt, elapsed, true);
+        zurnaPlayer.rig.updateWalk(0, dt, elapsed, true);
 
         dancers.forEach((efe, idx) => {
           const ang = efe.baseAngle;
           efe.pivot.position.set(Math.cos(ang) * 3.0, 0.24, Math.sin(ang) * 3.0);
           efe.pivot.rotation.y = -ang + Math.PI / 2;
-          efe.body.position.y = THREE.MathUtils.damp(efe.body.position.y, 0, 6, dt);
-          efe.body.rotation.x = THREE.MathUtils.damp(efe.body.rotation.x, 0, 6, dt);
-          const sway = Math.sin(elapsed * 1.5 + idx) * 0.06;
-          efe.armL.rotation.z = THREE.MathUtils.damp(efe.armL.rotation.z, -0.15 + sway, 6, dt);
-          efe.armR.rotation.z = THREE.MathUtils.damp(efe.armR.rotation.z, 0.15 - sway, 6, dt);
+          efe.rig.updateWalk(0, dt, elapsed + idx * 0.5, false);
         });
 
         for (let i = 0; i < sparkCount; i++) {
@@ -363,17 +315,20 @@ export function createLibraryAndVendor(
   vendor.position.set(vx, 0, vz);
   vendor.rotation.y = Math.PI / 2; // Facing East toward Kent Meydanı
 
-  const apronMat = new THREE.MeshStandardMaterial({ color: 0x4b6a7a, roughness: 0.78 });
-  const skinMat = new THREE.MeshStandardMaterial({ color: 0xefd0b4, roughness: 0.72 });
-
-  const vBody = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.9, 8), apronMat);
-  vBody.position.y = 0.45;
-  vBody.castShadow = true;
-  vendor.add(vBody);
-
-  const vHead = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), skinMat);
-  vHead.position.y = 1.08;
-  vendor.add(vHead);
+  const vendorRig = createSculptedHumanRig(
+    {
+      skinHex: 0xe3b690,
+      shirtHex: 0x4b6a7a,
+      pantsHex: 0x2e3b46,
+      hairHex: 0xf4eee3,
+      scarfHex: SPARROW_PALETTE.wallCreamTrim,
+      hairStyle: 'bun',
+      hatStyle: 'headscarf',
+      apron: true,
+    },
+    { forwardIsNegZ: false }
+  );
+  vendor.add(vendorRig.root);
 
   // Wooden Portable Display Tray with Colorful Lif & White Mendil Packs
   const tray = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.12, 0.56), mats.darkTimber);
@@ -433,8 +388,8 @@ export function createLibraryAndVendor(
       cycleTimer = 48.0;
     },
     update: (dt: number, elapsed: number) => {
-      // Gentle vendor hand/body sway
-      vendor.position.y = Math.sin(elapsed * 2.2) * 0.02;
+      // Gentle vendor greeting & waving when calling out
+      vendorRig.updateWave(bubbleTimer > 0, dt, elapsed, 1.2);
 
       if (bubbleTimer > 0) {
         bubbleTimer = Math.max(0, bubbleTimer - dt);
@@ -503,17 +458,22 @@ export function createBeyCamiiLokmaStand(
   syrupBowl.position.set(1.05, 1.1, -0.15);
   group.add(syrupBowl);
 
-  // Friendly Attendant pouring Lokma
-  const attMat = new THREE.MeshStandardMaterial({ color: 0xf0ece1, roughness: 0.8 });
-  const skinMat = new THREE.MeshStandardMaterial({ color: 0xefd0b4, roughness: 0.72 });
-  const attendant = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.22, 0.9, 8), attMat);
-  attendant.position.set(-0.2, 0.45, -1.0);
-  attendant.castShadow = true;
-  group.add(attendant);
-
-  const attHead = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8), skinMat);
-  attHead.position.set(-0.2, 1.06, -1.0);
-  group.add(attHead);
+  // Friendly Attendant pouring Lokma (Sparrow Sim sculpted chef figure)
+  const attendantRig = createSculptedHumanRig(
+    {
+      skinHex: 0xe3b690,
+      shirtHex: 0xf0ece1,
+      pantsHex: 0x3b4856,
+      hairHex: 0x3b2a22,
+      scarfHex: SPARROW_PALETTE.coatRose,
+      hairStyle: 'short',
+      hatStyle: 'chef_toque',
+      apron: true,
+    },
+    { forwardIsNegZ: false }
+  );
+  attendantRig.root.position.set(-0.2, 0, -1.0);
+  group.add(attendantRig.root);
 
   // Subtle Warm Steam Puffs over Cauldron
   const steamGeo = new THREE.SphereGeometry(0.16, 6, 6);
@@ -569,6 +529,8 @@ export function createBeyCamiiLokmaStand(
         puff.position.x = -0.75 + Math.sin(elapsed * 2 + i) * 0.14;
         puff.scale.setScalar(0.55 + Math.sin(t * Math.PI) * 0.75);
       });
+
+      attendantRig.updateWave(servePopTimer > 0, dt, elapsed, 2.5);
 
       if (servePopTimer > 0) {
         servePopTimer = Math.max(0, servePopTimer - dt);

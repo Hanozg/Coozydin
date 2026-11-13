@@ -93,6 +93,9 @@ class CozyAudioEngine {
   private weatherGain: GainNode | null = null;
   private crackleGain: GainNode | null = null;
   private noiseBuffer: AudioBuffer | null = null;
+  private chiffBuf: AudioBuffer | null = null;
+  private flapBuf: AudioBuffer | null = null;
+  private waterBuf: AudioBuffer | null = null;
 
   private musicTimer: number | null = null;
   private thunderTimer: number | null = null;
@@ -169,6 +172,36 @@ class CozyAudioEngine {
       data[i] *= 2.4;
     }
     this.noiseBuffer = buf;
+
+    // Short filtered noise buffers for sparrow syrinx chiff, wingbeat whoosh, and water splash
+    const chiffLen = Math.floor(ctx.sampleRate * 0.045);
+    const chiffBuf = ctx.createBuffer(1, chiffLen, ctx.sampleRate);
+    const chiffData = chiffBuf.getChannelData(0);
+    for (let i = 0; i < chiffLen; i++) {
+      const env = Math.sin((i / chiffLen) * Math.PI);
+      chiffData[i] = (Math.random() * 2 - 1) * env * 0.85;
+    }
+    this.chiffBuf = chiffBuf;
+
+    const flapLen = Math.floor(ctx.sampleRate * 0.095);
+    const flapBuf = ctx.createBuffer(1, flapLen, ctx.sampleRate);
+    const flapData = flapBuf.getChannelData(0);
+    let lpFlap = 0;
+    for (let i = 0; i < flapLen; i++) {
+      const env = Math.sin((i / flapLen) * Math.PI);
+      lpFlap = lpFlap * 0.72 + (Math.random() * 2 - 1) * 0.28;
+      flapData[i] = lpFlap * env * 1.9;
+    }
+    this.flapBuf = flapBuf;
+
+    const waterLen = Math.floor(ctx.sampleRate * 0.085);
+    const waterBuf = ctx.createBuffer(1, waterLen, ctx.sampleRate);
+    const waterData = waterBuf.getChannelData(0);
+    for (let i = 0; i < waterLen; i++) {
+      const env = Math.pow(1 - i / waterLen, 1.4);
+      waterData[i] = (Math.random() * 2 - 1) * env;
+    }
+    this.waterBuf = waterBuf;
 
     const weatherSrc = ctx.createBufferSource();
     weatherSrc.buffer = buf;
@@ -708,6 +741,377 @@ class CozyAudioEngine {
     if (this.ctx && this.sfxGain) {
       this.sfxGain.gain.setTargetAtTime(enabled ? 0.68 : 0, this.ctx.currentTime, 0.08);
     }
+  }
+
+  private triggerSyrinxSyllable(opts: {
+    t0: number;
+    dur: number;
+    fStart: number;
+    fPeak: number;
+    fEnd: number;
+    peakRatio?: number;
+    voice2Ratio?: number;
+    voice2Mix?: number;
+    trillHz?: number;
+    trillDepth?: number;
+    gain: number;
+  }) {
+    if (!this.ctx || !this.sfxGain) return;
+    const { t0, dur, fStart, fPeak, fEnd } = opts;
+    const peakT = t0 + dur * (opts.peakRatio ?? 0.36);
+    const endT = t0 + dur;
+
+    const oscA = this.ctx.createOscillator();
+    oscA.type = 'triangle';
+    oscA.frequency.setValueAtTime(fStart, t0);
+    oscA.frequency.exponentialRampToValueAtTime(Math.max(400, fPeak), peakT);
+    oscA.frequency.exponentialRampToValueAtTime(Math.max(400, fEnd), endT);
+
+    const oscB = this.ctx.createOscillator();
+    oscB.type = 'sine';
+    const r2 = opts.voice2Ratio ?? 1.49;
+    oscB.frequency.setValueAtTime(fStart * r2, t0);
+    oscB.frequency.exponentialRampToValueAtTime(Math.max(500, fPeak * r2), peakT);
+    oscB.frequency.exponentialRampToValueAtTime(Math.max(500, fEnd * r2), endT);
+
+    const mixB = this.ctx.createGain();
+    mixB.gain.value = opts.voice2Mix ?? 0.28;
+
+    let lfo: OscillatorNode | null = null;
+    let lfoGain: GainNode | null = null;
+    if (opts.trillHz && opts.trillDepth) {
+      lfo = this.ctx.createOscillator();
+      lfo.type = 'sine';
+      lfo.frequency.value = opts.trillHz;
+      lfoGain = this.ctx.createGain();
+      lfoGain.gain.value = opts.trillDepth;
+      lfo.connect(lfoGain);
+      lfoGain.connect(oscA.frequency);
+      lfo.start(t0);
+      lfo.stop(endT + 0.02);
+    }
+
+    const formant = this.ctx.createBiquadFilter();
+    formant.type = 'bandpass';
+    formant.frequency.setValueAtTime(fPeak * 1.1, t0);
+    formant.Q.value = 1.65;
+
+    const env = this.ctx.createGain();
+    env.gain.setValueAtTime(0.0001, t0);
+    env.gain.linearRampToValueAtTime(opts.gain, t0 + Math.min(0.014, dur * 0.2));
+    env.gain.exponentialRampToValueAtTime(0.0001, endT);
+
+    if (this.chiffBuf) {
+      const chiff = this.ctx.createBufferSource();
+      chiff.buffer = this.chiffBuf;
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = fPeak * 1.3;
+      bp.Q.value = 1.8;
+      const cg = this.ctx.createGain();
+      cg.gain.value = opts.gain * 0.35;
+      chiff.connect(bp);
+      bp.connect(cg);
+      cg.connect(this.sfxGain);
+      chiff.start(t0);
+    }
+
+    oscA.connect(formant);
+    oscB.connect(mixB);
+    mixB.connect(formant);
+    formant.connect(env);
+    env.connect(this.sfxGain);
+
+    oscA.start(t0);
+    oscB.start(t0);
+    oscA.stop(endT + 0.02);
+    oscB.stop(endT + 0.02);
+  }
+
+  public playSparrowChirp(melodicTrill = false) {
+    this.init();
+    if (!this.ctx || !this.sfxGain || !this.sfxEnabled || this.isMuted) return;
+    const now = this.ctx.currentTime;
+    const baseHz = 2700 + Math.random() * 520;
+    const jitter = 0.96 + Math.random() * 0.08;
+    const style = melodicTrill ? Math.floor(Math.random() * 2) : Math.floor(Math.random() * 3);
+
+    if (style === 0) {
+      this.triggerSyrinxSyllable({
+        t0: now,
+        dur: 0.082,
+        fStart: baseHz * 0.84 * jitter,
+        fPeak: baseHz * 1.28 * jitter,
+        fEnd: baseHz * 0.92 * jitter,
+        voice2Ratio: 1.33,
+        voice2Mix: 0.32,
+        gain: 0.135,
+      });
+      this.triggerSyrinxSyllable({
+        t0: now + 0.095,
+        dur: 0.056,
+        fStart: baseHz * 1.12 * jitter,
+        fPeak: baseHz * 1.44 * jitter,
+        fEnd: baseHz * 1.06 * jitter,
+        gain: 0.115,
+      });
+      this.triggerSyrinxSyllable({
+        t0: now + 0.165,
+        dur: 0.105,
+        fStart: baseHz * 0.98 * jitter,
+        fPeak: baseHz * 1.26 * jitter,
+        fEnd: baseHz * 0.82 * jitter,
+        trillHz: 46,
+        trillDepth: 110,
+        gain: 0.125,
+      });
+    } else if (style === 1) {
+      this.triggerSyrinxSyllable({
+        t0: now,
+        dur: 0.072,
+        fStart: baseHz * 0.88 * jitter,
+        fPeak: baseHz * 1.34 * jitter,
+        fEnd: baseHz * 1.02 * jitter,
+        gain: 0.128,
+      });
+      this.triggerSyrinxSyllable({
+        t0: now + 0.086,
+        dur: 0.092,
+        fStart: baseHz * 1.02 * jitter,
+        fPeak: baseHz * 1.42 * jitter,
+        fEnd: baseHz * 0.88 * jitter,
+        trillHz: 38,
+        trillDepth: 90,
+        gain: 0.12,
+      });
+    } else {
+      this.triggerSyrinxSyllable({
+        t0: now,
+        dur: 0.086,
+        fStart: baseHz * 0.9 * jitter,
+        fPeak: baseHz * 1.35 * jitter,
+        fEnd: baseHz * 0.95 * jitter,
+        trillHz: 42,
+        trillDepth: 95,
+        gain: 0.13,
+      });
+    }
+  }
+
+  public playSparrowMicroChirp(mood: 'idle' | 'hop' | 'takeoff' | 'perch' = 'idle') {
+    this.init();
+    if (!this.ctx || !this.sfxGain || !this.sfxEnabled || this.isMuted) return;
+    const now = this.ctx.currentTime;
+    const rootHz = 2750 + Math.random() * 480;
+    const jitter = 0.95 + Math.random() * 0.1;
+
+    if (mood === 'takeoff') {
+      this.triggerSyrinxSyllable({
+        t0: now,
+        dur: 0.045,
+        fStart: rootHz * 0.86 * jitter,
+        fPeak: rootHz * 1.18 * jitter,
+        fEnd: rootHz * 1.04 * jitter,
+        gain: 0.085,
+      });
+      this.triggerSyrinxSyllable({
+        t0: now + 0.055,
+        dur: 0.068,
+        fStart: rootHz * 1.04 * jitter,
+        fPeak: rootHz * 1.38 * jitter,
+        fEnd: rootHz * 1.16 * jitter,
+        peakRatio: 0.65,
+        gain: 0.092,
+      });
+    } else if (mood === 'perch') {
+      this.triggerSyrinxSyllable({
+        t0: now + 0.02,
+        dur: 0.085,
+        fStart: rootHz * 1.06 * jitter,
+        fPeak: rootHz * 1.22 * jitter,
+        fEnd: rootHz * 0.78 * jitter,
+        trillHz: 40,
+        trillDepth: 85,
+        gain: 0.082,
+      });
+    } else if (mood === 'hop') {
+      this.triggerSyrinxSyllable({
+        t0: now,
+        dur: 0.042,
+        fStart: rootHz * 0.92 * jitter,
+        fPeak: rootHz * 1.24 * jitter,
+        fEnd: rootHz * 0.98 * jitter,
+        gain: 0.068,
+      });
+    } else {
+      this.triggerSyrinxSyllable({
+        t0: now,
+        dur: 0.072,
+        fStart: rootHz * 0.82 * jitter,
+        fPeak: rootHz * 1.26 * jitter,
+        fEnd: rootHz * 0.88 * jitter,
+        trillHz: 36,
+        trillDepth: 65,
+        gain: 0.074,
+      });
+    }
+  }
+
+  public playWingFlap(strength = 1.0) {
+    this.init();
+    if (!this.ctx || !this.sfxGain || !this.flapBuf || !this.sfxEnabled || this.isMuted) return;
+    const baseTime = this.ctx.currentTime;
+    for (let beat = 0; beat < 3; beat++) {
+      const t0 = baseTime + beat * 0.048;
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.flapBuf;
+      src.playbackRate.value = 0.94 + Math.random() * 0.12;
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime(490 - beat * 55, t0);
+      bp.frequency.exponentialRampToValueAtTime(210, t0 + 0.05);
+      bp.Q.value = 1.1;
+      const g = this.ctx.createGain();
+      g.gain.value = 0.085 * strength * (1.0 - beat * 0.22);
+      src.connect(bp);
+      bp.connect(g);
+      g.connect(this.sfxGain);
+      src.start(t0);
+    }
+  }
+
+  public playFlightWingbeat(intensity = 0.5) {
+    if (!this.ctx || !this.sfxGain || !this.flapBuf || !this.sfxEnabled || this.isMuted) return;
+    const now = this.ctx.currentTime;
+    const amp = Math.max(0.08, Math.min(1.0, intensity));
+    const jitter = 0.91 + Math.random() * 0.18;
+    const whoosh = this.ctx.createBufferSource();
+    whoosh.buffer = this.flapBuf;
+    whoosh.playbackRate.value = 0.92 * jitter;
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(415 * jitter, now);
+    bp.frequency.exponentialRampToValueAtTime(185, now + 0.052);
+    bp.Q.value = 0.85;
+    const wg = this.ctx.createGain();
+    wg.gain.value = 0.028 * amp;
+    whoosh.connect(bp);
+    bp.connect(wg);
+    wg.connect(this.sfxGain);
+    whoosh.start(now);
+
+    if (this.chiffBuf) {
+      const quill = this.ctx.createBufferSource();
+      quill.buffer = this.chiffBuf;
+      quill.playbackRate.value = 0.82 * jitter;
+      const qbp = this.ctx.createBiquadFilter();
+      qbp.type = 'bandpass';
+      qbp.frequency.setValueAtTime(2150 * jitter, now + 0.004);
+      qbp.frequency.exponentialRampToValueAtTime(1320, now + 0.022);
+      qbp.Q.value = 1.2;
+      const qg = this.ctx.createGain();
+      qg.gain.value = 0.009 * amp;
+      quill.connect(qbp);
+      qbp.connect(qg);
+      qg.connect(this.sfxGain);
+      quill.start(now + 0.004);
+    }
+  }
+
+  public playSparrowHop(
+    surface: 'stone' | 'wood' | 'foliage' | 'metal' | 'water' | 'fabric' = 'stone'
+  ) {
+    if (!this.ctx || !this.sfxGain || !this.sfxEnabled || this.isMuted) return;
+    if (surface === 'water') {
+      this.playWaterPlop();
+      return;
+    }
+    const now = this.ctx.currentTime;
+    const jitter = 0.94 + Math.random() * 0.12;
+    const bodyPitch =
+      surface === 'wood'
+        ? 245
+        : surface === 'metal'
+          ? 760
+          : surface === 'fabric'
+            ? 145
+            : surface === 'foliage'
+              ? 310
+              : 410;
+
+    for (let tap = 0; tap < 2; tap++) {
+      const t0 = now + tap * 0.026;
+      const ampScale = tap === 0 ? 0.72 : 1.0;
+      const bodyOsc = this.ctx.createOscillator();
+      bodyOsc.type = surface === 'metal' ? 'sine' : 'triangle';
+      bodyOsc.frequency.setValueAtTime(bodyPitch * jitter * (tap === 1 ? 1.08 : 1.0), t0);
+      bodyOsc.frequency.exponentialRampToValueAtTime(bodyPitch * 0.44, t0 + 0.042);
+      const bg = this.ctx.createGain();
+      bg.gain.setValueAtTime(0.078 * ampScale, t0);
+      bg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.048);
+      bodyOsc.connect(bg);
+      bg.connect(this.sfxGain);
+      bodyOsc.start(t0);
+      bodyOsc.stop(t0 + 0.055);
+    }
+  }
+
+  public playWaterPlop() {
+    this.init();
+    if (!this.ctx || !this.sfxGain || !this.sfxEnabled || this.isMuted) return;
+    const now = this.ctx.currentTime;
+    const jitter = 0.92 + Math.random() * 0.16;
+
+    if (this.waterBuf) {
+      const slap = this.ctx.createBufferSource();
+      slap.buffer = this.waterBuf;
+      slap.playbackRate.value = 1.15 * jitter;
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime(1950 * jitter, now);
+      bp.frequency.exponentialRampToValueAtTime(920, now + 0.065);
+      bp.Q.value = 1.4;
+      const sg = this.ctx.createGain();
+      sg.gain.setValueAtTime(0.088, now);
+      sg.gain.exponentialRampToValueAtTime(0.0001, now + 0.072);
+      slap.connect(bp);
+      bp.connect(sg);
+      sg.connect(this.sfxGain);
+      slap.start(now);
+    }
+
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(295 * jitter, now);
+    osc.frequency.exponentialRampToValueAtTime(790 * jitter, now + 0.082);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.14, now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.105);
+    osc.connect(g);
+    g.connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + 0.12);
+  }
+
+  public playCrumbEat() {
+    this.init();
+    if (!this.ctx || !this.sfxGain || !this.sfxEnabled || this.isMuted) return;
+    const now = this.ctx.currentTime;
+    [680, 960].forEach((f, idx) => {
+      const t = now + idx * 0.055;
+      const osc = this.ctx!.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f, t);
+      osc.frequency.exponentialRampToValueAtTime(f * 1.24, t + 0.08);
+      const g = this.ctx!.createGain();
+      g.gain.setValueAtTime(0.001, t);
+      g.gain.linearRampToValueAtTime(0.095, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+      osc.connect(g);
+      g.connect(this.sfxGain!);
+      osc.start(t);
+      osc.stop(t + 0.16);
+    });
   }
 
   public dispose() {

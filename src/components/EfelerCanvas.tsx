@@ -33,6 +33,10 @@ import {
   getSurfaceSlopeAngles,
   getTabakhaneCenterX,
 } from '../game/terrain';
+import { SparrowChaseCamera } from '../game/sparrowCamera';
+import { SparrowController, SparrowInputState } from '../game/sparrowController';
+import { SparrowFX } from '../game/sparrowFx';
+import { SparrowMesh } from '../game/sparrowMesh';
 import { createProceduralTextures } from '../game/textures';
 import { createVehicleModel, VehicleRig } from '../game/vehicles';
 import {
@@ -59,12 +63,15 @@ export interface TouchDriveInput {
   backward: boolean;
   left: boolean;
   right: boolean;
+  flap?: boolean;
+  dive?: boolean;
 }
 
 export interface EfelerCanvasHandle {
   teleportTo: (x: number, z: number, heading?: number) => void;
   triggerDiscoverNearby: () => void;
   triggerHorn: () => void;
+  triggerChirp: () => void;
   setTouchInput: (next: Partial<TouchDriveInput>) => void;
   adjustZoom: (delta: number) => void;
   startCompanionWalk: (npc: BuildingNpcDef, treat: HeldTreatType) => void;
@@ -95,6 +102,7 @@ interface EfelerCanvasProps {
   onWalkChatMessage: (msg: string) => void;
   onAutoTimeSync?: (nextTod: TimeOfDay) => void;
   onAutoWeatherSync?: (nextWeather: WeatherType) => void;
+  onCollectCrumb?: (amount: number) => void;
   onEnterHome: () => void;
 }
 
@@ -106,15 +114,20 @@ const _targetHemiSky = new THREE.Color();
 const _targetHemiSkyB = new THREE.Color();
 const _targetHemiGround = new THREE.Color();
 const _targetHemiGroundB = new THREE.Color();
+const _targetRim = new THREE.Color();
 const _stormTint = new THREE.Color(0x3a4354);
 const _rainTint = new THREE.Color(0x6c7c8e);
 const _snowTint = new THREE.Color(0xdde6ef);
 const _lightningTint = new THREE.Color(0xdbe8ff);
+const _dayRimColor = new THREE.Color(0xfff1dc);
+const _goldenRimColor = new THREE.Color(0xffcfa0);
+const _nightRimColor = new THREE.Color(0x7c9ad4);
 const _camGoal = new THREE.Vector3();
 const _lookGoal = new THREE.Vector3();
 const _lookCurrent = new THREE.Vector3();
 const _projVec = new THREE.Vector3();
 const _pointerVec = new THREE.Vector2();
+const _chaseTarget = new THREE.Vector3();
 
 function detectSoftwareWebGL(): boolean {
   try {
@@ -233,6 +246,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       onWalkChatMessage,
       onAutoTimeSync,
       onAutoWeatherSync,
+      onCollectCrumb,
       onEnterHome,
     },
     ref
@@ -263,6 +277,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       onWalkChatMessage,
       onAutoTimeSync,
       onAutoWeatherSync,
+      onCollectCrumb,
       onEnterHome,
     });
 
@@ -289,6 +304,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       onWalkChatMessage,
       onAutoTimeSync,
       onAutoWeatherSync,
+      onCollectCrumb,
       onEnterHome,
     };
 
@@ -325,6 +341,9 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       companionX: initialTransform?.x ?? -18,
       companionZ: initialTransform?.z ?? 27,
       companionDirty: false,
+      zeybekTimer: 0,
+      zeybekElapsed: 0,
+      lastZeybekDipBar: -1,
     });
 
     const touchInputRef = useRef<TouchDriveInput>({
@@ -332,7 +351,14 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       backward: false,
       left: false,
       right: false,
+      flap: false,
+      dive: false,
     });
+
+    const sparrowActionsRef = useRef<{
+      chirp: () => void;
+      resetAt: (x: number, z: number, yaw: number) => void;
+    } | null>(null);
 
     const streetTriggersRef = useRef<{
       triggerMusicians: () => void;
@@ -406,6 +432,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         simRef.current.roll = 0;
         simRef.current.heading = heading;
         simRef.current.speed = 0;
+        sparrowActionsRef.current?.resetAt(x, z, heading + Math.PI);
         if (simRef.current.companionNpc) {
           simRef.current.companionX = x + Math.cos(heading) * 1.25;
           simRef.current.companionZ = z - Math.sin(heading) * 1.25;
@@ -415,7 +442,18 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         performDiscover();
       },
       triggerHorn: () => {
-        audioEngine.playHorn(vehicleConfigRef.current.type);
+        if (explorationModeRef.current === 'sparrow') {
+          sparrowActionsRef.current?.chirp();
+        } else {
+          audioEngine.playHorn(vehicleConfigRef.current.type);
+        }
+      },
+      triggerChirp: () => {
+        if (explorationModeRef.current === 'sparrow') {
+          sparrowActionsRef.current?.chirp();
+        } else {
+          audioEngine.playSparrowChirp(false);
+        }
       },
       setTouchInput: (next: Partial<TouchDriveInput>) => {
         Object.assign(touchInputRef.current, next);
@@ -477,8 +515,10 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       const isSoftwareGl = detectSoftwareWebGL();
       const renderer = new THREE.WebGLRenderer({
         antialias: !isSoftwareGl,
+        alpha: true,
         powerPreference: 'high-performance',
       });
+      renderer.setClearColor(0x000000, 0);
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.18;
@@ -504,7 +544,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
 
       const scene = new THREE.Scene();
       const initialMood = TIME_MOODS[timeOfDayRef.current];
-      scene.background = new THREE.Color(initialMood.skyColor);
+      scene.background = null;
       scene.fog = new THREE.FogExp2(initialMood.fogColor, 0.0026);
 
       const pmrem = new THREE.PMREMGenerator(renderer);
@@ -531,6 +571,15 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
 
       const fpCamera = new THREE.PerspectiveCamera(62, aspect, 0.12, 280);
       fpCamera.position.set(simRef.current.x, simRef.current.y + 1.46, simRef.current.z);
+
+      const chaseCamera = new THREE.PerspectiveCamera(58, aspect, 0.12, 320);
+      const sparrowChaseCam = new SparrowChaseCamera();
+      const unbindChaseDrag = sparrowChaseCam.bindDrag(
+        renderer.domElement,
+        () =>
+          phaseRef.current === 'playing' &&
+          (explorationModeRef.current === 'sparrow' || cameraPresetRef.current === 'perspective')
+      );
 
       const hemiLight = new THREE.HemisphereLight(
         initialMood.hemiSky,
@@ -576,6 +625,16 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         triggerMusicians: () => {
           city.musicians.triggerZeybek();
           audioEngine.playZeybekDance(11.5);
+          const s = simRef.current;
+          s.zeybekTimer = 11.5;
+          s.zeybekElapsed = 0;
+          s.lastZeybekDipBar = -2;
+          s.speed = 0;
+          const dxM = city.musicians.center[0] - s.x;
+          const dzM = city.musicians.center[1] - s.z;
+          if (Math.hypot(dxM, dzM) > 0.25) {
+            s.heading = Math.atan2(-dxM, -dzM);
+          }
           callbacksRef.current.onStreetEvent('musicians');
         },
         triggerLokma: () => {
@@ -612,6 +671,35 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
 
       const companionRig: CompanionWalkerRig = createCompanionWalkerRig();
       scene.add(companionRig.root);
+
+      // Sparrow Sim articulated 3D sparrow + FX (clouds, chirp rings, trails, crumbs)
+      const sparrowMesh = new SparrowMesh(1.32);
+      sparrowMesh.root.visible = explorationModeRef.current === 'sparrow';
+      scene.add(sparrowMesh.root);
+
+      const sparrowFx = new SparrowFX(city.crumbSpots);
+      scene.add(sparrowFx.group);
+
+      const sparrowController = new SparrowController(
+        sparrowMesh,
+        city.perches,
+        city.colliders,
+        sparrowFx
+      );
+      sparrowController.resetAt(
+        simRef.current.x,
+        simRef.current.z,
+        simRef.current.heading + Math.PI
+      );
+      sparrowChaseCam.snapTo(sparrowController.position, sparrowController.yaw);
+
+      sparrowActionsRef.current = {
+        chirp: () => sparrowController.triggerChirp(),
+        resetAt: (x: number, z: number, yaw: number) => {
+          sparrowController.resetAt(x, z, yaw);
+          sparrowChaseCam.snapTo(sparrowController.position, sparrowController.yaw);
+        },
+      };
 
       const particleCount = 24;
       const particleGeo = new THREE.SphereGeometry(0.22, 6, 6);
@@ -711,7 +799,13 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         if (now - lastMoveRaycast < 65) return;
         lastMoveRaycast = now;
         updatePointer(e.clientX, e.clientY);
-        const activeCam = cameraPresetRef.current === 'first_person' ? fpCamera : camera;
+        const activeCam =
+          cameraPresetRef.current === 'first_person'
+            ? fpCamera
+            : explorationModeRef.current === 'sparrow' ||
+                cameraPresetRef.current === 'perspective'
+              ? chaseCamera
+              : camera;
         raycaster.setFromCamera(_pointerVec, activeCam);
         const hits = raycaster.intersectObjects(city.interactiveClickables, false);
         renderer.domElement.style.cursor = hits.length > 0 ? 'pointer' : 'default';
@@ -725,7 +819,13 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         if (phaseRef.current !== 'playing') return;
         if (pointerDragDist > 8) return;
         updatePointer(e.clientX, e.clientY);
-        const activeCam = cameraPresetRef.current === 'first_person' ? fpCamera : camera;
+        const activeCam =
+          cameraPresetRef.current === 'first_person'
+            ? fpCamera
+            : explorationModeRef.current === 'sparrow' ||
+                cameraPresetRef.current === 'perspective'
+              ? chaseCamera
+              : camera;
         raycaster.setFromCamera(_pointerVec, activeCam);
         const hits = raycaster.intersectObjects(city.interactiveClickables, false);
         if (hits.length > 0) {
@@ -754,6 +854,13 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       renderer.domElement.addEventListener('click', onPointerClick);
 
       const heldKeys = new Set<string>();
+      let flapQueued = false;
+      let chirpQueued = false;
+      let peckQueued = false;
+      let prevTouchFlap = false;
+      let prevMode: ExplorationMode = explorationModeRef.current;
+      let prevCamPreset: CameraPreset = cameraPresetRef.current;
+
       const onKeyDown = (e: KeyboardEvent) => {
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
           if (phaseRef.current === 'playing') e.preventDefault();
@@ -763,8 +870,17 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
 
         if (!wasDown && phaseRef.current === 'playing') {
           if (e.code === 'Space') {
-            audioEngine.playHorn(vehicleConfigRef.current.type);
+            if (explorationModeRef.current === 'sparrow') {
+              flapQueued = true;
+            } else {
+              audioEngine.playHorn(vehicleConfigRef.current.type);
+            }
+          } else if (e.code === 'KeyQ') {
+            chirpQueued = true;
           } else if (e.code === 'KeyE') {
+            if (explorationModeRef.current === 'sparrow') {
+              peckQueued = true;
+            }
             performDiscover();
           }
         }
@@ -778,6 +894,8 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         touchInputRef.current.backward = false;
         touchInputRef.current.left = false;
         touchInputRef.current.right = false;
+        touchInputRef.current.flap = false;
+        touchInputRef.current.dive = false;
       };
       const onWheel = (e: WheelEvent) => {
         if (phaseRef.current !== 'playing') return;
@@ -837,6 +955,8 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         camera.updateProjectionMatrix();
         fpCamera.aspect = asp;
         fpCamera.updateProjectionMatrix();
+        chaseCamera.aspect = asp;
+        chaseCamera.updateProjectionMatrix();
         renderer.setSize(w, h);
       };
       window.addEventListener('resize', onResize);
@@ -916,13 +1036,13 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         if (manualTargetPhaseRef.current !== null) {
           const targetP = manualTargetPhaseRef.current;
           let diff = targetP - solarPhase;
-          if (diff > 0.5) diff -= 1;
-          if (diff < -0.5) diff += 1;
+          if (diff > 0.6) diff -= 1;
+          if (diff < -0.6) diff += 1;
           if (Math.abs(diff) < 0.004) {
             solarPhase = targetP;
             manualTargetPhaseRef.current = null;
           } else {
-            solarPhase = ((solarPhase + diff * Math.min(1, dt * 2.2)) % 1 + 1) % 1;
+            solarPhase = ((solarPhase + diff * Math.min(1, dt * 1.65)) % 1 + 1) % 1;
           }
         } else if (autoAtmosphereRef.current && phaseRef.current === 'playing') {
           // Gentle full 24h Efeler cycle (~4 minutes real-time)
@@ -978,8 +1098,8 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           lightningFlash = 0;
         }
 
-        _targetSky.set(sampledSolar.a.skyColor);
-        _targetSkyB.set(sampledSolar.b.skyColor);
+        _targetSky.set(sampledSolar.a.fogColor);
+        _targetSkyB.set(sampledSolar.b.fogColor);
         _targetSky.lerp(_targetSkyB, sampledSolar.t);
         _targetSky.lerp(_stormTint, weatherWeights.storm * 0.68);
         _targetSky.lerp(_rainTint, weatherWeights.rain * 0.45);
@@ -988,9 +1108,8 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           _targetSky.lerp(_lightningTint, lightningFlash * 0.55);
         }
 
-        (scene.background as THREE.Color).lerp(_targetSky, Math.min(1, dt * 3.5));
         if (scene.fog instanceof THREE.FogExp2) {
-          scene.fog.color.copy(scene.background as THREE.Color);
+          scene.fog.color.lerp(_targetSky, Math.min(1, dt * 2.6));
           const targetFogDensity =
             0.0026 +
             weatherWeights.storm * 0.0056 +
@@ -1003,7 +1122,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         _targetSunB.set(sampledSolar.b.sunColor);
         _targetSun.lerp(_targetSunB, sampledSolar.t);
         _targetSun.lerp(_stormTint, weatherWeights.storm * 0.55);
-        sunLight.color.lerp(_targetSun, Math.min(1, dt * 3));
+        sunLight.color.lerp(_targetSun, Math.min(1, dt * 2.6));
         const weatherSunScale =
           1.0 -
           weatherWeights.storm * 0.45 -
@@ -1012,7 +1131,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         sunLight.intensity = THREE.MathUtils.damp(
           sunLight.intensity,
           sampledSolar.sunIntensity * weatherSunScale + lightningFlash * 1.6,
-          3.2,
+          2.6,
           dt
         );
 
@@ -1022,12 +1141,32 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         _targetHemiGround.set(sampledSolar.a.hemiGround);
         _targetHemiGroundB.set(sampledSolar.b.hemiGround);
         _targetHemiGround.lerp(_targetHemiGroundB, sampledSolar.t);
-        hemiLight.color.lerp(_targetHemiSky, Math.min(1, dt * 3));
-        hemiLight.groundColor.lerp(_targetHemiGround, Math.min(1, dt * 3));
+        hemiLight.color.lerp(_targetHemiSky, Math.min(1, dt * 2.6));
+        hemiLight.groundColor.lerp(_targetHemiGround, Math.min(1, dt * 2.6));
         hemiLight.intensity = THREE.MathUtils.damp(
           hemiLight.intensity,
           sampledSolar.hemiIntensity,
-          3,
+          2.6,
+          dt
+        );
+
+        const nightMix = THREE.MathUtils.clamp((sampledSolar.lampLevel - 0.35) / 0.65, 0, 1);
+        const goldenWarmth = Math.max(0, 1 - Math.abs(solarPhase - 0.58) / 0.18);
+        _targetRim
+          .copy(_dayRimColor)
+          .lerp(_goldenRimColor, goldenWarmth * 0.85)
+          .lerp(_nightRimColor, nightMix * 0.9);
+        rimLight.color.lerp(_targetRim, Math.min(1, dt * 2.6));
+        rimLight.intensity = THREE.MathUtils.damp(
+          rimLight.intensity,
+          0.32 + goldenWarmth * 0.16 - nightMix * 0.14,
+          2.6,
+          dt
+        );
+        renderer.toneMappingExposure = THREE.MathUtils.damp(
+          renderer.toneMappingExposure,
+          1.18 - nightMix * 0.12 + goldenWarmth * 0.05,
+          2.4,
           dt
         );
 
@@ -1092,10 +1231,35 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
 
         const sim = simRef.current;
         const vType = vehicleConfigRef.current.type;
-        const isWalking = explorationModeRef.current === 'walk';
+        const curMode = explorationModeRef.current;
+        const isWalking = curMode === 'walk';
+        const isSparrow = curMode === 'sparrow';
         const isFirstPerson =
           cameraPresetRef.current === 'first_person' && phaseRef.current !== 'title';
         const slopesPre = getSurfaceSlopeAngles(sim.x, sim.z, sim.heading);
+
+        // Mode switch synchronization (Vehicle/Walk <-> Sparrow)
+        if (isSparrow && prevMode !== 'sparrow') {
+          sparrowController.resetAt(sim.x, sim.z, sim.heading + Math.PI);
+          sparrowChaseCam.snapTo(sparrowController.position, sparrowController.yaw);
+        } else if (!isSparrow && prevMode === 'sparrow') {
+          sim.x = THREE.MathUtils.clamp(sparrowController.position.x, -98, 104);
+          sim.z = THREE.MathUtils.clamp(sparrowController.position.z, -106, 72);
+          sim.y = getSurfaceHeightAt(sim.x, sim.z);
+          sim.heading = sparrowController.yaw + Math.PI;
+          sim.speed = 0;
+        }
+        prevMode = curMode;
+
+        if (cameraPresetRef.current === 'perspective' && prevCamPreset !== 'perspective') {
+          if (isSparrow) {
+            sparrowChaseCam.snapTo(sparrowController.position, sparrowController.yaw);
+          } else {
+            _chaseTarget.set(sim.x, sim.y, sim.z);
+            sparrowChaseCam.snapTo(_chaseTarget, sim.heading + Math.PI);
+          }
+        }
+        prevCamPreset = cameraPresetRef.current;
 
         // Held treat duration & rig sync
         if (sim.treatTimer > 0) {
@@ -1110,126 +1274,250 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           cityAvatarRig.setTreat(sim.heldTreat);
         }
 
-        if (phaseRef.current === 'playing') {
-          const forward =
-            heldKeys.has('KeyW') || heldKeys.has('ArrowUp') || touchInputRef.current.forward;
-          const backward =
-            heldKeys.has('KeyS') || heldKeys.has('ArrowDown') || touchInputRef.current.backward;
-          const left =
-            heldKeys.has('KeyA') || heldKeys.has('ArrowLeft') || touchInputRef.current.left;
-          const right =
-            heldKeys.has('KeyD') || heldKeys.has('ArrowRight') || touchInputRef.current.right;
-          const sprint = heldKeys.has('ShiftLeft') || heldKeys.has('ShiftRight');
+        // Update Storybook Sparrow FX (clouds, crumb treats, rings, wing trails)
+        sparrowFx.update(dt, elapsed, goldenWarmth, nightMix, weatherWeights.storm);
 
-          const maxSpeed = isWalking
-            ? sprint
-              ? 8.0
-              : 5.4
-            : vType === 'bicycle'
-              ? 11.5
-              : vType === 'motorcycle'
-                ? 19.5
-                : 17.0;
-          const accel = isWalking ? 24 : vType === 'bicycle' ? 14 : vType === 'motorcycle' ? 22 : 17;
-          const drag = isWalking ? 14 : vType === 'bicycle' ? 3.8 : 2.6;
-          const turnRate = isWalking
-            ? 2.65
-            : vType === 'bicycle'
-              ? 2.5
-              : vType === 'motorcycle'
-                ? 2.35
-                : 1.95;
+        const touchFlapNow = Boolean(touchInputRef.current.flap);
+        const touchFlapRising = touchFlapNow && !prevTouchFlap;
+        prevTouchFlap = touchFlapNow;
 
-          if (forward) {
-            sim.speed = Math.min(maxSpeed, sim.speed + accel * dt);
-          } else if (backward) {
-            sim.speed = Math.max(-maxSpeed * (isWalking ? 0.65 : 0.45), sim.speed - accel * 0.9 * dt);
-          } else {
-            sim.speed = THREE.MathUtils.damp(sim.speed, 0, drag, dt);
-            if (Math.abs(sim.speed) < 0.04) sim.speed = 0;
-          }
-
-          // Gentle uphill resistance & downhill coasting on Aytepe / Tralleis slopes
-          if (!isWalking && Math.abs(slopesPre.pitch) > 0.008 && Math.abs(sim.speed) > 0.25) {
-            sim.speed -= Math.sin(slopesPre.pitch) * 4.8 * dt;
-          }
-
-          const steerInput = (left ? 1 : 0) - (right ? 1 : 0);
-          sim.steerAngle = THREE.MathUtils.damp(sim.steerAngle, steerInput * 0.42, 10, dt);
-
-          if (isWalking) {
-            sim.heading += steerInput * turnRate * dt;
-          } else if (Math.abs(sim.speed) > 0.15) {
-            const dirSign = sim.speed >= 0 ? 1 : -1;
-            const speedTurnScale = THREE.MathUtils.clamp(Math.abs(sim.speed) / 4.5, 0.35, 1.0);
-            sim.heading += steerInput * turnRate * speedTurnScale * dirSign * dt;
-          }
-
-          const moveX = -Math.sin(sim.heading) * sim.speed * dt;
-          const moveZ = -Math.cos(sim.heading) * sim.speed * dt;
-
-          const colRadius = isWalking ? 0.55 : vType === 'car' ? 1.35 : 0.72;
-          const [resolvedX, resolvedZ] = resolveCollision(
-            sim.x + moveX,
-            sim.z + moveZ,
-            colRadius,
-            city.colliders
+        if (sim.zeybekTimer > 0) {
+          sim.zeybekTimer = Math.max(0, sim.zeybekTimer - dt);
+          sim.zeybekElapsed += dt;
+          const distMus = Math.hypot(
+            sim.x - city.musicians.center[0],
+            sim.z - city.musicians.center[1]
           );
-          sim.x = resolvedX;
-          sim.z = resolvedZ;
-
-          if (isWalking) {
-            audioEngine.updateEngineSound(0, vType, false);
-          } else {
-            audioEngine.updateEngineSound(Math.abs(sim.speed), vType, true);
+          if (Math.abs(sim.speed) > 1.8 || distMus > 24) {
+            sim.zeybekTimer = 0;
           }
-        } else {
-          sim.speed = THREE.MathUtils.damp(sim.speed, 0, 4, dt);
-          audioEngine.updateEngineSound(0, vType, false);
         }
 
-        const groundY = getSurfaceHeightAt(sim.x, sim.z);
-        const slopes = getSurfaceSlopeAngles(sim.x, sim.z, sim.heading);
-        sim.y = THREE.MathUtils.damp(sim.y, groundY, 16, dt);
-        sim.pitch = THREE.MathUtils.damp(sim.pitch, slopes.pitch, 12, dt);
-        sim.roll = THREE.MathUtils.damp(sim.roll, -slopes.roll, 12, dt);
+        let groundY = getSurfaceHeightAt(sim.x, sim.z);
 
-        if (isWalking) {
+        if (isSparrow) {
           vehicleRig.root.visible = false;
-          cityAvatarRig.root.visible = !isFirstPerson;
-          cityAvatarRig.root.position.set(sim.x, sim.y, sim.z);
-          cityAvatarRig.root.rotation.order = 'YXZ';
-          cityAvatarRig.root.rotation.y = sim.heading;
-          cityAvatarRig.root.rotation.x = sim.pitch * 0.35;
-          cityAvatarRig.updateWalk(sim.speed, dt, elapsed);
-        } else {
           cityAvatarRig.root.visible = false;
-          vehicleRig.root.visible = !isFirstPerson;
-          vehicleRig.root.position.set(sim.x, sim.y, sim.z);
-          vehicleRig.root.rotation.order = 'YXZ';
-          vehicleRig.root.rotation.y = sim.heading;
-          vehicleRig.root.rotation.x = sim.pitch;
+          companionRig.root.visible = false;
+          sparrowMesh.root.visible = !isFirstPerson;
+          audioEngine.updateEngineSound(0, vType, false);
 
-          sim.wheelSpin += (sim.speed * dt) / (vType === 'car' ? 0.33 : 0.35);
-          vehicleRig.wheels.forEach((w) => {
-            w.rotation.x = -sim.wheelSpin;
-          });
-          vehicleRig.steerPivots.forEach((p) => {
-            p.rotation.y = sim.steerAngle;
-          });
-          if (vehicleRig.pedalCrank) {
-            vehicleRig.pedalCrank.rotation.x = -sim.wheelSpin * 0.7;
-          }
-          const steerRoll =
-            vType === 'car'
-              ? -sim.steerAngle * Math.min(1, Math.abs(sim.speed) / 12) * 0.14
-              : sim.steerAngle * Math.min(1, Math.abs(sim.speed) / 8) * 0.38;
-          vehicleRig.tiltGroup.rotation.z = THREE.MathUtils.damp(
-            vehicleRig.tiltGroup.rotation.z,
-            steerRoll + sim.roll,
-            8,
-            dt
+          const sparrowInput: SparrowInputState = {
+            forward:
+              heldKeys.has('KeyW') || heldKeys.has('ArrowUp') || touchInputRef.current.forward,
+            backward:
+              heldKeys.has('KeyS') || heldKeys.has('ArrowDown') || touchInputRef.current.backward,
+            left: heldKeys.has('KeyA') || heldKeys.has('ArrowLeft') || touchInputRef.current.left,
+            right:
+              heldKeys.has('KeyD') || heldKeys.has('ArrowRight') || touchInputRef.current.right,
+            flapHeld: heldKeys.has('Space') || touchFlapNow,
+            flapPressed: flapQueued || touchFlapRising,
+            diveHeld:
+              heldKeys.has('ShiftLeft') ||
+              heldKeys.has('ShiftRight') ||
+              Boolean(touchInputRef.current.dive),
+            chirpPressed: chirpQueued,
+            peckPressed: peckQueued,
+          };
+          flapQueued = false;
+          chirpQueued = false;
+          peckQueued = false;
+
+          sparrowController.update(
+            dt,
+            elapsed,
+            sparrowChaseCam.yaw,
+            sparrowInput,
+            phaseRef.current === 'playing'
           );
+
+          if (sim.zeybekTimer > 0 && sparrowController.mode !== 'flying') {
+            const barSec = 2.52;
+            const barIdx = Math.floor(sim.zeybekElapsed / barSec);
+            const u = (sim.zeybekElapsed % barSec) / barSec;
+            if (sim.lastZeybekDipBar === -2) {
+              sim.lastZeybekDipBar = -1;
+              sparrowController.triggerChirp();
+            } else if (u >= 0.5 && u <= 0.64 && barIdx !== sim.lastZeybekDipBar) {
+              sim.lastZeybekDipBar = barIdx;
+              sparrowController.triggerChirp();
+            }
+          }
+
+          sim.x = sparrowController.position.x;
+          sim.y = sparrowController.position.y;
+          sim.z = sparrowController.position.z;
+          sim.heading = sparrowController.yaw + Math.PI;
+          sim.speed = Math.hypot(sparrowController.velocity.x, sparrowController.velocity.z);
+          sim.pitch = -sparrowMesh.bodyPivot.rotation.x;
+          groundY = getSurfaceHeightAt(sim.x, sim.z);
+        } else {
+          sparrowMesh.root.visible = false;
+          flapQueued = false;
+          peckQueued = false;
+          if (chirpQueued) {
+            chirpQueued = false;
+            audioEngine.playSparrowMicroChirp('idle');
+          }
+
+          if (phaseRef.current === 'playing') {
+            const forward =
+              heldKeys.has('KeyW') || heldKeys.has('ArrowUp') || touchInputRef.current.forward;
+            const backward =
+              heldKeys.has('KeyS') || heldKeys.has('ArrowDown') || touchInputRef.current.backward;
+            const left =
+              heldKeys.has('KeyA') || heldKeys.has('ArrowLeft') || touchInputRef.current.left;
+            const right =
+              heldKeys.has('KeyD') || heldKeys.has('ArrowRight') || touchInputRef.current.right;
+            const sprint = heldKeys.has('ShiftLeft') || heldKeys.has('ShiftRight');
+
+            const maxSpeed = isWalking
+              ? sprint
+                ? 8.0
+                : 5.4
+              : vType === 'bicycle'
+                ? 11.5
+                : vType === 'motorcycle'
+                  ? 19.5
+                  : 17.0;
+            const accel = isWalking ? 24 : vType === 'bicycle' ? 14 : vType === 'motorcycle' ? 22 : 17;
+            const drag = isWalking ? 14 : vType === 'bicycle' ? 3.8 : 2.6;
+            const turnRate = isWalking
+              ? 2.65
+              : vType === 'bicycle'
+                ? 2.5
+                : vType === 'motorcycle'
+                  ? 2.35
+                  : 1.95;
+
+            if (forward) {
+              sim.speed = Math.min(maxSpeed, sim.speed + accel * dt);
+            } else if (backward) {
+              sim.speed = Math.max(-maxSpeed * (isWalking ? 0.65 : 0.45), sim.speed - accel * 0.9 * dt);
+            } else {
+              sim.speed = THREE.MathUtils.damp(sim.speed, 0, drag, dt);
+              if (Math.abs(sim.speed) < 0.04) sim.speed = 0;
+            }
+
+            // Gentle uphill resistance & downhill coasting on Aytepe / Tralleis slopes
+            if (!isWalking && Math.abs(slopesPre.pitch) > 0.008 && Math.abs(sim.speed) > 0.25) {
+              sim.speed -= Math.sin(slopesPre.pitch) * 4.8 * dt;
+            }
+
+            const steerInput = (left ? 1 : 0) - (right ? 1 : 0);
+            sim.steerAngle = THREE.MathUtils.damp(sim.steerAngle, steerInput * 0.42, 10, dt);
+
+            if (isWalking) {
+              sim.heading += steerInput * turnRate * dt;
+            } else if (Math.abs(sim.speed) > 0.15) {
+              const dirSign = sim.speed >= 0 ? 1 : -1;
+              const speedTurnScale = THREE.MathUtils.clamp(Math.abs(sim.speed) / 4.5, 0.35, 1.0);
+              sim.heading += steerInput * turnRate * speedTurnScale * dirSign * dt;
+            }
+
+            const moveX = -Math.sin(sim.heading) * sim.speed * dt;
+            const moveZ = -Math.cos(sim.heading) * sim.speed * dt;
+
+            const colRadius = isWalking ? 0.55 : vType === 'car' ? 1.35 : 0.72;
+            const [resolvedX, resolvedZ] = resolveCollision(
+              sim.x + moveX,
+              sim.z + moveZ,
+              colRadius,
+              city.colliders
+            );
+            sim.x = resolvedX;
+            sim.z = resolvedZ;
+
+            if (isWalking) {
+              audioEngine.updateEngineSound(0, vType, false);
+            } else {
+              audioEngine.updateEngineSound(Math.abs(sim.speed), vType, true);
+            }
+          } else {
+            sim.speed = THREE.MathUtils.damp(sim.speed, 0, 4, dt);
+            audioEngine.updateEngineSound(0, vType, false);
+          }
+
+          groundY = getSurfaceHeightAt(sim.x, sim.z);
+          const slopes = getSurfaceSlopeAngles(sim.x, sim.z, sim.heading);
+          sim.y = THREE.MathUtils.damp(sim.y, groundY, 16, dt);
+          sim.pitch = THREE.MathUtils.damp(sim.pitch, slopes.pitch, 12, dt);
+          sim.roll = THREE.MathUtils.damp(sim.roll, -slopes.roll, 12, dt);
+
+          if (isWalking) {
+            vehicleRig.root.visible = false;
+            cityAvatarRig.root.visible = !isFirstPerson;
+            cityAvatarRig.root.position.set(sim.x, sim.y, sim.z);
+            cityAvatarRig.root.rotation.order = 'YXZ';
+            cityAvatarRig.root.rotation.y = sim.heading;
+            cityAvatarRig.root.rotation.x = sim.pitch * 0.35;
+            if (sim.zeybekTimer > 0 && Math.abs(sim.speed) < 0.8) {
+              cityAvatarRig.updateZeybek(dt, elapsed, sim.zeybekElapsed);
+              const barSec = 2.52;
+              const barIdx = Math.floor(sim.zeybekElapsed / barSec);
+              const u = (sim.zeybekElapsed % barSec) / barSec;
+              if (sim.lastZeybekDipBar === -2) {
+                sim.lastZeybekDipBar = -1;
+                _chaseTarget.set(sim.x, groundY + 0.05, sim.z);
+                sparrowFx.spawnChirpRing(_chaseTarget, 0xf5be49);
+              } else if (u >= 0.5 && u <= 0.64 && barIdx !== sim.lastZeybekDipBar) {
+                sim.lastZeybekDipBar = barIdx;
+                _chaseTarget.set(sim.x, groundY + 0.05, sim.z);
+                sparrowFx.spawnChirpRing(_chaseTarget, 0xf5be49);
+                sparrowFx.spawnCrumbs(_chaseTarget, 5);
+              }
+            } else {
+              cityAvatarRig.updateWalk(sim.speed, dt, elapsed);
+            }
+          } else {
+            cityAvatarRig.root.visible = false;
+            vehicleRig.root.visible = !isFirstPerson;
+            vehicleRig.root.position.set(sim.x, sim.y, sim.z);
+            vehicleRig.root.rotation.order = 'YXZ';
+            vehicleRig.root.rotation.y = sim.heading;
+            vehicleRig.root.rotation.x = sim.pitch;
+
+            sim.wheelSpin += (sim.speed * dt) / (vType === 'car' ? 0.33 : 0.35);
+            vehicleRig.wheels.forEach((w) => {
+              w.rotation.x = -sim.wheelSpin;
+            });
+            vehicleRig.steerPivots.forEach((p) => {
+              p.rotation.y = sim.steerAngle;
+            });
+            if (vehicleRig.pedalCrank) {
+              vehicleRig.pedalCrank.rotation.x = -sim.wheelSpin * 0.7;
+            }
+            const steerRoll =
+              vType === 'car'
+                ? -sim.steerAngle * Math.min(1, Math.abs(sim.speed) / 12) * 0.14
+                : sim.steerAngle * Math.min(1, Math.abs(sim.speed) / 8) * 0.38;
+            vehicleRig.tiltGroup.rotation.z = THREE.MathUtils.damp(
+              vehicleRig.tiltGroup.rotation.z,
+              steerRoll + sim.roll,
+              8,
+              dt
+            );
+          }
+        }
+
+        // Collect floating sesame & fig crumbs (rooftops, bridges & Kent Meydanı)
+        if (phaseRef.current === 'playing') {
+          for (let i = 0; i < sparrowFx.pickups.length; i++) {
+            const pk = sparrowFx.pickups[i];
+            if (pk.collected) continue;
+            if (
+              Math.hypot(sim.x - pk.pos.x, sim.z - pk.pos.z) < 1.45 &&
+              Math.abs(sim.y - pk.pos.y) < 1.45
+            ) {
+              pk.collected = true;
+              pk.mesh.visible = false;
+              pk.respawnTimer = 45;
+              sparrowFx.spawnCrumbs(pk.pos, 9);
+              audioEngine.playCrumbEat();
+              if (isSparrow) sparrowController.triggerEat();
+              callbacksRef.current.onCollectCrumb?.(3);
+            }
+          }
         }
 
         // Companion NPC boulevard walk logic
@@ -1254,7 +1542,11 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           sim.companionZ = resCZ;
           companionRig.root.position.set(resCX, getSurfaceHeightAt(resCX, resCZ), resCZ);
           companionRig.root.rotation.y = sim.heading;
-          companionRig.updateWalk(compSpeed, dt, elapsed);
+          if (sim.zeybekTimer > 0 && Math.abs(sim.speed) < 0.8) {
+            companionRig.updateZeybek(dt, elapsed, sim.zeybekElapsed);
+          } else {
+            companionRig.updateWalk(compSpeed, dt, elapsed);
+          }
 
           if (phaseRef.current === 'playing') {
             sim.companionChatAccum -= dt;
@@ -1285,7 +1577,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           companionRig.root.visible = false;
         }
 
-        if (!isWalking && Math.abs(sim.speed) > 4.5 && phaseRef.current === 'playing') {
+        if (!isWalking && !isSparrow && Math.abs(sim.speed) > 4.5 && phaseRef.current === 'playing') {
           particleSpawnAccum += dt;
           if (particleSpawnAccum > 0.09) {
             particleSpawnAccum = 0;
@@ -1513,7 +1805,11 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
               ? 0.65
               : 1.0;
 
-        const activeCam = isFirstPerson ? fpCamera : camera;
+        const useChaseCam =
+          phaseRef.current !== 'title' &&
+          !isFirstPerson &&
+          (isSparrow || cameraPresetRef.current === 'perspective');
+        const activeCam = isFirstPerson ? fpCamera : useChaseCam ? chaseCamera : camera;
 
         if (phaseRef.current === 'title') {
           const orbitAngle = elapsed * 0.11;
@@ -1528,8 +1824,8 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           camera.lookAt(_lookCurrent);
           camera.updateProjectionMatrix();
         } else if (isFirstPerson) {
-          const eyeH = isWalking ? 1.46 : 1.32;
-          const fwdOff = isWalking ? 0.14 : 0.38;
+          const eyeH = isSparrow ? 0.34 : isWalking ? 1.46 : 1.32;
+          const fwdOff = isSparrow ? 0.24 : isWalking ? 0.14 : 0.38;
           const camX = sim.x - Math.sin(sim.heading) * fwdOff;
           const camZ = sim.z - Math.cos(sim.heading) * fwdOff;
           const camY = sim.y + eyeH;
@@ -1543,7 +1839,45 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
             camZ - Math.cos(lookAngle) * Math.cos(totalPitch) * 16
           );
           fpCamera.lookAt(_lookGoal);
-          _lookCurrent.set(sim.x, sim.y + 1.0, sim.z);
+          _lookCurrent.set(sim.x, sim.y + (isSparrow ? 0.4 : 1.0), sim.z);
+        } else if (useChaseCam) {
+          if (isSparrow) {
+            _chaseTarget.copy(sparrowController.position);
+            sparrowChaseCam.update(chaseCamera, {
+              targetPos: _chaseTarget,
+              targetYaw: sparrowController.yaw,
+              targetForwardX: Math.sin(sparrowController.yaw),
+              targetForwardZ: Math.cos(sparrowController.yaw),
+              airspeed: sim.speed,
+              maxAirspeed: 22,
+              bankAngle: sparrowMesh.bodyPivot.rotation.z,
+              verticalVel: sparrowController.velocity.y,
+              isFlying: sparrowController.mode === 'flying',
+              isVehicle: false,
+              zoomFactor: sim.zoomFactor,
+              colliders: city.colliders,
+              dt,
+            });
+            _lookCurrent.set(sim.x, sim.y + 0.4, sim.z);
+          } else {
+            _chaseTarget.set(sim.x, sim.y, sim.z);
+            sparrowChaseCam.update(chaseCamera, {
+              targetPos: _chaseTarget,
+              targetYaw: sim.heading + Math.PI,
+              targetForwardX: -Math.sin(sim.heading),
+              targetForwardZ: -Math.cos(sim.heading),
+              airspeed: Math.abs(sim.speed),
+              maxAirspeed: 20,
+              bankAngle: 0,
+              verticalVel: 0,
+              isFlying: false,
+              isVehicle: !isWalking,
+              zoomFactor: sim.zoomFactor,
+              colliders: city.colliders,
+              dt,
+            });
+            _lookCurrent.set(sim.x, sim.y + 1.0, sim.z);
+          }
         } else {
           _lookGoal.set(sim.x, sim.y + 1.0, sim.z);
           _camGoal.set(sim.x + 38, sim.y + 34, sim.z + 38);
@@ -1613,6 +1947,9 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
             companionName: sim.companionNpc ? sim.companionNpc.name : null,
             heldTreat: sim.heldTreat,
             solarClock: getSolarClockLabel(solarPhase),
+            sparrowState: isSparrow ? sparrowController.mode : undefined,
+            sparrowStamina: isSparrow ? sparrowController.flightStamina : undefined,
+            isDancingZeybek: sim.zeybekTimer > 0,
           });
         }
 
@@ -1653,6 +1990,9 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         renderer.domElement.removeEventListener('webglcontextrestored', handleContextRestored);
 
         audioEngine.updateEngineSound(0, vehicleConfigRef.current.type, false);
+        unbindChaseDrag();
+        sparrowActionsRef.current = null;
+        sparrowFx.dispose();
         vehicleRig.dispose();
         cityAvatarRig.dispose();
         companionRig.dispose();
@@ -1665,15 +2005,21 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         textures.dispose();
         envRT.dispose();
         renderer.dispose();
-        if (renderer.domElement.parentNode === container) {
-          container.removeChild(renderer.domElement);
-        }
+        renderer.domElement.remove();
       };
     }, []);
 
     return (
-      <div className="relative w-full h-full">
-        <div ref={mountRef} className="w-full h-full" />
+      <div
+        className={`relative w-full h-full overflow-hidden efeler-atmosphere-root efeler-cycle-${timeOfDay} efeler-weather-${weather}`}
+        data-time-of-day={timeOfDay}
+        data-weather={weather}
+      >
+        <div aria-hidden="true" className="absolute inset-0 pointer-events-none efeler-sky-backdrop" />
+        <div aria-hidden="true" className="absolute inset-0 pointer-events-none efeler-sky-stars" />
+        <div aria-hidden="true" className="absolute inset-0 pointer-events-none efeler-sky-sun-halo" />
+        <div ref={mountRef} className="relative w-full h-full efeler-canvas-stage" />
+        <div aria-hidden="true" className="absolute inset-0 pointer-events-none efeler-lighting-overlay" />
         {contextLost && (
           <div className="absolute inset-0 flex items-center justify-center bg-[#181612]/90 text-[#F5EFE6]">
             <div className="text-center max-w-sm px-6">

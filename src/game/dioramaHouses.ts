@@ -37,7 +37,11 @@ function addMullionedWindow(
   sillMat: THREE.Material,
   withFlowerBox = false,
   flowerBoxMat?: THREE.Material,
-  blossomMat?: THREE.Material
+  blossomMat?: THREE.Material,
+  shutterMat?: THREE.Material,
+  withJulietBalcony = false,
+  ironMat?: THREE.Material,
+  terracottaMat?: THREE.Material
 ): void {
   const wg = new THREE.Group();
   wg.position.set(x, y, z);
@@ -53,18 +57,66 @@ function addMullionedWindow(
   const hBar = new THREE.Mesh(new THREE.BoxGeometry(winW, 0.06, 0.09), frameMat);
   hBar.position.z = 0.04;
 
+  // Projecting stone lintel crest above the window (Sparrow Townhouse style)
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(winW + 0.28, 0.1, 0.15), sillMat);
+  lintel.position.set(0, winH / 2 + 0.08, 0.045);
+
   // Chunky projecting stone/timber sill
   const sill = new THREE.Mesh(new THREE.BoxGeometry(winW + 0.28, 0.11, 0.2), sillMat);
   sill.position.set(0, -winH / 2 - 0.07, 0.06);
 
-  wg.add(outer, pane, vBar, hBar, sill);
+  wg.add(outer, pane, vBar, hBar, lintel, sill);
+
+  // Paired louvered wooden shutters (Sparrow Sim coastal/Mediterranean signature)
+  if (shutterMat) {
+    const shW = Math.max(0.24, winW * 0.31);
+    const shH = winH + 0.04;
+    [-1, 1].forEach((side) => {
+      const shutter = new THREE.Mesh(new THREE.BoxGeometry(shW, shH, 0.06), shutterMat);
+      shutter.position.set(side * (winW / 2 + shW / 2 + 0.1), 0, 0.035);
+      shutter.castShadow = true;
+      wg.add(shutter);
+
+      const topBar = new THREE.Mesh(new THREE.BoxGeometry(shW * 0.88, 0.045, 0.075), sillMat);
+      topBar.position.set(shutter.position.x, shH * 0.22, 0.04);
+      const botBar = new THREE.Mesh(new THREE.BoxGeometry(shW * 0.88, 0.045, 0.075), sillMat);
+      botBar.position.set(shutter.position.x, -shH * 0.22, 0.04);
+      wg.add(topBar, botBar);
+    });
+  }
 
   if (withFlowerBox && flowerBoxMat && blossomMat) {
-    const box = new THREE.Mesh(new THREE.BoxGeometry(winW + 0.2, 0.18, 0.24), flowerBoxMat);
-    box.position.set(0, -winH / 2 - 0.01, 0.14);
-    const flowers = new THREE.Mesh(new THREE.BoxGeometry(winW + 0.1, 0.14, 0.18), blossomMat);
-    flowers.position.set(0, -winH / 2 + 0.12, 0.14);
-    wg.add(box, flowers);
+    const potMat = terracottaMat ?? flowerBoxMat;
+    const potBox = new THREE.Mesh(new THREE.BoxGeometry(winW + 0.22, 0.19, 0.24), potMat);
+    potBox.position.set(0, -winH / 2 - 0.01, 0.14);
+    const leafBed = new THREE.Mesh(new THREE.BoxGeometry(winW + 0.12, 0.12, 0.18), flowerBoxMat);
+    leafBed.position.set(0, -winH / 2 + 0.1, 0.14);
+    wg.add(potBox, leafBed);
+
+    // Sculpted gouache tulip/geranium flower clusters along sill box
+    const bloomCount = 3;
+    for (let b = 0; b < bloomCount; b++) {
+      const bx = ((b - (bloomCount - 1) / 2) * winW) / 3;
+      const bloom = new THREE.Mesh(new THREE.IcosahedronGeometry(0.085, 0), blossomMat);
+      bloom.position.set(bx, -winH / 2 + 0.2, 0.15);
+      wg.add(bloom);
+    }
+  } else if (withJulietBalcony && ironMat) {
+    // Wrought-iron Juliet balcony railing (Sparrow Townhouse alternating upper window motif)
+    const railW = winW + 0.24;
+    const topRail = new THREE.Mesh(new THREE.BoxGeometry(railW, 0.055, 0.055), ironMat);
+    topRail.position.set(0, -winH / 2 + 0.36, 0.14);
+    const botRail = new THREE.Mesh(new THREE.BoxGeometry(railW, 0.045, 0.05), ironMat);
+    botRail.position.set(0, -winH / 2 + 0.02, 0.14);
+    wg.add(topRail, botRail);
+
+    const spindleCount = 5;
+    for (let sp = 0; sp < spindleCount; sp++) {
+      const sx = ((sp - (spindleCount - 1) / 2) * (railW - 0.12)) / (spindleCount - 1);
+      const spindle = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.34, 0.032), ironMat);
+      spindle.position.set(sx, -winH / 2 + 0.19, 0.14);
+      wg.add(spindle);
+    }
   }
 
   parent.add(wg);
@@ -85,7 +137,10 @@ function addCircularAtticWindow(
   cg.rotation.y = rotY;
 
   const ring = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.065, 8, 16), frameMat);
-  const glass = new THREE.Mesh(new THREE.CylinderGeometry(radius * 0.92, radius * 0.92, 0.08, 14), paneMat);
+  const glass = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius * 0.92, radius * 0.92, 0.08, 14),
+    paneMat
+  );
   glass.rotation.x = Math.PI / 2;
 
   const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.055, radius * 1.8, 0.1), frameMat);
@@ -99,7 +154,7 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
   const { w, d, h, variant, mats, wallMat, lawnMat, flowerBoxMat, blossomMat, isPlayerHome } = opts;
   const house = new THREE.Group();
 
-  // Pick roof material across Charcoal Slate, Aegean Blue-Slate, and Warm Terracotta (matching all 5 refs)
+  // Pick roof & shutter palette across Sparrow Sim + Efeler gouache tones
   const roofStyle = variant % 3;
   const roofMat =
     roofStyle === 0
@@ -107,6 +162,13 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
       : roofStyle === 1
         ? mats.aegeanBlueRoof
         : mats.terracottaRoof;
+  const ridgeCapMat = roofStyle === 2 ? mats.terracottaRidge : mats.copperPatina;
+  const shutterMat =
+    variant % 3 === 0
+      ? mats.shutterWood
+      : variant % 3 === 1
+        ? mats.shutterCobalt
+        : mats.shutterOlive;
   const windowFrameMat = roofStyle === 2 ? mats.darkTimber : mats.wroughtIron;
   const ridgeAlongZ = variant % 2 === 0;
   const hasFence = variant % 2 === 0 || Boolean(isPlayerHome);
@@ -116,7 +178,7 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
   const yardD = d + 2.05;
   const foundation = new THREE.Mesh(
     new THREE.BoxGeometry(yardW, 2.3, yardD),
-    mats.travertine
+    mats.limestonePlinth
   );
   foundation.position.set(0, -1.04, 0.45);
   foundation.receiveShadow = true;
@@ -130,7 +192,7 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
   yardLawn.receiveShadow = true;
   house.add(yardLawn);
 
-  // 2. Main House Walls + Stone Water-Table Base Trim + Gable Plaster Triangle
+  // 2. Main House Walls + Rusticated Limestone Base Trim + Corner Pilasters + Story Belt Cornices
   const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
   body.position.y = h / 2 + 0.2;
   body.castShadow = true;
@@ -138,18 +200,47 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
   house.add(body);
 
   const plinthBand = new THREE.Mesh(
-    new THREE.BoxGeometry(w + 0.14, 0.34, d + 0.14),
-    mats.travertine
+    new THREE.BoxGeometry(w + 0.18, 0.42, d + 0.18),
+    mats.limestonePlinth
   );
-  plinthBand.position.y = 0.32;
+  plinthBand.position.y = 0.36;
   house.add(plinthBand);
 
   const midTrim = new THREE.Mesh(
-    new THREE.BoxGeometry(w + 0.16, 0.14, d + 0.16),
+    new THREE.BoxGeometry(w + 0.18, 0.14, d + 0.18),
     mats.whitePlaster
   );
   midTrim.position.y = h * 0.48 + 0.2;
   house.add(midTrim);
+
+  // Dentil eave cornice crowning the upper wall under roof eaves
+  const eaveCornice = new THREE.Mesh(
+    new THREE.BoxGeometry(w + 0.26, 0.14, d + 0.26),
+    mats.whitePlaster
+  );
+  eaveCornice.position.y = h + 0.15;
+  house.add(eaveCornice);
+
+  // Vertical Corner Pilaster Strips + Mid-Story Rusticated Stone Accent Blocks (TownhouseBuilder style)
+  [-1, 1].forEach((sx) => {
+    [-1, 1].forEach((sz) => {
+      const px = sx * (w * 0.5 - 0.04);
+      const pz = sz * (d * 0.5 - 0.04);
+      const pilaster = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, h - 0.08, 0.18),
+        mats.whitePlaster
+      );
+      pilaster.position.set(px, h / 2 + 0.2, pz);
+      house.add(pilaster);
+
+      const accentBlock = new THREE.Mesh(
+        new THREE.BoxGeometry(0.24, 0.32, 0.24),
+        mats.whitePlaster
+      );
+      accentBlock.position.set(px, h * 0.26 + 0.2, pz);
+      house.add(accentBlock);
+    });
+  });
 
   // Steep pitched gable triangle rising from top of walls
   const peakH = Math.max(1.9, (ridgeAlongZ ? w : d) * 0.42 + (variant % 2) * 0.25);
@@ -162,7 +253,7 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
   gablePrism.receiveShadow = true;
   house.add(gablePrism);
 
-  // 3. Thick Overhanging Roof Slabs + Crisp White/Cream Verge Bargeboards
+  // 3. Thick Overhanging Roof Slabs + Copper Patina Ridge Cap + Crisp Cream Verge Bargeboards
   const roofW = w + 0.92;
   const roofD = d + 0.92;
   const roofSlabs = new THREE.Mesh(
@@ -173,6 +264,18 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
   roofSlabs.castShadow = true;
   roofSlabs.receiveShadow = true;
   house.add(roofSlabs);
+
+  // Signature Sparrow Sim copper-patina / terracotta ridge beam along roof crest
+  const ridgeCap = new THREE.Mesh(
+    new THREE.BoxGeometry(
+      ridgeAlongZ ? 0.28 : roofW + 0.04,
+      0.16,
+      ridgeAlongZ ? roofD + 0.04 : 0.28
+    ),
+    ridgeCapMat
+  );
+  ridgeCap.position.y = h + peakH + 0.26;
+  house.add(ridgeCap);
 
   const bargeboard = new THREE.Mesh(
     createGableBargeboardGeometry(roofW, roofD, peakH, 0.18, ridgeAlongZ),
@@ -190,11 +293,11 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
   const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.62, 1.35, 0.62), chimneyMat);
   chimney.position.set(chX, chY, chZ);
   chimney.castShadow = true;
-  const chimneyCap = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.16, 0.76), mats.travertine);
+  const chimneyCap = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.16, 0.76), mats.limestonePlinth);
   chimneyCap.position.set(chX, chY + 0.72, chZ);
   house.add(chimney, chimneyCap);
 
-  // 5. Cross-Gable Dormer Window on Roof Slope (especially iconic on ridgeAlongZ=false & variant%3!==2)
+  // 5. Cross-Gable Dormer Window on Roof Slope
   if (!ridgeAlongZ || variant % 3 === 1) {
     const dormW = 1.65;
     const dormD = 1.45;
@@ -250,7 +353,7 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
   const porchZ = d / 2 + porchD / 2;
   const porchDeck = new THREE.Mesh(
     new THREE.BoxGeometry(porchW, 0.36, porchD),
-    mats.travertine
+    mats.limestonePlinth
   );
   porchDeck.position.set(0, 0.34, porchZ);
   porchDeck.receiveShadow = true;
@@ -267,17 +370,17 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
     house.add(step);
   }
   [1.1, 1.6].forEach((pz) => {
-    const paver = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.06, 0.34), mats.travertine);
+    const paver = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.06, 0.34), mats.limestonePlinth);
     paver.position.set(0, 0.21, d / 2 + porchD + pz);
     house.add(paver);
   });
 
-  // Crisp White Porch Columns + Pitched Gable Porch Canopy
+  // Crisp Cream Porch Columns + Pitched Gable Porch Canopy
   const porchH = 2.15;
   const colPositions =
     porchW >= 3.4 ? [-porchW / 2 + 0.2, 0, porchW / 2 - 0.2] : [-porchW / 2 + 0.2, porchW / 2 - 0.2];
   colPositions.forEach((cx) => {
-    const colBase = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.26, 0.28), mats.travertine);
+    const colBase = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.26, 0.28), mats.limestonePlinth);
     colBase.position.set(cx, 0.62, d / 2 + porchD - 0.2);
     const col = new THREE.Mesh(new THREE.BoxGeometry(0.18, porchH - 0.22, 0.18), mats.whitePlaster);
     col.position.set(cx, 0.52 + porchH / 2, d / 2 + porchD - 0.2);
@@ -331,7 +434,11 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
       mats.creamPlaster,
       true,
       flowerBoxMat,
-      blossomMat
+      blossomMat,
+      undefined,
+      false,
+      mats.wroughtIron,
+      mats.terracottaRoof
     );
   }
 
@@ -344,10 +451,9 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
     house.add(pot, bush);
   });
 
-  // 7. Upper Facade Windows, Circular Attic Porthole & Side Windows
+  // 7. Upper Facade Windows with Louvered Shutters, Flowerboxes / Wrought-Iron Juliet Balconies
   const upperY = h * 0.72 + 0.22;
   if (ridgeAlongZ) {
-    // Upper center window + circular porthole window inside the front plaster gable
     addMullionedWindow(
       house,
       0,
@@ -361,7 +467,11 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
       mats.creamPlaster,
       true,
       flowerBoxMat,
-      blossomMat
+      blossomMat,
+      shutterMat,
+      false,
+      mats.wroughtIron,
+      mats.terracottaRoof
     );
     addCircularAtticWindow(
       house,
@@ -384,8 +494,9 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
       mats.windowLit
     );
   } else {
-    // Two symmetrical upper windows on front facade + attic portholes on West/East gables
-    [-w * 0.25, w * 0.25].forEach((wx) => {
+    // Two symmetrical upper windows alternating flowerboxes & wrought-iron Juliet balconies
+    [-w * 0.25, w * 0.25].forEach((wx, idx) => {
+      const useFlowerbox = (variant + idx) % 2 === 0;
       addMullionedWindow(
         house,
         wx,
@@ -397,9 +508,13 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
         windowFrameMat,
         mats.windowLit,
         mats.creamPlaster,
-        variant % 2 === 0,
+        useFlowerbox,
         flowerBoxMat,
-        blossomMat
+        blossomMat,
+        shutterMat,
+        !useFlowerbox,
+        mats.wroughtIron,
+        mats.terracottaRoof
       );
     });
     [-1, 1].forEach((side) => {
@@ -416,11 +531,11 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
     });
   }
 
-  // Side Facade Windows (East & West) + Back Windows
+  // Side Facade Windows (East & West) with Louvered Shutters + Optional Striped Café Awning
   [-1, 1].forEach((side) => {
     const sx = side * (w / 2 + 0.04);
     const sRot = side > 0 ? Math.PI / 2 : -Math.PI / 2;
-    [-d * 0.24, d * 0.24].forEach((sz) => {
+    [-d * 0.24, d * 0.24].forEach((sz, idx) => {
       addMullionedWindow(
         house,
         sx,
@@ -431,9 +546,14 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
         sRot,
         windowFrameMat,
         mats.windowLit,
-        mats.creamPlaster
+        mats.creamPlaster,
+        false,
+        undefined,
+        undefined,
+        shutterMat
       );
       if (h >= 4.4) {
+        const useFlowerbox = (variant + idx + (side > 0 ? 1 : 0)) % 2 === 0;
         addMullionedWindow(
           house,
           sx,
@@ -444,11 +564,30 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
           sRot,
           windowFrameMat,
           mats.windowLit,
-          mats.creamPlaster
+          mats.creamPlaster,
+          useFlowerbox,
+          flowerBoxMat,
+          blossomMat,
+          shutterMat,
+          !useFlowerbox,
+          mats.wroughtIron,
+          mats.terracottaRoof
         );
       }
     });
   });
+
+  // Charming Sparrow Sim striped café awning over East side ground bay on corner variants
+  if (variant % 3 === 1 && !isPlayerHome) {
+    const awning = new THREE.Mesh(
+      new THREE.BoxGeometry(0.66, 0.08, Math.min(d * 0.62, 2.5)),
+      mats.stripedAwning
+    );
+    awning.position.set(w / 2 + 0.3, 2.34, 0);
+    awning.rotation.z = -0.34;
+    awning.castShadow = true;
+    house.add(awning);
+  }
 
   [-w * 0.24, w * 0.24].forEach((bx) => {
     addMullionedWindow(
@@ -461,7 +600,11 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
       Math.PI,
       windowFrameMat,
       mats.windowLit,
-      mats.creamPlaster
+      mats.creamPlaster,
+      false,
+      undefined,
+      undefined,
+      shutterMat
     );
   });
 
@@ -475,7 +618,6 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
       const endX = side * (yardW / 2 - 0.22);
       const midX = (startX + endX) / 2;
       if (hasFence) {
-        // White picket fence rails + pickets
         const rail = new THREE.Mesh(
           new THREE.BoxGeometry(sideSpan, 0.08, 0.06),
           mats.whitePlaster
@@ -495,8 +637,10 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
           house.add(picket);
         }
       } else {
-        // Wrought-iron low courtyard railing with stone corner post (pngtree-3d-house style)
-        const post = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.62, 0.24), mats.travertine);
+        const post = new THREE.Mesh(
+          new THREE.BoxGeometry(0.24, 0.62, 0.24),
+          mats.limestonePlinth
+        );
         post.position.set(endX, 0.5, fenceZ);
         const bar = new THREE.Mesh(new THREE.BoxGeometry(sideSpan, 0.38, 0.06), mats.wroughtIron);
         bar.position.set(midX, 0.44, fenceZ);

@@ -37,8 +37,12 @@ import {
 } from '../data/efelerData';
 import { audioEngine } from '../game/audioEngine';
 import {
+  avatarConfigToAppearance,
+  createSculptedHumanRig,
+  SculptedHumanRig,
+} from '../game/sculptedHumans';
+import {
   AvatarConfig,
-  AvatarHairStyle,
   CozyRoomState,
   LofiTrackId,
   PetType,
@@ -288,16 +292,15 @@ function createDogRig(): {
 
 interface AvatarRig {
   root: THREE.Group;
-  bodyPivot: THREE.Group;
-  leftLegPivot: THREE.Group;
-  rightLegPivot: THREE.Group;
-  leftArmPivot: THREE.Group;
-  rightArmPivot: THREE.Group;
+  rig: SculptedHumanRig;
   applyConfig: (cfg: AvatarConfig) => void;
 }
 
 function createAvatarRig(initial: AvatarConfig): AvatarRig {
-  const root = new THREE.Group();
+  const rig = createSculptedHumanRig(avatarConfigToAppearance(initial), {
+    scale: 0.138,
+    forwardIsNegZ: false,
+  });
 
   const shadowMat = new THREE.MeshBasicMaterial({
     color: 0x1e150e,
@@ -308,149 +311,14 @@ function createAvatarRig(initial: AvatarConfig): AvatarRig {
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.36, 18), shadowMat);
   shadow.rotation.x = -Math.PI / 2;
   shadow.position.y = 0.025;
-  root.add(shadow);
-
-  const bodyPivot = new THREE.Group();
-  root.add(bodyPivot);
-
-  const skinMat = new THREE.MeshStandardMaterial({ color: initial.skinColor, roughness: 0.72 });
-  const shirtMat = new THREE.MeshStandardMaterial({ color: initial.shirtColor, roughness: 0.78 });
-  const vestMat = new THREE.MeshStandardMaterial({ color: 0x4b3527, roughness: 0.8 });
-  const pantsMat = new THREE.MeshStandardMaterial({ color: initial.pantsColor, roughness: 0.84 });
-  const shoeMat = new THREE.MeshStandardMaterial({ color: 0x2d2118, roughness: 0.7 });
-  const hairMat = new THREE.MeshStandardMaterial({ color: initial.hairColor, roughness: 0.85 });
-  const capMat = new THREE.MeshStandardMaterial({ color: 0x3f4c59, roughness: 0.82 });
-  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x211914, roughness: 0.4 });
-
-  // Legs
-  const makeLeg = (lx: number) => {
-    const pivot = new THREE.Group();
-    pivot.position.set(lx, 0.46, 0);
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.4, 0.17), pantsMat);
-    leg.position.y = -0.2;
-    leg.castShadow = true;
-    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.1, 0.24), shoeMat);
-    shoe.position.set(0, -0.41, 0.03);
-    shoe.castShadow = true;
-    pivot.add(leg, shoe);
-    bodyPivot.add(pivot);
-    return pivot;
-  };
-  const leftLegPivot = makeLeg(-0.11);
-  const rightLegPivot = makeLeg(0.11);
-
-  // Torso + Cozy Aegean Vest Accent
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.5, 0.26), shirtMat);
-  torso.position.y = 0.72;
-  torso.castShadow = true;
-  bodyPivot.add(torso);
-
-  const vestL = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.44, 0.28), vestMat);
-  vestL.position.set(-0.12, 0.72, 0);
-  const vestR = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.44, 0.28), vestMat);
-  vestR.position.set(0.12, 0.72, 0);
-  bodyPivot.add(vestL, vestR);
-
-  // Arms
-  const makeArm = (ax: number) => {
-    const pivot = new THREE.Group();
-    pivot.position.set(ax, 0.92, 0);
-    const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.34, 0.14), shirtMat);
-    sleeve.position.y = -0.17;
-    sleeve.castShadow = true;
-    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.1, 0.11), skinMat);
-    hand.position.y = -0.37;
-    pivot.add(sleeve, hand);
-    bodyPivot.add(pivot);
-    return pivot;
-  };
-  const leftArmPivot = makeArm(-0.29);
-  const rightArmPivot = makeArm(0.29);
-
-  // Head
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.35, 0.34), skinMat);
-  head.position.set(0, 1.16, 0);
-  head.castShadow = true;
-  bodyPivot.add(head);
-
-  [-0.08, 0.08].forEach((ex) => {
-    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.055, 0.03), eyeMat);
-    eye.position.set(ex, 1.17, 0.175);
-    bodyPivot.add(eye);
-  });
-
-  // 4 Swappable Hair/Cap Styles
-  const hairGroups: Record<AvatarHairStyle, THREE.Group> = {
-    kasket: new THREE.Group(),
-    short: new THREE.Group(),
-    long: new THREE.Group(),
-    bun: new THREE.Group(),
-  };
-
-  // Kasket (Aegean Flat Cap)
-  {
-    const crown = new THREE.Mesh(new THREE.BoxGeometry(0.39, 0.12, 0.39), capMat);
-    crown.position.set(0, 1.36, 0.01);
-    const brim = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.04, 0.18), capMat);
-    brim.position.set(0, 1.31, 0.22);
-    const backHair = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.16, 0.1), hairMat);
-    backHair.position.set(0, 1.24, -0.16);
-    hairGroups.kasket.add(crown, brim, backHair);
-  }
-
-  // Short
-  {
-    const top = new THREE.Mesh(new THREE.BoxGeometry(0.39, 0.12, 0.37), hairMat);
-    top.position.set(0, 1.35, -0.01);
-    const back = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.22, 0.12), hairMat);
-    back.position.set(0, 1.22, -0.15);
-    hairGroups.short.add(top, back);
-  }
-
-  // Long
-  {
-    const top = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.12, 0.38), hairMat);
-    top.position.set(0, 1.35, -0.01);
-    const drape = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.44, 0.15), hairMat);
-    drape.position.set(0, 1.1, -0.16);
-    [-0.18, 0.18].forEach((sx) => {
-      const side = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.36, 0.18), hairMat);
-      side.position.set(sx, 1.12, -0.02);
-      hairGroups.long.add(side);
-    });
-    hairGroups.long.add(top, drape);
-  }
-
-  // Bun
-  {
-    const top = new THREE.Mesh(new THREE.BoxGeometry(0.39, 0.11, 0.37), hairMat);
-    top.position.set(0, 1.35, -0.01);
-    const bun = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), hairMat);
-    bun.position.set(0, 1.38, -0.19);
-    hairGroups.bun.add(top, bun);
-  }
-
-  Object.values(hairGroups).forEach((hg) => bodyPivot.add(hg));
-
-  const applyConfig = (cfg: AvatarConfig) => {
-    skinMat.color.set(cfg.skinColor);
-    shirtMat.color.set(cfg.shirtColor);
-    pantsMat.color.set(cfg.pantsColor);
-    hairMat.color.set(cfg.hairColor);
-    (Object.keys(hairGroups) as AvatarHairStyle[]).forEach((style) => {
-      hairGroups[style].visible = style === cfg.hairStyle;
-    });
-  };
-  applyConfig(initial);
+  rig.root.add(shadow);
 
   return {
-    root,
-    bodyPivot,
-    leftLegPivot,
-    rightLegPivot,
-    leftArmPivot,
-    rightArmPivot,
-    applyConfig,
+    root: rig.root,
+    rig,
+    applyConfig: (cfg: AvatarConfig) => {
+      rig.applyAppearance(avatarConfigToAppearance(cfg));
+    },
   };
 }
 
@@ -1439,44 +1307,16 @@ export function CozyRoomView({
         teaSipRef.current = Math.max(0, teaSipRef.current - dt * 1.4);
 
         if (isSittingRef.current) {
-          avatarRig.bodyPivot.position.y = -0.18;
-          avatarRig.leftLegPivot.rotation.x = -1.35;
-          avatarRig.rightLegPivot.rotation.x = -1.35;
-          avatarRig.leftArmPivot.rotation.x = -0.45;
-          avatarRig.rightArmPivot.rotation.x = -0.45 - Math.sin(teaSipRef.current * Math.PI) * 0.7;
+          avatarRig.rig.updateSit(dt, elapsed, teaSipRef.current);
         } else if (isMoving) {
-          const stride = Math.sin(elapsed * 11.5) * 0.65;
-          avatarRig.bodyPivot.position.y = Math.abs(Math.sin(elapsed * 11.5)) * 0.045;
-          avatarRig.leftLegPivot.rotation.x = stride;
-          avatarRig.rightLegPivot.rotation.x = -stride;
-          avatarRig.leftArmPivot.rotation.x = -stride * 0.75;
-          avatarRig.rightArmPivot.rotation.x = stride * 0.75;
+          avatarRig.rig.updateWalk(3.4, dt, elapsed, false);
         } else {
-          avatarRig.bodyPivot.position.y = Math.sin(elapsed * 2.2) * 0.015;
-          avatarRig.leftLegPivot.rotation.x = THREE.MathUtils.damp(
-            avatarRig.leftLegPivot.rotation.x,
-            0,
-            10,
-            dt
-          );
-          avatarRig.rightLegPivot.rotation.x = THREE.MathUtils.damp(
-            avatarRig.rightLegPivot.rotation.x,
-            0,
-            10,
-            dt
-          );
-          avatarRig.leftArmPivot.rotation.x = THREE.MathUtils.damp(
-            avatarRig.leftArmPivot.rotation.x,
-            0,
-            10,
-            dt
-          );
-          avatarRig.rightArmPivot.rotation.x = THREE.MathUtils.damp(
-            avatarRig.rightArmPivot.rotation.x,
-            -Math.sin(teaSipRef.current * Math.PI) * 0.9,
-            10,
-            dt
-          );
+          avatarRig.rig.updateWalk(0, dt, elapsed, false);
+          if (teaSipRef.current > 0.01) {
+            avatarRig.rig.armR.shoulder.rotation.x =
+              -Math.sin(teaSipRef.current * Math.PI) * 0.9;
+            avatarRig.rig.armR.elbow.rotation.x = -0.45;
+          }
         }
 
         // Determine nearest interactive object in Gezinti Mode
@@ -1646,14 +1486,15 @@ export function CozyRoomView({
 
       roomGroup.traverse((obj) => {
         if ((obj as THREE.Mesh).isMesh) {
-          (obj as THREE.Mesh).geometry.dispose();
+          const geo = (obj as THREE.Mesh).geometry;
+          if (!geo.userData?.isSharedHumanGeo) {
+            geo.dispose();
+          }
         }
       });
       envRT.dispose();
       renderer.dispose();
-      if (renderer.domElement.parentNode === container) {
-        container.removeChild(renderer.domElement);
-      }
+      renderer.domElement.remove();
     };
   }, []);
 
@@ -1744,7 +1585,10 @@ export function CozyRoomView({
         <div className="flex items-start justify-between gap-2 sm:gap-4">
           <div className="pointer-events-auto rounded-2xl bg-[#F7EEDC]/96 border-2 border-[#B99464] px-3 py-2 sm:px-4 sm:py-3 text-[#3A2618] shadow-md max-w-[58vw] sm:max-w-lg">
             <div className="font-display text-sm sm:text-base md:text-lg font-bold leading-tight truncate">
-              Sıcak Yuvam · {placementMode ? 'Eşya Yerleştirme Modu' : 'Gezinti & Yaşam'}
+              <span>Sıcak Yuvam · </span>
+              <span key={placementMode ? 'place' : 'walk'}>
+                {placementMode ? 'Eşya Yerleştirme Modu' : 'Gezinti & Yaşam'}
+              </span>
             </div>
             <div className="flex flex-wrap items-center gap-x-1.5 sm:gap-x-2 text-[11px] sm:text-xs text-[#6B5038] mt-0.5 sm:mt-1 font-medium">
               <span>{WEATHER_OPTIONS.find((w) => w.id === weather)?.label}</span>
@@ -1826,9 +1670,9 @@ export function CozyRoomView({
               className="pointer-events-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#C85A32] hover:bg-[#B44D28] border-2 border-[#FAF2E2]/85 text-[#FAF2E2] text-xs sm:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
             >
               {nearbyInteractable.id === 'teatable' ? (
-                <Coffee className="w-4 h-4" aria-hidden="true" />
+                <Coffee key="coffee" className="w-4 h-4" aria-hidden="true" />
               ) : (
-                <Sparkles className="w-4 h-4" aria-hidden="true" />
+                <Sparkles key="sparkle" className="w-4 h-4" aria-hidden="true" />
               )}
               <span>[E] {nearbyInteractable.label}</span>
             </button>
@@ -2008,7 +1852,9 @@ export function CozyRoomView({
                           : 'bg-[#EDE0C6] text-[#3A2618]'
                       }`}
                     >
-                      {avatarPlaced ? 'Avatar Odada (Gizle)' : 'Avatarı Odaya Yerleştir'}
+                      <span key={avatarPlaced ? 'placed' : 'unplaced'}>
+                        {avatarPlaced ? 'Avatar Odada (Gizle)' : 'Avatarı Odaya Yerleştir'}
+                      </span>
                     </button>
                   </div>
 
@@ -2336,9 +2182,9 @@ export function CozyRoomView({
               className="p-1.5 rounded-xl bg-[#EDE0C6] hover:bg-[#E2D1B2] border border-[#B99464]/50 text-[#3A2618] transition-colors shrink-0 cursor-pointer"
             >
               {isMuted ? (
-                <VolumeX className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
+                <VolumeX key="muted" className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
               ) : (
-                <Volume2 className="w-3.5 h-3.5 text-[#4B743B]" aria-hidden="true" />
+                <Volume2 key="unmuted" className="w-3.5 h-3.5 text-[#4B743B]" aria-hidden="true" />
               )}
             </button>
           </div>

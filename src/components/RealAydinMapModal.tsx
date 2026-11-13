@@ -5,7 +5,6 @@ import {
   APIProvider,
   InfoWindow,
   Map,
-  Pin,
   useAdvancedMarkerRef,
   useApiLoadingStatus,
   useMap,
@@ -161,6 +160,9 @@ function PlaceMarker({
   onSelect: (entry: PlaceEntry, marker: google.maps.marker.AdvancedMarkerElement | null) => void;
 }) {
   const [markerRef, marker] = useAdvancedMarkerRef();
+  const fill = isSelected ? '#D99B43' : entry.matchedLandmark ? '#61B88A' : '#3B6E8C';
+  const stroke = isSelected ? '#FFF4DF' : '#181612';
+  const dot = isSelected ? '#181612' : '#F5EFE6';
 
   return (
     <AdvancedMarker
@@ -170,11 +172,22 @@ function PlaceMarker({
       zIndex={isSelected ? 1000 : 10}
       onClick={() => onSelect(entry, marker)}
     >
-      <Pin
-        background={isSelected ? '#D99B43' : entry.matchedLandmark ? '#61B88A' : '#3B6E8C'}
-        borderColor={isSelected ? '#FFF4DF' : '#181612'}
-        glyphColor={isSelected ? '#181612' : '#F5EFE6'}
-      />
+      <div
+        className={`relative flex items-center justify-center transition-transform duration-150 ${
+          isSelected ? 'scale-125' : 'hover:scale-110'
+        }`}
+        style={{ width: 28, height: 36 }}
+      >
+        <svg viewBox="0 0 28 36" width="28" height="36" aria-hidden="true">
+          <path
+            d="M14 1.5C7.1 1.5 1.5 7.1 1.5 14c0 8.8 11 19.6 12.1 20.6.2.2.6.2.8 0 1.1-1 12.1-11.8 12.1-20.6C26.5 7.1 20.9 1.5 14 1.5Z"
+            fill={fill}
+            stroke={stroke}
+            strokeWidth="2"
+          />
+          <circle cx="14" cy="13.5" r="4.8" fill={dot} />
+        </svg>
+      </div>
     </AdvancedMarker>
   );
 }
@@ -449,7 +462,9 @@ function EfelerRealMapContent({
               disabled={searching || !placesLib}
               className="px-3.5 py-2 rounded-xl bg-[#D99B43] hover:bg-[#E4AC59] disabled:opacity-50 text-[#181612] text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
             >
-              {searching ? 'Aranıyor...' : 'Ara'}
+              <span key={searching ? 'searching' : 'idle'}>
+                {searching ? 'Aranıyor...' : 'Ara'}
+              </span>
             </button>
           </form>
 
@@ -553,8 +568,14 @@ function EfelerRealMapContent({
                   </span>
                 </div>
                 <div className="text-[11px] text-[#CFC6B8] mt-1 font-mono-num">
-                  {routeSummary.distanceText} · {routeSummary.durationText} (
-                  {routeSummary.travelMode === 'WALKING' ? 'Yürüyüş' : 'Araç'})
+                  <span>{routeSummary.distanceText}</span>
+                  <span> · </span>
+                  <span>{routeSummary.durationText}</span>
+                  <span> (</span>
+                  <span key={routeSummary.travelMode}>
+                    {routeSummary.travelMode === 'WALKING' ? 'Yürüyüş' : 'Araç'}
+                  </span>
+                  <span>)</span>
                 </div>
               </div>
             )}
@@ -575,9 +596,11 @@ function EfelerRealMapContent({
             </div>
           ) : placesList.length === 0 ? (
             <div className="rounded-xl bg-[#24201A] border border-[#F5EFE6]/8 p-3 text-xs text-[#BEB5A6]">
-              {searching
-                ? 'Efeler’deki noktalar Google Haritalar’dan getiriliyor...'
-                : 'Bir kategori seçin veya Efeler’de bir yer arayın.'}
+              <span key={searching ? 'loading' : 'prompt'}>
+                {searching
+                  ? 'Efeler’deki noktalar Google Haritalar’dan getiriliyor...'
+                  : 'Bir kategori seçin veya Efeler’de bir yer arayın.'}
+              </span>
             </div>
           ) : (
             placesList.map((entry) => {
@@ -643,6 +666,7 @@ function EfelerRealMapContent({
 
           {selectedPlace && (
             <InfoWindow
+              key={selectedPlace.id}
               anchor={selectedMarker}
               position={selectedMarker ? undefined : selectedPlace.location}
               pixelOffset={[0, -8]}
@@ -660,10 +684,10 @@ function EfelerRealMapContent({
                 </div>
                 {typeof selectedPlace.rating === 'number' && (
                   <div className="text-xs font-medium text-[#8C5B14]">
-                    ★ {selectedPlace.rating.toFixed(1)}
-                    {typeof selectedPlace.userRatingCount === 'number'
-                      ? ` (${selectedPlace.userRatingCount} değerlendirme)`
-                      : ''}
+                    <span>★ {selectedPlace.rating.toFixed(1)}</span>
+                    {typeof selectedPlace.userRatingCount === 'number' && (
+                      <span> ({selectedPlace.userRatingCount} değerlendirme)</span>
+                    )}
                   </div>
                 )}
                 {selectedPlace.weekdayDescriptions &&

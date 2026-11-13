@@ -16,13 +16,15 @@ function addBoxCollider(
   cx: number,
   cz: number,
   w: number,
-  d: number
+  d: number,
+  topH?: number
 ) {
   list.push({
     minX: cx - w / 2,
     maxX: cx + w / 2,
     minZ: cz - d / 2,
     maxZ: cz + d / 2,
+    maxY: topH !== undefined ? getTerrainHeightAt(cx, cz) + topH : undefined,
   });
 }
 
@@ -139,7 +141,7 @@ function buildTralleis(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandma
 
   const ringMesh = makeDiscoveryRing(lx, lz + 9.5);
   const colliders: ColliderBox[] = [];
-  addBoxCollider(colliders, lx, lz, 17, 9);
+  addBoxCollider(colliders, lx, lz, 17, 9, 9.2);
 
   return { def, group, ringMesh, colliders };
 }
@@ -234,7 +236,7 @@ function buildBeyCamii(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandma
 
   const ringMesh = makeDiscoveryRing(lx - 10.5, lz + 4);
   const colliders: ColliderBox[] = [];
-  addBoxCollider(colliders, lx, lz, 13.5, 14.5);
+  addBoxCollider(colliders, lx, lz, 13.5, 14.5, 9.5);
 
   return { def, group, ringMesh, colliders };
 }
@@ -314,7 +316,7 @@ function buildNasuhPasa(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandm
 
   const ringMesh = makeDiscoveryRing(lx - 11.8, lz);
   const colliders: ColliderBox[] = [];
-  addBoxCollider(colliders, lx, lz, 17.5, 15.5);
+  addBoxCollider(colliders, lx, lz, 17.5, 15.5, 6.8);
 
   return { def, group, ringMesh, colliders };
 }
@@ -378,7 +380,7 @@ function buildRamazanPasa(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLan
 
   const ringMesh = makeDiscoveryRing(lx, lz + 9.2);
   const colliders: ColliderBox[] = [];
-  addBoxCollider(colliders, lx, lz, 14, 13);
+  addBoxCollider(colliders, lx, lz, 14, 13, 6.4);
 
   return { def, group, ringMesh, colliders };
 }
@@ -439,7 +441,7 @@ function buildCihanoglu(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandm
 
   const ringMesh = makeDiscoveryRing(lx + 11.2, lz + 1.5);
   const colliders: ColliderBox[] = [];
-  addBoxCollider(colliders, lx, lz, 15, 15);
+  addBoxCollider(colliders, lx, lz, 15, 15, 7.2);
 
   return { def, group, ringMesh, colliders };
 }
@@ -592,9 +594,9 @@ function buildKentMeydani(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLan
 
   const ringMesh = makeDiscoveryRing(lx, lz + 15.2);
   const colliders: ColliderBox[] = [];
-  addBoxCollider(colliders, lx, lz - 2.5, 7.6, 7.6);
-  addBoxCollider(colliders, lx - 9.5, lz - 1.0, 4.0, 7.6);
-  addBoxCollider(colliders, lx + 9.5, lz - 1.0, 4.0, 7.6);
+  addBoxCollider(colliders, lx, lz - 2.5, 7.6, 7.6, 6.6);
+  addBoxCollider(colliders, lx - 9.5, lz - 1.0, 4.0, 7.6, 0.55);
+  addBoxCollider(colliders, lx + 9.5, lz - 1.0, 4.0, 7.6, 0.55);
 
   return { def, group, ringMesh, colliders };
 }
@@ -686,7 +688,7 @@ function buildSariBelediye(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLa
 
   const ringMesh = makeDiscoveryRing(lx - 10.5, lz);
   const colliders: ColliderBox[] = [];
-  addBoxCollider(colliders, lx + 0.5, lz, 14, 12);
+  addBoxCollider(colliders, lx + 0.5, lz, 14, 12, 9.6);
 
   return { def, group, ringMesh, colliders };
 }
@@ -757,9 +759,9 @@ function buildTekstilPark(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLan
 
   const ringMesh = makeDiscoveryRing(lx + 14.5, lz);
   const colliders: ColliderBox[] = [];
-  addBoxCollider(colliders, lx - 1.5, lz - 3.5, 15.5, 9.2);
-  addBoxCollider(colliders, lx + 8.8, lz - 5.2, 2.4, 2.4);
-  addBoxCollider(colliders, lx + 4.5, lz + 6.2, 8.2, 8.2);
+  addBoxCollider(colliders, lx - 1.5, lz - 3.5, 15.5, 9.2, 5.8);
+  addBoxCollider(colliders, lx + 8.8, lz - 5.2, 2.4, 2.4, 15.5);
+  addBoxCollider(colliders, lx + 4.5, lz + 6.2, 8.2, 8.2, 0.45);
 
   return { def, group, ringMesh, colliders };
 }
@@ -837,9 +839,9 @@ function buildForumAvm(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandma
 
   const ringMesh = makeDiscoveryRing(lx - 14.5, lz);
   const colliders: ColliderBox[] = [];
-  addBoxCollider(colliders, lx, lz - 7.2, 22, 5.6);
-  addBoxCollider(colliders, lx, lz + 7.2, 22, 5.6);
-  addBoxCollider(colliders, lx + 8.6, lz, 5.6, 18.0);
+  addBoxCollider(colliders, lx, lz - 7.2, 22, 5.6, 7.2);
+  addBoxCollider(colliders, lx, lz + 7.2, 22, 5.6, 7.2);
+  addBoxCollider(colliders, lx + 8.6, lz, 5.6, 18.0, 6.8);
 
   return { def, group, ringMesh, colliders };
 }
@@ -930,7 +932,7 @@ function buildTrenGari(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandma
 
   const ringMesh = makeDiscoveryRing(lx, lz - 7.5);
   const colliders: ColliderBox[] = [];
-  addBoxCollider(colliders, lx, lz + 1.5, 22, 13);
+  addBoxCollider(colliders, lx, lz + 1.5, 22, 13, 8.6);
 
   return { def, group, ringMesh, colliders };
 }
@@ -1066,8 +1068,8 @@ function buildOrtaMahalle(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLan
 
   const ringMesh = makeDiscoveryRing(lx - 12.2, lz);
   const colliders: ColliderBox[] = [];
-  addBoxCollider(colliders, lx - 4.6, lz - 3.8, 7.6, 6.4);
-  addBoxCollider(colliders, lx + 4.5, lz - 1.8, 2.8, 2.4);
+  addBoxCollider(colliders, lx - 4.6, lz - 3.8, 7.6, 6.4, 7.2);
+  addBoxCollider(colliders, lx + 4.5, lz - 1.8, 2.8, 2.4, 4.4);
 
   return { def, group, ringMesh, colliders };
 }
@@ -1191,10 +1193,10 @@ function buildUniversite(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLand
 
   const ringMesh = makeDiscoveryRing(lx - 15.5, lz);
   const colliders: ColliderBox[] = [];
-  addBoxCollider(colliders, lx + 3.2, lz - 6.4, 14.5, 7.6);
-  addBoxCollider(colliders, lx + 5.6, lz + 5.8, 8.8, 8.8);
-  addBoxCollider(colliders, lx - 12.5, lz - 3.2, 1.7, 1.7);
-  addBoxCollider(colliders, lx - 12.5, lz + 3.2, 1.7, 1.7);
+  addBoxCollider(colliders, lx + 3.2, lz - 6.4, 14.5, 7.6, 8.4);
+  addBoxCollider(colliders, lx + 5.6, lz + 5.8, 8.8, 8.8, 9.4);
+  addBoxCollider(colliders, lx - 12.5, lz - 3.2, 1.7, 1.7, 5.6);
+  addBoxCollider(colliders, lx - 12.5, lz + 3.2, 1.7, 1.7, 5.6);
 
   return { def, group, ringMesh, colliders };
 }

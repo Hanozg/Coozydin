@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AgendaModal } from './components/AgendaModal';
 import { CozyRoomView } from './components/CozyRoomView';
 import { EfelerCanvas, EfelerCanvasHandle, TouchDriveInput } from './components/EfelerCanvas';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { GameHUD } from './components/GameHUD';
 import { JournalModal } from './components/JournalModal';
 import { NpcDialogueModal } from './components/NpcDialogueModal';
@@ -247,8 +248,9 @@ export default function App() {
   const handleStreetEvent = useCallback(
     (type: StreetInteractionType) => {
       if (type === 'musicians') {
+        setExplorationMode((prev) => (prev === 'vehicle' ? 'walk' : prev));
         showErrandToast(
-          'Kent Meydanı’nda Zeybek çalıyor — Efeler halk oyununa başladı!'
+          'Kent Meydanı’nda Zeybek çalıyor — Efeler halk oyununa katıldınız!'
         );
       } else if (type === 'lokma') {
         setLokmaPower((p) => p + 1);
@@ -268,6 +270,8 @@ export default function App() {
         backward: false,
         left: false,
         right: false,
+        flap: false,
+        dive: false,
       });
       const isFirst = !chattedNpcIds.includes(npc.id);
       if (isFirst) {
@@ -369,6 +373,8 @@ export default function App() {
       backward: false,
       left: false,
       right: false,
+      flap: false,
+      dive: false,
     });
     setJournalOpen(false);
     setRealMapOpen(false);
@@ -443,7 +449,9 @@ export default function App() {
         !activeNpc &&
         !typing
       ) {
-        setExplorationMode((m) => (m === 'walk' ? 'vehicle' : 'walk'));
+        setExplorationMode((m) =>
+          m === 'vehicle' ? 'walk' : m === 'walk' ? 'sparrow' : 'vehicle'
+        );
       } else if (
         e.code === 'KeyC' &&
         phase === 'playing' &&
@@ -454,7 +462,9 @@ export default function App() {
         !activeNpc &&
         !typing
       ) {
-        setCameraPreset((p) => (p === 'first_person' ? 'isometric' : 'first_person'));
+        setCameraPreset((p) =>
+          p === 'isometric' ? 'perspective' : p === 'perspective' ? 'first_person' : 'isometric'
+        );
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -501,48 +511,61 @@ export default function App() {
         </div>
       )}
       {!inHome ? (
-        <EfelerCanvas
-          ref={canvasRef}
-          phase={effectivePhase}
-          explorationMode={explorationMode}
-          avatarConfig={cozyRoomState.avatarConfig || DEFAULT_AVATAR_CONFIG}
-          vehicleConfig={vehicleConfig}
-          timeOfDay={timeOfDay}
-          season={season}
-          weather={weather}
-          autoAtmosphere={autoAtmosphere}
-          cameraPreset={cameraPreset}
-          discoveredIds={discoveredIds}
-          coins={coins}
-          activeErrand={activeErrand}
-          errandPickedUp={errandPickedUp}
-          initialTransform={lastTransformRef.current}
-          onHudUpdate={handleHudUpdate}
-          onDiscoverLandmark={handleDiscoverLandmark}
-          onErrandAction={handleErrandAction}
-          onInspectSignpost={handleInspectSignpost}
-          onStreetEvent={handleStreetEvent}
-          onInteractNpc={handleInteractNpc}
-          onWalkChatMessage={showErrandToast}
-          onAutoTimeSync={setTimeOfDay}
-          onAutoWeatherSync={handleAutoWeatherSync}
-          onEnterHome={handleEnterHome}
-        />
+        <ErrorBoundary
+          key="city-boundary"
+          fallbackTitle="Efeler Sahnesi Yenileniyor"
+          onReset={() => setPhase('playing')}
+        >
+          <EfelerCanvas
+            ref={canvasRef}
+            phase={effectivePhase}
+            explorationMode={explorationMode}
+            avatarConfig={cozyRoomState.avatarConfig || DEFAULT_AVATAR_CONFIG}
+            vehicleConfig={vehicleConfig}
+            timeOfDay={timeOfDay}
+            season={season}
+            weather={weather}
+            autoAtmosphere={autoAtmosphere}
+            cameraPreset={cameraPreset}
+            discoveredIds={discoveredIds}
+            coins={coins}
+            activeErrand={activeErrand}
+            errandPickedUp={errandPickedUp}
+            initialTransform={lastTransformRef.current}
+            onHudUpdate={handleHudUpdate}
+            onDiscoverLandmark={handleDiscoverLandmark}
+            onErrandAction={handleErrandAction}
+            onInspectSignpost={handleInspectSignpost}
+            onStreetEvent={handleStreetEvent}
+            onInteractNpc={handleInteractNpc}
+            onWalkChatMessage={showErrandToast}
+            onAutoTimeSync={setTimeOfDay}
+            onAutoWeatherSync={handleAutoWeatherSync}
+            onCollectCrumb={(amt) => setCoins((c) => c + amt)}
+            onEnterHome={handleEnterHome}
+          />
+        </ErrorBoundary>
       ) : (
-        <CozyRoomView
-          roomState={cozyRoomState}
-          weather={weather}
-          lofiTrack={lofiTrack}
-          isMuted={isMuted}
-          musicEnabled={musicEnabled}
-          onChangeRoomState={setCozyRoomState}
-          onChangeWeather={handleChangeWeather}
-          onChangeLofiTrack={handleChangeLofiTrack}
-          onToggleMute={handleToggleMute}
-          onToggleMusic={handleToggleMusic}
-          onOpenAgenda={() => setAgendaOpen(true)}
-          onExitHome={handleExitHome}
-        />
+        <ErrorBoundary
+          key="home-boundary"
+          fallbackTitle="Sıcak Yuvam Yenileniyor"
+          onReset={handleExitHome}
+        >
+          <CozyRoomView
+            roomState={cozyRoomState}
+            weather={weather}
+            lofiTrack={lofiTrack}
+            isMuted={isMuted}
+            musicEnabled={musicEnabled}
+            onChangeRoomState={setCozyRoomState}
+            onChangeWeather={handleChangeWeather}
+            onChangeLofiTrack={handleChangeLofiTrack}
+            onToggleMute={handleToggleMute}
+            onToggleMusic={handleToggleMusic}
+            onOpenAgenda={() => setAgendaOpen(true)}
+            onExitHome={handleExitHome}
+          />
+        </ErrorBoundary>
       )}
 
       {phase === 'title' && !inHome && <TitleScreen onStart={handleStartGame} />}
@@ -593,11 +616,14 @@ export default function App() {
               backward: false,
               left: false,
               right: false,
+              flap: false,
+              dive: false,
             });
             setPhase('paused');
           }}
           onDiscoverNearby={() => canvasRef.current?.triggerDiscoverNearby()}
           onHorn={() => canvasRef.current?.triggerHorn()}
+          onChirp={() => canvasRef.current?.triggerChirp()}
           onTouchInput={handleTouchInput}
           onAdjustZoom={handleAdjustZoom}
         />
@@ -628,10 +654,17 @@ export default function App() {
       )}
 
       {realMapOpen && !inHome && (
-        <RealAydinMapModal
-          onJumpTo3DLandmark={handleNavigateToLandmark}
-          onClose={() => setRealMapOpen(false)}
-        />
+        <ErrorBoundary
+          key="map-boundary"
+          fallbackTitle="Harita Yenileniyor"
+          fallbackActionLabel="Haritayı Kapat"
+          onReset={() => setRealMapOpen(false)}
+        >
+          <RealAydinMapModal
+            onJumpTo3DLandmark={handleNavigateToLandmark}
+            onClose={() => setRealMapOpen(false)}
+          />
+        </ErrorBoundary>
       )}
 
       {agendaOpen && (

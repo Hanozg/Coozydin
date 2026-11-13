@@ -108,15 +108,15 @@ export function JournalModal({
                           }`}
                         >
                           {isDiscovered ? (
-                            <>
+                            <span key="discovered" className="inline-flex items-center gap-1">
                               <Check className="w-3.5 h-3.5" aria-hidden="true" />
                               <span>Keşfedildi</span>
-                            </>
+                            </span>
                           ) : (
-                            <>
+                            <span key="pending" className="inline-flex items-center gap-1">
                               <Compass className="w-3.5 h-3.5" aria-hidden="true" />
                               <span>Bekliyor</span>
-                            </>
+                            </span>
                           )}
                         </span>
                       </div>
@@ -190,10 +190,12 @@ export function JournalModal({
                       <p className="text-xs text-[#543E2B] max-w-xl">{err.description}</p>
                       {isActive && (
                         <p className="text-xs text-[#4B743B] font-semibold pt-0.5">
-                          Durum:{' '}
-                          {errandPickedUp
-                            ? `Teslimat için ${toName} noktasına sürün`
-                            : `Paketi almak için ${fromName} noktasına sürün`}
+                          <span>Durum: </span>
+                          <span key={errandPickedUp ? 'deliver' : 'pickup'}>
+                            {errandPickedUp
+                              ? `Teslimat için ${toName} noktasına sürün`
+                              : `Paketi almak için ${fromName} noktasına sürün`}
+                          </span>
                         </p>
                       )}
                     </div>
@@ -211,7 +213,9 @@ export function JournalModal({
                             : 'bg-[#C85A32] text-[#FAF2E2] hover:bg-[#B44D28]'
                         }`}
                       >
-                        {isActive ? 'Görevi Bırak' : 'Görevi Al'}
+                        <span key={isActive ? 'drop' : 'take'}>
+                          {isActive ? 'Görevi Bırak' : 'Görevi Al'}
+                        </span>
                       </button>
                     </div>
                   </div>
