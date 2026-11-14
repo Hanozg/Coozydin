@@ -176,6 +176,7 @@ interface WalkerAgent {
   targetZ: number;
   speed: number;
   isPlazaWalker: boolean;
+  plazaZone: 'north' | 'south';
   doorId: string | null;
   state: 'walking' | 'entering' | 'inside' | 'exiting';
   timer: number;
@@ -220,10 +221,27 @@ export function createPedestrianSystem(): PedestrianSystem {
   const colorTmp = new THREE.Color();
   const doorLandmarks = LANDMARKS.filter((l) => l.doorPosition);
 
-  const pickPlazaPoint = (): [number, number] => {
-    const ang = Math.random() * Math.PI * 2;
-    const rad = 4.6 + Math.random() * 9.5;
-    return [Math.cos(ang) * rad, 12 + Math.sin(ang) * rad];
+  const pickPlazaPoint = (zone: 'north' | 'south'): [number, number] => {
+    if (zone === 'north') {
+      // Large open paved event plaza south of Burger King / Popeyes / Usta Döner & north of Belediye Kafeleri
+      const px = (Math.random() - 0.5) * 21.6; // [-10.8, 10.8]
+      const pz = -7.6 + Math.random() * 10.4; // [-7.6, +2.8]
+      return [px, pz];
+    }
+    // Southern promenade south of the turquoise pool & monument (around Fig Tree & Zeybek)
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const px = (Math.random() - 0.5) * 21.6; // [-10.8, 10.8]
+      const pz = 18.8 + Math.random() * 6.8; // [18.8, 25.6]
+      // Avoid Living Fig Tree ([0, 21.8]), Zeybek Musicians ([-8.2, 20.6]), Dondurmacı ([8.8, 22.8])
+      if (
+        Math.hypot(px, pz - 21.8) > 2.6 &&
+        Math.hypot(px + 8.2, pz - 20.6) > 2.3 &&
+        Math.hypot(px - 8.8, pz - 22.8) > 2.2
+      ) {
+        return [px, pz];
+      }
+    }
+    return [3.6, 22.4];
   };
 
   const streetWaypoints: [number, number][] = [
@@ -258,8 +276,9 @@ export function createPedestrianSystem(): PedestrianSystem {
 
     const isPlaza = i < 34; // Dense lively crowd in Atatürk Kent Meydanı!
     if (isPlaza) {
-      const [sx, sz] = pickPlazaPoint();
-      const [tx, tz] = pickPlazaPoint();
+      const plazaZone: 'north' | 'south' = i < 20 ? 'north' : 'south';
+      const [sx, sz] = pickPlazaPoint(plazaZone);
+      const [tx, tz] = pickPlazaPoint(plazaZone);
       agents.push({
         x: sx,
         z: sz,
@@ -267,6 +286,7 @@ export function createPedestrianSystem(): PedestrianSystem {
         targetZ: tz,
         speed: 1.05 + Math.random() * 0.55,
         isPlazaWalker: true,
+        plazaZone,
         doorId: null,
         state: 'walking',
         timer: Math.random() * 2,
@@ -285,6 +305,7 @@ export function createPedestrianSystem(): PedestrianSystem {
         targetZ: dz,
         speed: 1.15 + Math.random() * 0.5,
         isPlazaWalker: false,
+        plazaZone: 'north',
         doorId: doorLm.id,
         state: 'walking',
         timer: 0,
@@ -336,10 +357,10 @@ export function createPedestrianSystem(): PedestrianSystem {
 
           if (dist < 0.6) {
             if (a.isPlazaWalker) {
-              // Pause briefly to admire Kent Meydanı, then pick another spot
+              // Pause briefly to admire Kent Meydanı, then pick another spot in the same walkable zone
               a.timer -= dt;
               if (a.timer <= 0) {
-                const [nx, nz] = pickPlazaPoint();
+                const [nx, nz] = pickPlazaPoint(a.plazaZone);
                 a.targetX = nx;
                 a.targetZ = nz;
                 a.timer = 1.0 + Math.random() * 2.5;

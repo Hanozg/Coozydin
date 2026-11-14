@@ -125,6 +125,7 @@ function matchGameLandmark(placeName: string): LandmarkDef | null {
     { keywords: ['tren garı', 'garı', 'tcdd aydın'], landmarkId: 'trengari' },
     { keywords: ['orta mahalle', 'ortamahalle'], landmarkId: 'ortamahalle' },
     { keywords: ['adnan menderes', 'adü', 'üniversite', 'kampüs', 'aytepe'], landmarkId: 'universite' },
+    { keywords: ['magnesia', 'artemis', 'germencik'], landmarkId: 'magnesia' },
   ];
 
   for (const rule of rules) {

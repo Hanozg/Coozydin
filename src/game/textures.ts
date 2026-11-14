@@ -318,13 +318,13 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
 
   signCtx.fillStyle = '#EAD4B0';
   signCtx.font = '20px sans-serif';
-  signCtx.fillText('Nysa · Aphrodisias · Magnesia · Milet', 256, 114);
+  signCtx.fillText('Nysa · Alabanda · Alinda · Didyma', 256, 114);
 
   signCtx.fillStyle = '#E0A44B';
-  signCtx.fillRect(86, 146, 340, 56);
+  signCtx.fillRect(66, 146, 380, 56);
   signCtx.fillStyle = '#2A1D13';
-  signCtx.font = 'bold 24px sans-serif';
-  signCtx.fillText('ÇOK YAKINDA · YENİ ROTA!', 256, 182);
+  signCtx.font = 'bold 23px sans-serif';
+  signCtx.fillText('MAGNESIA AÇILDI · BATI YOLU!', 256, 182);
 
   const ancientSignpost = finalizeTexture(signCanvas, aniso, 1, 1, true);
   ancientSignpost.wrapS = THREE.ClampToEdgeWrapping;

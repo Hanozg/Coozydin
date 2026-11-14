@@ -1,12 +1,10 @@
-import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import {
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  ArrowUp,
   Calendar,
+  ChevronDown,
+  ChevronUp,
   CloudRain,
   Coffee,
   DoorOpen,
@@ -21,11 +19,14 @@ import {
   RotateCcw,
   RotateCw,
   ShoppingBag,
+  SlidersHorizontal,
   Sparkles,
   User,
   Volume2,
   VolumeX,
+  X,
 } from 'lucide-react';
+import { VirtualJoystick } from './VirtualJoystick';
 import {
   AVATAR_HAIR_STYLES,
   AVATAR_SHIRT_SWATCHES,
@@ -383,6 +384,8 @@ export function CozyRoomView({
   const [drawerTab, setDrawerTab] = useState<
     'furniture' | 'shop' | 'exterior' | 'avatar' | 'style' | 'pets' | 'atmosphere'
   >('furniture');
+  const [roomDockCollapsed, setRoomDockCollapsed] = useState(false);
+  const [mobileRoomTab, setMobileRoomTab] = useState<'room' | 'ambient'>('room');
   const [roomToast, setRoomToast] = useState<string | null>(null);
   const [nearbyInteractable, setNearbyInteractable] = useState<NearbyRoomInteractable | null>(null);
   const [isSitting, setIsSitting] = useState(false);
@@ -390,6 +393,18 @@ export function CozyRoomView({
     if (typeof window === 'undefined') return false;
     return window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768;
   });
+
+  const toggleRoomTab = (
+    tab: 'furniture' | 'shop' | 'exterior' | 'avatar' | 'style' | 'pets' | 'atmosphere'
+  ) => {
+    if (editOpen && drawerTab === tab) {
+      setEditOpen(false);
+    } else {
+      setDrawerTab(tab);
+      setEditOpen(true);
+      setPlacementMode(false);
+    }
+  };
 
   const avatarConfig: AvatarConfig = {
     ...DEFAULT_AVATAR_CONFIG,
@@ -435,6 +450,8 @@ export function CozyRoomView({
     down: false,
     left: false,
     right: false,
+    joyX: 0,
+    joyY: 0,
   });
 
   const petBounceRef = useRef({ cat: 0, dog: 0 });
@@ -982,7 +999,7 @@ export function CozyRoomView({
     };
     const onBlur = () => {
       heldKeys.clear();
-      touchMoveRef.current = { up: false, down: false, left: false, right: false };
+      touchMoveRef.current = { up: false, down: false, left: false, right: false, joyX: 0, joyY: 0 };
     };
 
     let pinchStartDist = 0;
@@ -1247,6 +1264,7 @@ export function CozyRoomView({
         const av = avatarWalkRef.current;
         let moveX = 0;
         let moveZ = 0;
+        let walkMag = 1;
         if (!placementModeRef.current) {
           const up = heldKeys.has('KeyW') || heldKeys.has('ArrowUp') || touchMoveRef.current.up;
           const down =
@@ -1256,50 +1274,53 @@ export function CozyRoomView({
           const right =
             heldKeys.has('KeyD') || heldKeys.has('ArrowRight') || touchMoveRef.current.right;
 
+          const fwdAmt = THREE.MathUtils.clamp(
+            (up ? 1 : 0) - (down ? 1 : 0) + touchMoveRef.current.joyY,
+            -1,
+            1
+          );
+          const rightAmt = THREE.MathUtils.clamp(
+            (right ? 1 : 0) - (left ? 1 : 0) + touchMoveRef.current.joyX,
+            -1,
+            1
+          );
+
           // Isometric screen-aligned directions
-          if (up) {
-            moveX -= 1;
-            moveZ -= 1;
-          }
-          if (down) {
-            moveX += 1;
-            moveZ += 1;
-          }
-          if (left) {
-            moveX -= 1;
-            moveZ += 1;
-          }
-          if (right) {
-            moveX += 1;
-            moveZ -= 1;
-          }
+          moveX = -fwdAmt + rightAmt;
+          moveZ = -fwdAmt - rightAmt;
+          walkMag = Math.min(1, Math.hypot(fwdAmt, rightAmt));
         }
 
         let isMoving = false;
-        if (moveX !== 0 || moveZ !== 0) {
+        const rawLen = Math.hypot(moveX, moveZ);
+        if (rawLen > 0.05) {
           if (isSittingRef.current) setIsSitting(false);
           av.targetX = null;
           av.targetZ = null;
-          const len = Math.hypot(moveX, moveZ);
-          moveX /= len;
-          moveZ /= len;
+          moveX /= rawLen;
+          moveZ /= rawLen;
           isMoving = true;
-        } else if (av.targetX !== null && av.targetZ !== null && !isSittingRef.current) {
-          const dx = av.targetX - av.x;
-          const dz = av.targetZ - av.z;
-          const dist = Math.hypot(dx, dz);
-          if (dist < 0.14) {
-            av.targetX = null;
-            av.targetZ = null;
-          } else {
-            moveX = dx / dist;
-            moveZ = dz / dist;
-            isMoving = true;
+        } else {
+          moveX = 0;
+          moveZ = 0;
+          if (av.targetX !== null && av.targetZ !== null && !isSittingRef.current) {
+            const dx = av.targetX - av.x;
+            const dz = av.targetZ - av.z;
+            const dist = Math.hypot(dx, dz);
+            if (dist < 0.14) {
+              av.targetX = null;
+              av.targetZ = null;
+            } else {
+              moveX = dx / dist;
+              moveZ = dz / dist;
+              walkMag = 1;
+              isMoving = true;
+            }
           }
         }
 
         if (isMoving) {
-          const walkSpeed = 2.45;
+          const walkSpeed = 2.45 * Math.max(0.3, walkMag);
           let nx = THREE.MathUtils.clamp(av.x + moveX * walkSpeed * dt, -3.35, 3.35);
           let nz = THREE.MathUtils.clamp(av.z + moveZ * walkSpeed * dt, -3.35, 3.35);
 
@@ -1607,26 +1628,6 @@ export function CozyRoomView({
     });
   };
 
-  const bindPadButton = (dir: 'up' | 'down' | 'left' | 'right') => ({
-    onPointerDown: (e: ReactPointerEvent<HTMLButtonElement>) => {
-      e.preventDefault();
-      e.currentTarget.setPointerCapture(e.pointerId);
-      touchMoveRef.current[dir] = true;
-    },
-    onPointerUp: (e: ReactPointerEvent<HTMLButtonElement>) => {
-      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-        e.currentTarget.releasePointerCapture(e.pointerId);
-      }
-      touchMoveRef.current[dir] = false;
-    },
-    onPointerCancel: () => {
-      touchMoveRef.current[dir] = false;
-    },
-    onLostPointerCapture: () => {
-      touchMoveRef.current[dir] = false;
-    },
-  });
-
   const selectedLabel =
     FURNITURE_CATALOG.find((c) => c.id === selectedFurniture)?.label || 'Eşya';
 
@@ -1737,53 +1738,44 @@ export function CozyRoomView({
             </button>
           )}
 
-          {/* Compact Touch Walk Pad when Avatar is placed */}
+          {/* Compact Analog Walk Joystick when Avatar is placed */}
           {touchPadOpen && !placementMode && avatarPlaced && !editOpen && (
             <div className="w-full flex items-end justify-between px-1 sm:px-3">
-              <div className="pointer-events-auto grid grid-cols-3 gap-1 w-32">
-                <div />
-                <button
-                  type="button"
-                  aria-label="Yukarı Yürü"
-                  {...bindPadButton('up')}
-                  className="h-10 rounded-xl bg-[#F7EEDC]/92 active:bg-[#E2D0AF] border-2 border-[#B99464] text-[#3A2618] flex items-center justify-center touch-none select-none cursor-pointer"
-                >
-                  <ArrowUp className="w-4 h-4" aria-hidden="true" />
-                </button>
-                <div />
-                <button
-                  type="button"
-                  aria-label="Sola Yürü"
-                  {...bindPadButton('left')}
-                  className="h-10 rounded-xl bg-[#F7EEDC]/92 active:bg-[#E2D0AF] border-2 border-[#B99464] text-[#3A2618] flex items-center justify-center touch-none select-none cursor-pointer"
-                >
-                  <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Aşağı Yürü"
-                  {...bindPadButton('down')}
-                  className="h-10 rounded-xl bg-[#F7EEDC]/92 active:bg-[#E2D0AF] border-2 border-[#B99464] text-[#3A2618] flex items-center justify-center touch-none select-none cursor-pointer"
-                >
-                  <ArrowDown className="w-4 h-4" aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Sağa Yürü"
-                  {...bindPadButton('right')}
-                  className="h-10 rounded-xl bg-[#F7EEDC]/92 active:bg-[#E2D0AF] border-2 border-[#B99464] text-[#3A2618] flex items-center justify-center touch-none select-none cursor-pointer"
-                >
-                  <ArrowRight className="w-4 h-4" aria-hidden="true" />
-                </button>
-              </div>
+              <VirtualJoystick
+                size={112}
+                knobSize={46}
+                accent="olive"
+                ariaLabel="Oda İçi Yürüme Joysticki"
+                label="Yürü"
+                onChange={({ x, y }) => {
+                  touchMoveRef.current.joyX = x;
+                  touchMoveRef.current.joyY = y;
+                }}
+              />
               <div className="rounded-xl bg-[#F7EEDC]/90 border border-[#B99464]/60 px-2.5 py-1.5 text-[11px] font-medium text-[#5B432F]">
-                Zemine dokunarak da yürüyebilirsin
+                Joystick veya zemine dokunarak yürü
               </div>
             </div>
           )}
 
-          {editOpen && (
+          {!roomDockCollapsed && editOpen && (
             <div className="pointer-events-auto w-full max-w-2xl max-h-[42dvh] overflow-y-auto efeler-scroll rounded-2xl bg-[#F7EEDC]/98 border-2 border-[#B99464] p-3.5 sm:p-4 text-[#3A2618] shadow-2xl">
+              {/* Drawer Header + Close Button */}
+              <div className="flex items-center justify-between gap-2 pb-2 mb-2.5 border-b border-[#B99464]/35">
+                <div className="text-xs font-bold text-[#3A2618]">
+                  Oda &amp; Yaşam Alanı Tasarımı
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditOpen(false)}
+                  aria-label="Oda Tasarım Panelini Kapat"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#EDE0C6] hover:bg-[#E2D1B2] text-[11px] font-semibold text-[#5B432F] transition-colors cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>Kapat</span>
+                </button>
+              </div>
+
               {/* Tabs */}
               <div className="flex flex-wrap items-center gap-1.5 pb-2.5 mb-3 border-b border-[#B99464]/40">
                 {(
@@ -1818,7 +1810,7 @@ export function CozyRoomView({
                     <div className="text-xs text-[#6B5038]">
                       Bey Camii hayır lokması ve keşiflerden kazandığın <strong>Lokma Puanı</strong> ile koltuk, pikap ve oda mobilyalarının yeni görünümlerini aç!
                     </div>
-                    <div className="px-3 py-1 rounded-full bg-[#EFE0C3] border border-[#B99464] text-xs font-bold text-[#8F5624] font-mono-num shrink-0">
+                    <div className="px-3 py-1 rounded-lg bg-[#EFE0C3] border border-[#B99464] text-xs font-bold text-[#8F5624] font-mono-num shrink-0">
                       Bakiye: {lokmaPower} Lokma
                     </div>
                   </div>
@@ -2381,178 +2373,406 @@ export function CozyRoomView({
             </div>
           )}
 
-          {/* Bottom Bar */}
-          <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 rounded-2xl bg-[#F7EEDC]/96 border-2 border-[#B99464] px-2.5 sm:px-3 py-1.5 sm:py-2 text-[#3A2618] shadow-lg max-w-[96vw] overflow-x-auto efeler-scroll">
+          {/* Collapsible Structured Bottom Bar */}
+          <div className="pointer-events-auto flex flex-col items-center max-w-full">
             <button
               type="button"
-              onClick={() => {
-                setPlacementMode((v) => !v);
-                setEditOpen(false);
-              }}
-              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                placementMode
-                  ? 'bg-[#C85A32] text-[#FAF2E2]'
-                  : 'bg-[#EDE0C6] hover:bg-[#E2D1B2] text-[#3A2618]'
-              }`}
+              onClick={() => setRoomDockCollapsed((v) => !v)}
+              className="inline-flex items-center gap-2 px-4 py-1 rounded-t-xl bg-[#F7EEDC]/96 border-2 border-b-0 border-[#B99464] text-[11px] font-semibold text-[#5B432F] hover:text-[#3A2618] transition-colors cursor-pointer"
             >
-              <Move className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Eşya Yerleştir</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                if (editOpen && drawerTab === 'shop') {
-                  setEditOpen(false);
-                } else {
-                  setDrawerTab('shop');
-                  setEditOpen(true);
-                  setPlacementMode(false);
-                }
-              }}
-              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                editOpen && drawerTab === 'shop'
-                  ? 'bg-[#C85A32] text-[#FAF2E2]'
-                  : 'bg-[#EFE0C3] hover:bg-[#E4D1AE] border border-[#C85A32]/40 text-[#3A2618]'
-              }`}
-            >
-              <ShoppingBag className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
-              <span>Mağaza</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                if (editOpen && drawerTab === 'exterior') {
-                  setEditOpen(false);
-                } else {
-                  setDrawerTab('exterior');
-                  setEditOpen(true);
-                  setPlacementMode(false);
-                }
-              }}
-              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                editOpen && drawerTab === 'exterior'
-                  ? 'bg-[#5D8A48] text-[#FAF2E2]'
-                  : 'bg-[#EDE0C6] hover:bg-[#E2D1B2] text-[#3A2618]'
-              }`}
-            >
-              <Home className="w-3.5 h-3.5 text-[#4B743B]" aria-hidden="true" />
-              <span>Ev Dışı</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setDrawerTab('furniture');
-                setEditOpen((o) => !o);
-              }}
-              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                editOpen && drawerTab === 'furniture'
-                  ? 'bg-[#C85A32] text-[#FAF2E2]'
-                  : 'bg-[#EDE0C6] hover:bg-[#E2D1B2] text-[#3A2618]'
-              }`}
-            >
-              <Paintbrush className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Odayı Düzenle</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setDrawerTab('avatar');
-                setEditOpen(true);
-              }}
-              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                editOpen && drawerTab === 'avatar'
-                  ? 'bg-[#5D8A48] text-[#FAF2E2]'
-                  : 'bg-[#EDE0C6] hover:bg-[#E2D1B2] text-[#3A2618]'
-              }`}
-            >
-              <User className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
-              <span>Avatarım</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                onChangeRoomState({ ...roomState, lampOn: !roomState.lampOn })
-              }
-              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                roomState.lampOn
-                  ? 'bg-[#EFE0C3] border-[#C85A32]/50 text-[#B84C27]'
-                  : 'bg-[#EDE0C6] border-[#B99464]/50 text-[#6B5038]'
-              }`}
-            >
-              <LampDesk className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Lamba</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setDrawerTab('pets');
-                setEditOpen(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#EDE0C6] hover:bg-[#E2D1B2] text-xs font-semibold text-[#3A2618] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <PawPrint className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
-              <span>Dostlarım</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setDrawerTab('atmosphere');
-                setEditOpen(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#EDE0C6] hover:bg-[#E2D1B2] text-xs font-semibold text-[#3A2618] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <CloudRain className="w-3.5 h-3.5 text-[#3B6E8C]" aria-hidden="true" />
-              <span>Hava &amp; Lo-Fi</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setTouchPadOpen((v) => !v)}
-              title="Yürüme Tuşları"
-              aria-label="Yürüme Tuşları"
-              className={`p-1.5 rounded-xl border transition-colors shrink-0 cursor-pointer ${
-                touchPadOpen
-                  ? 'bg-[#EFE0C3] border-[#C85A32]/60 text-[#B84C27]'
-                  : 'bg-[#EDE0C6] border-[#B99464]/50 text-[#8A735D]'
-              }`}
-            >
-              <Gamepad2 className="w-3.5 h-3.5" aria-hidden="true" />
-            </button>
-
-            <button
-              type="button"
-              onClick={onToggleMusic}
-              title="Lo-Fi Müziği Aç/Kapat"
-              aria-label="Müziği Aç/Kapat"
-              className={`p-1.5 rounded-xl border transition-colors shrink-0 cursor-pointer ${
-                musicEnabled && !isMuted
-                  ? 'bg-[#EFE0C3] border-[#C85A32]/60 text-[#B84C27]'
-                  : 'bg-[#EDE0C6] border-[#B99464]/50 text-[#8A735D]'
-              }`}
-            >
-              <Music className="w-3.5 h-3.5" aria-hidden="true" />
-            </button>
-
-            <button
-              type="button"
-              onClick={onToggleMute}
-              title="Tüm Sesler"
-              aria-label="Sesi Aç/Kapat"
-              className="p-1.5 rounded-xl bg-[#EDE0C6] hover:bg-[#E2D1B2] border border-[#B99464]/50 text-[#3A2618] transition-colors shrink-0 cursor-pointer"
-            >
-              {isMuted ? (
-                <VolumeX key="muted" className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
+              {roomDockCollapsed ? (
+                <span key="room-collapsed" className="inline-flex items-center gap-1.5">
+                  <ChevronUp className="w-3.5 h-3.5 text-[#C85A32]" aria-hidden="true" />
+                  <span>Oda Panelini Aç</span>
+                </span>
               ) : (
-                <Volume2 key="unmuted" className="w-3.5 h-3.5 text-[#4B743B]" aria-hidden="true" />
+                <span key="room-expanded" className="inline-flex items-center gap-1.5">
+                  <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>Paneli Gizle</span>
+                </span>
               )}
             </button>
+
+            {!roomDockCollapsed && (
+              <div className="rounded-2xl bg-[#F7EEDC]/96 border-2 border-[#B99464] px-3 py-2 sm:px-3.5 sm:py-2.5 text-[#3A2618] shadow-xl max-w-[96vw]">
+                {/* Desktop & Tablet 2-Row Structured Bar */}
+                <div className="hidden md:flex flex-col gap-2">
+                  {/* Row 1: Oda & Tasarım */}
+                  <div className="flex flex-wrap items-center justify-center gap-1.5">
+                    <span className="text-[11px] font-bold text-[#6B5038] mr-1 whitespace-nowrap">
+                      Oda &amp; Tasarım
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPlacementMode((v) => !v);
+                        setEditOpen(false);
+                      }}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        placementMode
+                          ? 'bg-[#C85A32] border-[#A74522] text-[#FAF2E2]'
+                          : 'bg-[#EDE0C6] border-[#B99464]/60 hover:bg-[#E2D1B2] text-[#3A2618]'
+                      }`}
+                    >
+                      <Move className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Eşya Taşı</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleRoomTab('shop')}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        editOpen && drawerTab === 'shop'
+                          ? 'bg-[#C85A32] border-[#A74522] text-[#FAF2E2]'
+                          : 'bg-[#EFE0C3] hover:bg-[#E4D1AE] border-[#C85A32]/40 text-[#3A2618]'
+                      }`}
+                    >
+                      <ShoppingBag className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Mağaza</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleRoomTab('furniture')}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        editOpen && drawerTab === 'furniture'
+                          ? 'bg-[#C85A32] border-[#A74522] text-[#FAF2E2]'
+                          : 'bg-[#EDE0C6] border-[#B99464]/60 hover:bg-[#E2D1B2] text-[#3A2618]'
+                      }`}
+                    >
+                      <Paintbrush className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Eşyalar &amp; Düzen</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleRoomTab('style')}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        editOpen && drawerTab === 'style'
+                          ? 'bg-[#C85A32] border-[#A74522] text-[#FAF2E2]'
+                          : 'bg-[#EDE0C6] border-[#B99464]/60 hover:bg-[#E2D1B2] text-[#3A2618]'
+                      }`}
+                    >
+                      <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Duvar &amp; Zemin</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleRoomTab('exterior')}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        editOpen && drawerTab === 'exterior'
+                          ? 'bg-[#5D8A48] border-[#4A7138] text-[#FAF2E2]'
+                          : 'bg-[#EDE0C6] border-[#B99464]/60 hover:bg-[#E2D1B2] text-[#3A2618]'
+                      }`}
+                    >
+                      <Home className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Ev Dışı</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleRoomTab('avatar')}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        editOpen && drawerTab === 'avatar'
+                          ? 'bg-[#5D8A48] border-[#4A7138] text-[#FAF2E2]'
+                          : 'bg-[#EDE0C6] border-[#B99464]/60 hover:bg-[#E2D1B2] text-[#3A2618]'
+                      }`}
+                    >
+                      <User className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Avatarım</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleRoomTab('pets')}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        editOpen && drawerTab === 'pets'
+                          ? 'bg-[#5D8A48] border-[#4A7138] text-[#FAF2E2]'
+                          : 'bg-[#EDE0C6] border-[#B99464]/60 hover:bg-[#E2D1B2] text-[#3A2618]'
+                      }`}
+                    >
+                      <PawPrint className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Dostlarım</span>
+                    </button>
+                  </div>
+
+                  {/* Row 2: Ortam, Kontrol & Ses */}
+                  <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1.5 border-t border-[#B99464]/30">
+                    <span className="text-[11px] font-bold text-[#6B5038] mr-1 whitespace-nowrap">
+                      Ortam &amp; Ses
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onChangeRoomState({ ...roomState, lampOn: !roomState.lampOn })
+                      }
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        roomState.lampOn
+                          ? 'bg-[#EFE0C3] border-[#C85A32]/60 text-[#B84C27]'
+                          : 'bg-[#EDE0C6] border-[#B99464]/50 text-[#6B5038]'
+                      }`}
+                    >
+                      <LampDesk className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>
+                        Lamba:{' '}
+                        <span key={roomState.lampOn ? 'on' : 'off'}>
+                          {roomState.lampOn ? 'Açık' : 'Kapalı'}
+                        </span>
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleRoomTab('atmosphere')}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        editOpen && drawerTab === 'atmosphere'
+                          ? 'bg-[#5D8A48] border-[#4A7138] text-[#FAF2E2]'
+                          : 'bg-[#EDE0C6] border-[#B99464]/60 hover:bg-[#E2D1B2] text-[#3A2618]'
+                      }`}
+                    >
+                      <CloudRain className="w-3.5 h-3.5 text-[#3B6E8C]" aria-hidden="true" />
+                      <span>Hava &amp; Lo-Fi</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setTouchPadOpen((v) => {
+                          if (v) {
+                            touchMoveRef.current.joyX = 0;
+                            touchMoveRef.current.joyY = 0;
+                          }
+                          return !v;
+                        })
+                      }
+                      title="Ekrandaki Yürüme Joystickini Göster/Gizle"
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        touchPadOpen
+                          ? 'bg-[#EFE0C3] border-[#C85A32]/60 text-[#B84C27]'
+                          : 'bg-[#EDE0C6] border-[#B99464]/50 text-[#5B432F]'
+                      }`}
+                    >
+                      <Gamepad2 className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Joystick</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={onToggleMusic}
+                      title="Lo-Fi Müziği Aç/Kapat"
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        musicEnabled && !isMuted
+                          ? 'bg-[#EFE0C3] border-[#C85A32]/60 text-[#B84C27]'
+                          : 'bg-[#EDE0C6] border-[#B99464]/50 text-[#5B432F]'
+                      }`}
+                    >
+                      <Music className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Müzik</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={onToggleMute}
+                      title="Tüm Sesleri Aç/Kapat"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#EDE0C6] hover:bg-[#E2D1B2] border border-[#B99464]/50 text-xs font-semibold text-[#3A2618] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                    >
+                      {isMuted ? (
+                        <VolumeX key="muted" className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
+                      ) : (
+                        <Volume2 key="unmuted" className="w-3.5 h-3.5 text-[#4B743B]" aria-hidden="true" />
+                      )}
+                      <span>{isMuted ? 'Sessiz' : 'Ses'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Mobile Compact 2-Tab Layout */}
+                <div className="flex md:hidden flex-col gap-2">
+                  <div className="flex items-center justify-center gap-1 p-0.5 rounded-xl bg-[#E8D8B9]">
+                    <button
+                      type="button"
+                      onClick={() => setMobileRoomTab('room')}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${
+                        mobileRoomTab === 'room'
+                          ? 'bg-[#C85A32] text-[#FAF2E2]'
+                          : 'text-[#5B432F]'
+                      }`}
+                    >
+                      <Paintbrush className="w-3 h-3" aria-hidden="true" />
+                      <span>Tasarım</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMobileRoomTab('ambient')}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${
+                        mobileRoomTab === 'ambient'
+                          ? 'bg-[#5B3D28] text-[#FAF2E2]'
+                          : 'text-[#5B432F]'
+                      }`}
+                    >
+                      <SlidersHorizontal className="w-3 h-3" aria-hidden="true" />
+                      <span>Ortam &amp; Ses</span>
+                    </button>
+                  </div>
+
+                  {mobileRoomTab === 'room' ? (
+                    <div className="flex flex-wrap items-center justify-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPlacementMode((v) => !v);
+                          setEditOpen(false);
+                        }}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer ${
+                          placementMode
+                            ? 'bg-[#C85A32] text-[#FAF2E2]'
+                            : 'bg-[#EDE0C6] text-[#3A2618]'
+                        }`}
+                      >
+                        <Move className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Taşı</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleRoomTab('shop')}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer ${
+                          editOpen && drawerTab === 'shop'
+                            ? 'bg-[#C85A32] text-[#FAF2E2]'
+                            : 'bg-[#EFE0C3] text-[#3A2618]'
+                        }`}
+                      >
+                        <ShoppingBag className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Mağaza</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleRoomTab('furniture')}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer ${
+                          editOpen && drawerTab === 'furniture'
+                            ? 'bg-[#C85A32] text-[#FAF2E2]'
+                            : 'bg-[#EDE0C6] text-[#3A2618]'
+                        }`}
+                      >
+                        <Paintbrush className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Düzenle</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleRoomTab('exterior')}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer ${
+                          editOpen && drawerTab === 'exterior'
+                            ? 'bg-[#5D8A48] text-[#FAF2E2]'
+                            : 'bg-[#EDE0C6] text-[#3A2618]'
+                        }`}
+                      >
+                        <Home className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Ev Dışı</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleRoomTab('avatar')}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer ${
+                          editOpen && drawerTab === 'avatar'
+                            ? 'bg-[#5D8A48] text-[#FAF2E2]'
+                            : 'bg-[#EDE0C6] text-[#3A2618]'
+                        }`}
+                      >
+                        <User className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Avatar</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleRoomTab('pets')}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer ${
+                          editOpen && drawerTab === 'pets'
+                            ? 'bg-[#5D8A48] text-[#FAF2E2]'
+                            : 'bg-[#EDE0C6] text-[#3A2618]'
+                        }`}
+                      >
+                        <PawPrint className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Dostlar</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onChangeRoomState({ ...roomState, lampOn: !roomState.lampOn })
+                        }
+                        className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer ${
+                          roomState.lampOn
+                            ? 'bg-[#EFE0C3] border-[#C85A32]/50 text-[#B84C27]'
+                            : 'bg-[#EDE0C6] border-[#B99464]/50 text-[#6B5038]'
+                        }`}
+                      >
+                        <LampDesk className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Lamba</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleRoomTab('atmosphere')}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer ${
+                          editOpen && drawerTab === 'atmosphere'
+                            ? 'bg-[#5D8A48] text-[#FAF2E2]'
+                            : 'bg-[#EDE0C6] text-[#3A2618]'
+                        }`}
+                      >
+                        <CloudRain className="w-3.5 h-3.5 text-[#3B6E8C]" aria-hidden="true" />
+                        <span>Hava &amp; Lo-Fi</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setTouchPadOpen((v) => {
+                            if (v) {
+                              touchMoveRef.current.joyX = 0;
+                              touchMoveRef.current.joyY = 0;
+                            }
+                            return !v;
+                          })
+                        }
+                        className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer ${
+                          touchPadOpen
+                            ? 'bg-[#EFE0C3] border-[#C85A32]/60 text-[#B84C27]'
+                            : 'bg-[#EDE0C6] border-[#B99464]/50 text-[#5B432F]'
+                        }`}
+                      >
+                        <Gamepad2 className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Joystick</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onToggleMusic}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer ${
+                          musicEnabled && !isMuted
+                            ? 'bg-[#EFE0C3] border-[#C85A32]/60 text-[#B84C27]'
+                            : 'bg-[#EDE0C6] border-[#B99464]/50 text-[#5B432F]'
+                        }`}
+                      >
+                        <Music className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Müzik</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onToggleMute}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#EDE0C6] border border-[#B99464]/50 text-xs font-semibold text-[#3A2618] cursor-pointer"
+                      >
+                        {isMuted ? (
+                          <VolumeX key="m-muted" className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
+                        ) : (
+                          <Volume2 key="m-unmuted" className="w-3.5 h-3.5 text-[#4B743B]" aria-hidden="true" />
+                        )}
+                        <span>{isMuted ? 'Sessiz' : 'Ses'}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

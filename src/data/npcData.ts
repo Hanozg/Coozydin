@@ -48,10 +48,10 @@ export const BUILDING_NPCS: BuildingNpcDef[] = [
   {
     id: 'npc-saribelediye',
     landmarkId: 'saribelediye',
-    buildingName: 'Tarihi Sarı Belediye Binası',
+    buildingName: 'Aydın Büyükşehir Belediyesi Binası',
     name: 'Rehber Emine Hanım',
     role: 'Kent Rehberi & Kahve İkramı',
-    position: [26.6, 25.0],
+    position: [27.4, 24.4],
     facingRad: -Math.PI / 2,
     shirtColor: '#2E4A68',
     pantsColor: '#2B313B',
@@ -59,7 +59,7 @@ export const BUILDING_NPCS: BuildingNpcDef[] = [
     hatColor: '#E5B044',
     propType: 'coffee_tray',
     greeting:
-      'Tarihi Sarı Belediye’mize hoş geldiniz! Hemen arkamızdan Tabakhane Deresi akıyor. Köprüye çıkmadan sıcak bir Türk kahvesi içer misiniz?',
+      'Aydın Büyükşehir Belediyesi’mize hoş geldiniz! Altın yansımalı cam cephemiz ve Atatürk Anıtı önünden Tabakhane Deresi köprüsüne geçmeden sıcak bir Türk kahvesi içer misiniz?',
     actions: [
       {
         id: 'belediye-coffee',
@@ -67,7 +67,7 @@ export const BUILDING_NPCS: BuildingNpcDef[] = [
         cost: 15,
         treat: 'coffee',
         resultMessage:
-          'Köpüklü Türk kahvenizi yudumlarken Sarı Belediye’nin tarihini dinlediniz.',
+          'Köpüklü Türk kahvenizi yudumlarken Aydın Büyükşehir Belediyesi ve Efeler’in hikayesini dinlediniz.',
       },
     ],
   },
@@ -370,6 +370,37 @@ export const BUILDING_NPCS: BuildingNpcDef[] = [
         treat: 'icecream',
         startsWalk: true,
         resultMessage: 'Deniz ile cornet dondurmalarınızı alıp Aytepe kampüs yürüyüşüne çıktınız!',
+      },
+    ],
+  },
+  {
+    id: 'npc-magnesia',
+    landmarkId: 'magnesia',
+    buildingName: 'Magnesia Antik Kenti (Artemis Tapınağı)',
+    name: 'Arkeolog Emre',
+    role: 'Magnesia Kazı Ekibi',
+    position: [-126.2, -28.0],
+    facingRad: 0,
+    shirtColor: '#9E7344',
+    pantsColor: '#3E473D',
+    hatStyle: 'cap',
+    hatColor: '#E6D9C2',
+    propType: 'notebook',
+    greeting:
+      'Batı yolunu aşıp Magnesia ad Maeandrum’a hoş geldin! Artemis Tapınağı’nın mermer basamakları ve mozaik agorası yeni harita genişlememizle birlikte ziyarete açıldı.',
+    walkChatLines: [
+      'Buradaki İyon düzeni Artemis Tapınağı, Hermogenes’in başyapıtlarından biridir.',
+      'Avludaki taş döşemeler ve stoa sütunları Efeler’den Germencik’e uzanan antik mirası taşır.',
+      'Sıradaki harita genişlemelerinde Nysa, Alabanda ve Priene de açılacak!',
+    ],
+    actions: [
+      {
+        id: 'magnesia-coffee-walk',
+        label: 'Kazı Kahvesi Al & Agorada Gez',
+        cost: 15,
+        treat: 'coffee',
+        startsWalk: true,
+        resultMessage: 'Arkeolog Emre ile Magnesia mozaik agorasında keyifli bir yürüyüşe çıktınız!',
       },
     ],
   },

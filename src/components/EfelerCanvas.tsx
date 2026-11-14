@@ -64,6 +64,8 @@ export interface TouchDriveInput {
   backward: boolean;
   left: boolean;
   right: boolean;
+  joyX?: number;
+  joyY?: number;
   flap?: boolean;
   dive?: boolean;
 }
@@ -175,6 +177,10 @@ function resolveLocationLabels(x: number, z: number): { district: string; street
 
   if (Math.hypot(x, z - 12) < 18) {
     bestStreet = 'Atatürk Kent Meydanı';
+  } else if (x < -94 && Math.abs(z + 22) < 9.5) {
+    bestStreet = 'Magnesia Antik Yolu';
+  } else if (Math.abs(x + 132) < 15 && Math.abs(z + 40) < 15) {
+    bestStreet = 'Magnesia Artemis Tapınağı';
   }
 
   return { district, street: bestStreet };
@@ -188,7 +194,7 @@ function resolveCollision(
   radius: number,
   colliders: ColliderBox[]
 ): [number, number] {
-  let nx = THREE.MathUtils.clamp(x, -98, 104);
+  let nx = THREE.MathUtils.clamp(x, -154, 104);
   let nz = THREE.MathUtils.clamp(z, -106, 72);
 
   // Keep player on riverbanks / stone bridges instead of stepping into Tabakhane Deresi water
@@ -357,6 +363,8 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       backward: false,
       left: false,
       right: false,
+      joyX: 0,
+      joyY: 0,
       flap: false,
       dive: false,
     });
@@ -1258,7 +1266,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           sparrowController.resetAt(sim.x, sim.z, sim.heading + Math.PI);
           sparrowChaseCam.snapTo(sparrowController.position, sparrowController.yaw);
         } else if (!isSparrow && prevMode === 'sparrow') {
-          sim.x = THREE.MathUtils.clamp(sparrowController.position.x, -98, 104);
+          sim.x = THREE.MathUtils.clamp(sparrowController.position.x, -154, 104);
           sim.z = THREE.MathUtils.clamp(sparrowController.position.z, -106, 72);
           sim.y = getWalkableSurfaceHeightAt(sim.x, sim.z);
           sim.heading = sparrowController.yaw + Math.PI;
@@ -1325,6 +1333,8 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
             left: heldKeys.has('KeyA') || heldKeys.has('ArrowLeft') || touchInputRef.current.left,
             right:
               heldKeys.has('KeyD') || heldKeys.has('ArrowRight') || touchInputRef.current.right,
+            joyX: touchInputRef.current.joyX ?? 0,
+            joyY: touchInputRef.current.joyY ?? 0,
             flapHeld: heldKeys.has('Space') || touchFlapNow,
             flapPressed: flapQueued || touchFlapRising,
             diveHeld:
@@ -1376,14 +1386,21 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           }
 
           if (phaseRef.current === 'playing') {
-            const forward =
-              heldKeys.has('KeyW') || heldKeys.has('ArrowUp') || touchInputRef.current.forward;
-            const backward =
-              heldKeys.has('KeyS') || heldKeys.has('ArrowDown') || touchInputRef.current.backward;
-            const left =
-              heldKeys.has('KeyA') || heldKeys.has('ArrowLeft') || touchInputRef.current.left;
-            const right =
-              heldKeys.has('KeyD') || heldKeys.has('ArrowRight') || touchInputRef.current.right;
+            const keyForward = heldKeys.has('KeyW') || heldKeys.has('ArrowUp');
+            const keyBackward = heldKeys.has('KeyS') || heldKeys.has('ArrowDown');
+            const keyLeft = heldKeys.has('KeyA') || heldKeys.has('ArrowLeft');
+            const keyRight = heldKeys.has('KeyD') || heldKeys.has('ArrowRight');
+            const hasKeyMove = keyForward || keyBackward || keyLeft || keyRight;
+
+            const joyX = touchInputRef.current.joyX ?? 0;
+            const joyY = touchInputRef.current.joyY ?? 0;
+            const joyMag = Math.min(1, Math.hypot(joyX, joyY));
+            const touchButtonsActive =
+              touchInputRef.current.forward ||
+              touchInputRef.current.backward ||
+              touchInputRef.current.left ||
+              touchInputRef.current.right;
+
             const sprint = heldKeys.has('ShiftLeft') || heldKeys.has('ShiftRight');
 
             const maxSpeed = isWalking
@@ -1405,29 +1422,67 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
                   ? 2.35
                   : 1.95;
 
-            if (forward) {
-              sim.speed = Math.min(maxSpeed, sim.speed + accel * dt);
-            } else if (backward) {
-              sim.speed = Math.max(-maxSpeed * (isWalking ? 0.65 : 0.45), sim.speed - accel * 0.9 * dt);
+            const isIsoCam =
+              cameraPresetRef.current !== 'first_person' &&
+              cameraPresetRef.current !== 'perspective';
+
+            if (isWalking && isIsoCam && joyMag > 0.05 && !hasKeyMove && !touchButtonsActive) {
+              // 360-degree screen-relative isometric analog walking
+              const worldDirX = (joyX - joyY) * Math.SQRT1_2;
+              const worldDirZ = (-joyX - joyY) * Math.SQRT1_2;
+              const targetHeading = Math.atan2(-worldDirX, -worldDirZ);
+              let diff = targetHeading - sim.heading;
+              while (diff > Math.PI) diff -= Math.PI * 2;
+              while (diff < -Math.PI) diff += Math.PI * 2;
+              sim.heading += diff * Math.min(1, dt * 11);
+              sim.speed = THREE.MathUtils.damp(sim.speed, maxSpeed * joyMag, 14, dt);
+              sim.steerAngle = THREE.MathUtils.damp(sim.steerAngle, -joyX * 0.35, 10, dt);
             } else {
-              sim.speed = THREE.MathUtils.damp(sim.speed, 0, drag, dt);
-              if (Math.abs(sim.speed) < 0.04) sim.speed = 0;
-            }
+              const forwardStrength = Math.max(
+                keyForward || touchInputRef.current.forward ? 1 : 0,
+                Math.max(0, joyY)
+              );
+              const backwardStrength = Math.max(
+                keyBackward || touchInputRef.current.backward ? 1 : 0,
+                Math.max(0, -joyY)
+              );
 
-            // Gentle uphill resistance & downhill coasting on Aytepe / Tralleis slopes
-            if (!isWalking && Math.abs(slopesPre.pitch) > 0.008 && Math.abs(sim.speed) > 0.25) {
-              sim.speed -= Math.sin(slopesPre.pitch) * 4.8 * dt;
-            }
+              if (forwardStrength > 0.05) {
+                const cap = maxSpeed * forwardStrength;
+                if (sim.speed < cap) {
+                  sim.speed = Math.min(cap, sim.speed + accel * forwardStrength * dt);
+                } else {
+                  sim.speed = THREE.MathUtils.damp(sim.speed, cap, drag, dt);
+                }
+              } else if (backwardStrength > 0.05) {
+                const revCap = -maxSpeed * (isWalking ? 0.65 : 0.45) * backwardStrength;
+                sim.speed = Math.max(revCap, sim.speed - accel * 0.9 * backwardStrength * dt);
+              } else {
+                sim.speed = THREE.MathUtils.damp(sim.speed, 0, drag, dt);
+                if (Math.abs(sim.speed) < 0.04) sim.speed = 0;
+              }
 
-            const steerInput = (left ? 1 : 0) - (right ? 1 : 0);
-            sim.steerAngle = THREE.MathUtils.damp(sim.steerAngle, steerInput * 0.42, 10, dt);
+              // Gentle uphill resistance & downhill coasting on Aytepe / Tralleis slopes
+              if (!isWalking && Math.abs(slopesPre.pitch) > 0.008 && Math.abs(sim.speed) > 0.25) {
+                sim.speed -= Math.sin(slopesPre.pitch) * 4.8 * dt;
+              }
 
-            if (isWalking) {
-              sim.heading += steerInput * turnRate * dt;
-            } else if (Math.abs(sim.speed) > 0.15) {
-              const dirSign = sim.speed >= 0 ? 1 : -1;
-              const speedTurnScale = THREE.MathUtils.clamp(Math.abs(sim.speed) / 4.5, 0.35, 1.0);
-              sim.heading += steerInput * turnRate * speedTurnScale * dirSign * dt;
+              const left = keyLeft || touchInputRef.current.left;
+              const right = keyRight || touchInputRef.current.right;
+              const steerInput = THREE.MathUtils.clamp(
+                (left ? 1 : 0) - (right ? 1 : 0) - joyX,
+                -1,
+                1
+              );
+              sim.steerAngle = THREE.MathUtils.damp(sim.steerAngle, steerInput * 0.42, 10, dt);
+
+              if (isWalking) {
+                sim.heading += steerInput * turnRate * dt;
+              } else if (Math.abs(sim.speed) > 0.15) {
+                const dirSign = sim.speed >= 0 ? 1 : -1;
+                const speedTurnScale = THREE.MathUtils.clamp(Math.abs(sim.speed) / 4.5, 0.35, 1.0);
+                sim.heading += steerInput * turnRate * speedTurnScale * dirSign * dt;
+              }
             }
 
             const moveX = -Math.sin(sim.heading) * sim.speed * dt;
@@ -1943,7 +1998,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
                 x: ((_projVec.x + 1) / 2) * container.clientWidth,
                 y: (-(_projVec.y - 1) / 2) * container.clientHeight,
                 visible: true,
-                text: 'Islak mendil, lif ister misiniz? Buyurun!',
+                text: 'Mendil yara bandı ıslak mendil lif ister misiniz ? buyrunnn',
               };
             }
           }

@@ -17,6 +17,7 @@ import {
   DEFAULT_HOUSE_EXTERIOR,
   DEFAULT_UNLOCKED_FURNITURE_STYLES,
   DEFAULT_VEHICLE_CONFIG,
+  getRadioStationForDistrict,
   LANDMARKS,
 } from './data/efelerData';
 import { audioEngine } from './game/audioEngine';
@@ -166,6 +167,7 @@ export default function App() {
   const [weather, setWeather] = useState<WeatherType>('clear');
   const [autoAtmosphere, setAutoAtmosphere] = useState<boolean>(true);
   const [lofiTrack, setLofiTrack] = useState<LofiTrackId>('aegean');
+  const [autoDistrictRadio, setAutoDistrictRadio] = useState<boolean>(false);
   const [cameraPreset, setCameraPreset] = useState<CameraPreset>('isometric');
 
   const [activeErrand, setActiveErrand] = useState<ErrandDef | null>(null);
@@ -433,11 +435,24 @@ export default function App() {
     audioEngine.setWeatherAudio(next);
   }, []);
 
-  const handleChangeLofiTrack = useCallback((next: LofiTrackId) => {
+  const handleChangeLofiTrack = useCallback((next: LofiTrackId, fromAuto = false) => {
     audioEngine.init();
     setLofiTrack(next);
-    audioEngine.setLofiTrack(next);
+    audioEngine.setLofiTrack(next, !fromAuto);
+    if (!fromAuto && next !== 'ambient_only') {
+      setMusicEnabled(true);
+      audioEngine.setMusicEnabled(true);
+    }
   }, []);
+
+  useEffect(() => {
+    if (!autoDistrictRadio || phase !== 'playing' || inHome) return;
+    const matched = getRadioStationForDistrict(hud.currentDistrict);
+    if (matched.id !== lofiTrack) {
+      setLofiTrack(matched.id);
+      audioEngine.setLofiTrack(matched.id, true);
+    }
+  }, [autoDistrictRadio, hud.currentDistrict, inHome, lofiTrack, phase]);
 
   const handleDiscoverLandmark = useCallback(
     (lm: LandmarkDef) => {
@@ -496,7 +511,7 @@ export default function App() {
         setLokmaPower((p) => p + 1);
         showErrandToast('Bey Camii önünden taze hayır lokması aldınız! +1 Lokma Puanı');
       } else if (type === 'vendor') {
-        showErrandToast('“Islak mendil, lif ister misiniz? Buyurun!”');
+        showErrandToast('“Mendil yara bandı ıslak mendil lif ister misiniz ? buyrunnn”');
       }
     },
     [showErrandToast]
@@ -621,6 +636,10 @@ export default function App() {
       tx = lx - 16.0;
       tz = lz;
       heading = -Math.PI / 2;
+    } else if (lm.id === 'magnesia') {
+      tx = lx;
+      tz = lz + 15.0;
+      heading = 0;
     }
     canvasRef.current?.teleportTo(tx, tz, heading);
     setJournalOpen(false);
@@ -891,6 +910,7 @@ export default function App() {
           weather={weather}
           autoAtmosphere={autoAtmosphere}
           lofiTrack={lofiTrack}
+          autoDistrictRadio={autoDistrictRadio}
           cameraPreset={cameraPreset}
           discoveredIds={discoveredIds}
           coins={coins}
@@ -915,6 +935,20 @@ export default function App() {
           onChangeWeather={handleChangeWeather}
           onToggleAutoAtmosphere={() => setAutoAtmosphere((prev) => !prev)}
           onChangeLofiTrack={handleChangeLofiTrack}
+          onToggleAutoDistrictRadio={() => {
+            audioEngine.init();
+            setAutoDistrictRadio((prev) => {
+              const next = !prev;
+              if (next) {
+                const matched = getRadioStationForDistrict(hud.currentDistrict);
+                setLofiTrack(matched.id);
+                audioEngine.setLofiTrack(matched.id, true);
+                setMusicEnabled(true);
+                audioEngine.setMusicEnabled(true);
+              }
+              return next;
+            });
+          }}
           onChangeCameraPreset={setCameraPreset}
           onInteractNpc={handleInteractNpc}
           onToggleMute={handleToggleMute}

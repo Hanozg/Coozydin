@@ -10,7 +10,25 @@ export type SeasonType = 'spring' | 'summer' | 'autumn' | 'winter';
 
 export type WeatherType = 'clear' | 'rain' | 'snow' | 'storm';
 
-export type LofiTrackId = 'aegean' | 'rainy_piano' | 'night_lofi' | 'ambient_only';
+export type LofiTrackId =
+  | 'aegean'
+  | 'bazaar_oud'
+  | 'tralleis_echo'
+  | 'aytepe_campus'
+  | 'rainy_piano'
+  | 'night_lofi'
+  | 'ambient_only';
+
+export interface RadioStationDef {
+  id: LofiTrackId;
+  frequency: string;
+  label: string;
+  region: string;
+  mood: string;
+  bpmLabel: string;
+  accentColor: string;
+  matchingDistricts: string[];
+}
 
 export type CameraPreset = 'isometric' | 'close' | 'overview' | 'first_person' | 'perspective';
 

@@ -1,8 +1,6 @@
 import { type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent, useState } from 'react';
 import {
   ArrowDown,
-  ArrowLeft,
-  ArrowRight,
   ArrowUp,
   Bike,
   Bird,
@@ -10,7 +8,10 @@ import {
   Camera,
   Car,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
+  Clock,
   CloudRain,
   Compass,
   Eye,
@@ -23,18 +24,24 @@ import {
   Music,
   Paintbrush,
   Pause,
+  Play,
+  Radio,
+  SlidersHorizontal,
   Sparkles,
   Sun,
   Volume2,
   VolumeX,
   Wind,
+  X,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
 import { TouchDriveInput } from './EfelerCanvas';
+import { VirtualJoystick } from './VirtualJoystick';
 import {
   ACCENT_SWATCHES,
   getFigTreeStage,
+  getRadioStationForDistrict,
   HOUSE_ROOF_SWATCHES,
   HOUSE_STYLE_OPTIONS,
   HOUSE_TRIM_SWATCHES,
@@ -42,6 +49,7 @@ import {
   LANDMARKS,
   LOFI_TRACKS,
   PAINT_SWATCHES,
+  RADIO_STATIONS,
   SEASON_OPTIONS,
   TIME_MOODS,
   WEATHER_OPTIONS,
@@ -84,6 +92,7 @@ interface GameHUDProps {
   weather: WeatherType;
   autoAtmosphere: boolean;
   lofiTrack: LofiTrackId;
+  autoDistrictRadio: boolean;
   cameraPreset: CameraPreset;
   discoveredIds: string[];
   coins: number;
@@ -102,6 +111,7 @@ interface GameHUDProps {
   onChangeWeather: (next: WeatherType) => void;
   onToggleAutoAtmosphere: () => void;
   onChangeLofiTrack: (next: LofiTrackId) => void;
+  onToggleAutoDistrictRadio: () => void;
   onChangeCameraPreset: (next: CameraPreset) => void;
   onInteractNpc: (npc: BuildingNpcDef) => void;
   onToggleMute: () => void;
@@ -131,6 +141,7 @@ export function GameHUD({
   weather,
   autoAtmosphere,
   lofiTrack,
+  autoDistrictRadio,
   cameraPreset,
   discoveredIds,
   coins,
@@ -149,6 +160,7 @@ export function GameHUD({
   onChangeWeather,
   onToggleAutoAtmosphere,
   onChangeLofiTrack,
+  onToggleAutoDistrictRadio,
   onChangeCameraPreset,
   onInteractNpc,
   onToggleMute,
@@ -165,9 +177,10 @@ export function GameHUD({
   onAdjustZoom,
 }: GameHUDProps) {
   const [dockCollapsed, setDockCollapsed] = useState(false);
-  const [activeDrawer, setActiveDrawer] = useState<'none' | 'garage' | 'house' | 'atmosphere'>(
-    'none'
-  );
+  const [activeDrawer, setActiveDrawer] = useState<
+    'none' | 'garage' | 'house' | 'atmosphere' | 'radio'
+  >('none');
+  const [mobileDockTab, setMobileDockTab] = useState<'move' | 'view' | 'design'>('move');
   const [touchControlsEnabled, setTouchControlsEnabled] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768;
@@ -217,6 +230,19 @@ export function GameHUD({
       )?.name
     : null;
 
+  const currentStation =
+    RADIO_STATIONS.find((s) => s.id === lofiTrack) ?? RADIO_STATIONS[0];
+  const districtStation = getRadioStationForDistrict(hud.currentDistrict);
+  const isRadioPlaying =
+    musicEnabled && !isMuted && lofiTrack !== 'ambient_only';
+
+  const cycleRadioStation = (dir: -1 | 1) => {
+    const idx = RADIO_STATIONS.findIndex((s) => s.id === lofiTrack);
+    const currentIdx = idx >= 0 ? idx : 0;
+    const nextIdx = (currentIdx + dir + RADIO_STATIONS.length) % RADIO_STATIONS.length;
+    onChangeLofiTrack(RADIO_STATIONS[nextIdx].id);
+  };
+
   return (
     <div className="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-2.5 sm:p-4 md:p-6 pt-[max(0.65rem,env(safe-area-inset-top))] pb-[max(0.65rem,env(safe-area-inset-bottom))]">
       {/* Screen-Projected Speech Bubble for Mendil & Lif Satıcısı */}
@@ -228,7 +254,7 @@ export function GameHUD({
             top: `${hud.vendorBubble.y}px`,
           }}
         >
-          <div className="rounded-xl bg-[#FAF2E2] text-[#3A2618] border-2 border-[#B99464] px-3 py-1.5 sm:px-3.5 sm:py-2 text-[11px] sm:text-xs font-semibold shadow-lg whitespace-nowrap">
+          <div className="rounded-xl bg-[#FAF2E2] text-[#3A2618] border-2 border-[#B99464] px-3 py-1.5 sm:px-3.5 sm:py-2 text-[11px] sm:text-xs font-semibold shadow-lg max-w-[78vw] sm:max-w-sm text-center leading-snug">
             “{hud.vendorBubble.text}”
           </div>
         </div>
@@ -236,37 +262,127 @@ export function GameHUD({
 
       {/* Top Perimeter Row */}
       <div className="flex items-start justify-between gap-2 sm:gap-4">
-        {/* Top-Left Storybook Parchment District & Telemetry Readout */}
-        <div className="pointer-events-auto rounded-2xl bg-[#F7EEDC]/96 border-2 border-[#B99464] px-3 py-2 sm:px-4 sm:py-3 text-[#3A2618] shadow-md max-w-[54vw] sm:max-w-xl">
-          <div className="font-display text-sm sm:text-base md:text-lg font-bold leading-tight tracking-tight truncate text-[#3A2618]">
-            {hud.currentStreet}
-          </div>
-          <div className="flex flex-wrap items-center gap-x-1.5 sm:gap-x-2 gap-y-0.5 text-[11px] sm:text-xs text-[#6B5038] mt-0.5 sm:mt-1 font-medium">
-            <span className="hidden sm:inline">{hud.currentDistrict}</span>
-            <span className="hidden sm:inline" aria-hidden="true">·</span>
-            {hud.solarClock && (
-              <span className="inline-flex items-center gap-x-1.5 sm:gap-x-2">
-                <span className="font-mono-num text-[#3A2618] font-semibold">
-                  {hud.solarClock}
+        {/* Top-Left Column: District Telemetry + Compact Regional Radio Mini-Player */}
+        <div className="flex flex-col items-start gap-1.5 sm:gap-2 max-w-[54vw] sm:max-w-xl">
+          <div className="pointer-events-auto rounded-2xl bg-[#F7EEDC]/96 border-2 border-[#B99464] px-3 py-2 sm:px-4 sm:py-3 text-[#3A2618] shadow-md w-full">
+            <div className="font-display text-sm sm:text-base md:text-lg font-bold leading-tight tracking-tight truncate text-[#3A2618]">
+              {hud.currentStreet}
+            </div>
+            <div className="flex flex-wrap items-center gap-x-1.5 sm:gap-x-2 gap-y-0.5 text-[11px] sm:text-xs text-[#6B5038] mt-0.5 sm:mt-1 font-medium">
+              <span className="hidden sm:inline">{hud.currentDistrict}</span>
+              <span className="hidden sm:inline" aria-hidden="true">·</span>
+              {hud.solarClock && (
+                <span className="inline-flex items-center gap-x-1.5 sm:gap-x-2">
+                  <span className="font-mono-num text-[#3A2618] font-semibold">
+                    {hud.solarClock}
+                  </span>
+                  <span aria-hidden="true">·</span>
                 </span>
-                <span aria-hidden="true">·</span>
+              )}
+              <span className="font-mono-num text-[#3A2618] font-semibold">
+                {hud.speedKmh} km/s
               </span>
-            )}
-            <span className="font-mono-num text-[#3A2618] font-semibold">
-              {hud.speedKmh} km/s
-            </span>
-            <span aria-hidden="true">·</span>
-            <span className="font-mono-num">
-              {discoveredIds.length}/{LANDMARKS.length}
-            </span>
-            <span aria-hidden="true">·</span>
-            <span className="font-mono-num text-[#B84C27] font-semibold">{coins} İncir</span>
-            <span className="hidden xs:inline sm:inline" aria-hidden="true">·</span>
-            <span className="font-mono-num text-[#8F5624] font-semibold">
-              {lokmaPower} Lokma
-            </span>
-            <span className="hidden md:inline" aria-hidden="true">·</span>
-            <span className="hidden md:inline text-[#4B743B] font-semibold">{figStage.label}</span>
+              <span aria-hidden="true">·</span>
+              <span className="font-mono-num">
+                {discoveredIds.length}/{LANDMARKS.length}
+              </span>
+              <span aria-hidden="true">·</span>
+              <span className="font-mono-num text-[#B84C27] font-semibold">{coins} İncir</span>
+              <span className="hidden xs:inline sm:inline" aria-hidden="true">·</span>
+              <span className="font-mono-num text-[#8F5624] font-semibold">
+                {lokmaPower} Lokma
+              </span>
+              <span className="hidden md:inline" aria-hidden="true">·</span>
+              <span className="hidden md:inline text-[#4B743B] font-semibold">{figStage.label}</span>
+            </div>
+          </div>
+
+          {/* Efeler Regional Radio Mini-Player */}
+          <div className="pointer-events-auto inline-flex items-center gap-1 sm:gap-1.5 rounded-2xl bg-[#F7EEDC]/96 border-2 border-[#B99464] px-2 py-1 sm:px-2.5 sm:py-1.5 text-[#3A2618] shadow-md max-w-full">
+            <button
+              type="button"
+              onClick={() => {
+                setDockCollapsed(false);
+                setActiveDrawer((d) => (d === 'radio' ? 'none' : 'radio'));
+              }}
+              title="Efeler Bölge Radyosu İstasyonlarını Aç"
+              className="flex items-center gap-1.5 min-w-0 text-left cursor-pointer group"
+            >
+              <span
+                className="inline-flex items-center justify-center w-6 h-6 rounded-lg shrink-0 text-[#FAF2E2]"
+                style={{ backgroundColor: currentStation.accentColor }}
+              >
+                {isRadioPlaying ? (
+                  <span className="inline-flex items-end gap-[2px] h-3" aria-hidden="true">
+                    <span className="w-[2.5px] h-2 bg-[#FAF2E2] rounded-full animate-pulse" />
+                    <span className="w-[2.5px] h-3 bg-[#FAF2E2] rounded-full animate-pulse [animation-delay:150ms]" />
+                    <span className="w-[2.5px] h-1.5 bg-[#FAF2E2] rounded-full animate-pulse [animation-delay:300ms]" />
+                  </span>
+                ) : (
+                  <Radio className="w-3.5 h-3.5" aria-hidden="true" />
+                )}
+              </span>
+
+              <span className="min-w-0">
+                <span className="flex items-center gap-1 text-[11px] font-bold text-[#3A2618] leading-tight">
+                  <span className="font-mono-num text-[#B84C27] shrink-0">
+                    {currentStation.frequency}
+                  </span>
+                  <span className="truncate max-w-[90px] sm:max-w-[140px] group-hover:text-[#B84C27] transition-colors">
+                    {currentStation.label}
+                  </span>
+                </span>
+                <span className="hidden sm:block text-[10px] text-[#6B5038] truncate max-w-[180px] leading-tight">
+                  {autoDistrictRadio ? `Oto: ${currentStation.region}` : currentStation.region}
+                </span>
+              </span>
+            </button>
+
+            <div className="flex items-center gap-0.5 pl-1 border-l border-[#B99464]/40 shrink-0">
+              <button
+                type="button"
+                onClick={() => cycleRadioStation(-1)}
+                title="Önceki İstasyon"
+                aria-label="Önceki İstasyon"
+                className="w-6 h-6 rounded-lg hover:bg-[#EDE0C6] flex items-center justify-center text-[#5B432F] cursor-pointer"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (lofiTrack === 'ambient_only') {
+                    onChangeLofiTrack(districtStation.id);
+                  } else {
+                    onToggleMusic();
+                  }
+                }}
+                title={isRadioPlaying ? 'Radyoyu Duraklat' : 'Radyoyu Çal'}
+                aria-label={isRadioPlaying ? 'Radyoyu Duraklat' : 'Radyoyu Çal'}
+                className={`w-6 h-6 rounded-lg flex items-center justify-center cursor-pointer transition-colors ${
+                  isRadioPlaying
+                    ? 'bg-[#C85A32] text-[#FAF2E2]'
+                    : 'bg-[#EDE0C6] text-[#3A2618] hover:bg-[#E2D1B2]'
+                }`}
+              >
+                {isRadioPlaying ? (
+                  <Pause className="w-3 h-3" aria-hidden="true" />
+                ) : (
+                  <Play className="w-3 h-3" aria-hidden="true" />
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => cycleRadioStation(1)}
+                title="Sonraki İstasyon"
+                aria-label="Sonraki İstasyon"
+                className="w-6 h-6 rounded-lg hover:bg-[#EDE0C6] flex items-center justify-center text-[#5B432F] cursor-pointer"
+              >
+                <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -543,32 +659,160 @@ export function GameHUD({
           )
         )}
 
+        {/* Efeler Regional Radio Tuner Drawer */}
+        {!dockCollapsed && activeDrawer === 'radio' && (
+          <div className="pointer-events-auto w-full max-w-2xl max-h-[42dvh] overflow-y-auto efeler-scroll rounded-2xl bg-[#F7EEDC]/98 border-2 border-[#B99464] p-3.5 sm:p-4 text-[#3A2618] shadow-xl space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[#B99464]/35">
+              <div className="flex items-center gap-2.5">
+                <span
+                  className="inline-flex items-center justify-center w-9 h-9 rounded-xl text-[#FAF2E2] shadow-sm shrink-0"
+                  style={{ backgroundColor: currentStation.accentColor }}
+                >
+                  <Radio className="w-5 h-5" aria-hidden="true" />
+                </span>
+                <div>
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold text-[#3A2618]">
+                    <span>Efeler Bölge Radyosu</span>
+                    <span className="px-2 py-0.5 rounded-md bg-[#EFE0C3] border border-[#B99464]/50 font-mono-num text-[10px] text-[#B84C27]">
+                      {currentStation.frequency}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-[#6B5038]">
+                    Her semtin ruhuna özel Lo-Fi yayınları — seç veya bölgene göre ayarla.
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onChangeLofiTrack(districtStation.id)}
+                  title={`Bulunduğun bölgeye geç: ${districtStation.label}`}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#EFE0C3] hover:bg-[#E4D1AE] border border-[#B99464]/60 text-[11px] font-semibold text-[#3A2618] transition-colors cursor-pointer"
+                >
+                  <MapPin className="w-3.5 h-3.5 text-[#C85A32]" aria-hidden="true" />
+                  <span>Bölgeme Geç</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onToggleAutoDistrictRadio}
+                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                    autoDistrictRadio
+                      ? 'bg-[#5D8A48] text-[#FAF2E2]'
+                      : 'bg-[#EDE0C6] text-[#5B432F] hover:bg-[#E2D1B2]'
+                  }`}
+                >
+                  Oto Bölge: {autoDistrictRadio ? 'Açık' : 'Kapalı'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveDrawer('none')}
+                  aria-label="Radyo Panelini Kapat"
+                  className="p-1.5 rounded-lg bg-[#EDE0C6] hover:bg-[#E2D1B2] text-[#5B432F] transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {RADIO_STATIONS.map((station) => {
+                const isSelected = lofiTrack === station.id;
+                const isHere = station.id === districtStation.id;
+                return (
+                  <button
+                    key={station.id}
+                    type="button"
+                    onClick={() => onChangeLofiTrack(station.id)}
+                    className={`text-left rounded-xl border-2 p-2.5 transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-[#EFE0C3] border-[#C85A32] shadow-sm'
+                        : 'bg-[#FAF2E2]/90 border-[#B99464]/45 hover:bg-[#EFE0C3]/75'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className="px-2 py-0.5 rounded-md text-[10px] font-bold font-mono-num text-[#FAF2E2] shrink-0"
+                          style={{ backgroundColor: station.accentColor }}
+                        >
+                          {station.frequency}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-[#3A2618] truncate">
+                            {station.label}
+                          </div>
+                          <div className="text-[10px] font-semibold text-[#6B5038] truncate">
+                            {station.region}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        {isHere && (
+                          <span className="px-1.5 py-0.5 rounded-md bg-[#5D8A48]/15 border border-[#5D8A48]/40 text-[9px] font-bold text-[#456D36]">
+                            Bölgen
+                          </span>
+                        )}
+                        {isSelected && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#C85A32] text-[9px] font-bold text-[#FAF2E2]">
+                            {isRadioPlaying ? 'Çalıyor' : 'Seçili'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <p className="text-[10px] text-[#5B432F] leading-snug mt-1.5">
+                      {station.mood}
+                    </p>
+                    <div className="text-[9px] font-semibold text-[#8F5624] mt-1">
+                      {station.bpmLabel}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Atmosphere (Seasons, Weather, Auto Cycle & Lo-Fi) Drawer */}
         {!dockCollapsed && activeDrawer === 'atmosphere' && (
           <div className="pointer-events-auto w-full max-w-2xl max-h-[38dvh] overflow-y-auto efeler-scroll rounded-2xl bg-[#F7EEDC]/98 border-2 border-[#B99464] p-3.5 sm:p-4 text-[#3A2618] shadow-xl space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[#B99464]/35">
               <div>
-                <div className="text-xs font-semibold text-[#3A2618]">
-                  Günlük Saat &amp; Hava Akışı
+                <div className="text-xs font-bold text-[#3A2618]">
+                  Mevsim, Hava Durumu &amp; Lo-Fi Müzik
                 </div>
                 <div className="text-[11px] text-[#6B5038]">
                   Saat ve hava durumu seçilen mevsime göre kademeli olarak değişir.
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={onToggleAutoAtmosphere}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                  autoAtmosphere
-                    ? 'bg-[#5D8A48] text-[#FAF2E2]'
-                    : 'bg-[#EDE0C6] text-[#5B432F] hover:bg-[#E2D1B2]'
-                }`}
-              >
-                <span>Oto Akış: </span>
-                <span key={autoAtmosphere ? 'on' : 'off'}>
-                  {autoAtmosphere ? 'Açık' : 'Sabit'}
-                </span>
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={onToggleAutoAtmosphere}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                    autoAtmosphere
+                      ? 'bg-[#5D8A48] text-[#FAF2E2]'
+                      : 'bg-[#EDE0C6] text-[#5B432F] hover:bg-[#E2D1B2]'
+                  }`}
+                >
+                  <span>Oto Akış: </span>
+                  <span key={autoAtmosphere ? 'on' : 'off'}>
+                    {autoAtmosphere ? 'Açık' : 'Sabit'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveDrawer('none')}
+                  aria-label="Hava ve Müzik Panelini Kapat"
+                  className="p-1.5 rounded-lg bg-[#EDE0C6] hover:bg-[#E2D1B2] text-[#5B432F] transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" aria-hidden="true" />
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -614,8 +858,17 @@ export function GameHUD({
             </div>
 
             <div>
-              <div className="text-[11px] font-semibold text-[#6B5038] mb-1.5">
-                Lo-Fi Müzik Kanalı
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <div className="text-[11px] font-semibold text-[#6B5038]">
+                  Bölge Radyosu &amp; Lo-Fi Kanalı
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveDrawer('radio')}
+                  className="text-[11px] font-bold text-[#B84C27] hover:underline cursor-pointer"
+                >
+                  Tüm Radyo İstasyonları →
+                </button>
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
                 {LOFI_TRACKS.map((t) => (
@@ -639,7 +892,50 @@ export function GameHUD({
 
         {/* Garage Customization Drawer */}
         {!dockCollapsed && activeDrawer === 'garage' && (
-          <div className="pointer-events-auto w-full max-w-2xl max-h-[34dvh] overflow-y-auto efeler-scroll rounded-2xl bg-[#F7EEDC]/98 border-2 border-[#B99464] p-3.5 sm:p-4 text-[#3A2618] shadow-xl">
+          <div className="pointer-events-auto w-full max-w-2xl max-h-[38dvh] overflow-y-auto efeler-scroll rounded-2xl bg-[#F7EEDC]/98 border-2 border-[#B99464] p-3.5 sm:p-4 text-[#3A2618] shadow-xl space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[#B99464]/35">
+              <div>
+                <div className="text-xs font-bold text-[#3A2618]">
+                  Araç Tasarımı &amp; Boya Atölyesi
+                </div>
+                <div className="text-[11px] text-[#6B5038]">
+                  Aracını seç, gövde/jant rengini ve aksesuarlarını anında değiştir.
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1 p-0.5 rounded-lg bg-[#E8D8B9]">
+                  {(
+                    [
+                      ['car', 'Araba'],
+                      ['bicycle', 'Bisiklet'],
+                      ['motorcycle', 'Motor'],
+                    ] as [VehicleType, string][]
+                  ).map(([vt, label]) => (
+                    <button
+                      key={vt}
+                      type="button"
+                      onClick={() => setVehicleType(vt)}
+                      className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                        vehicleConfig.type === vt
+                          ? 'bg-[#C85A32] text-[#FAF2E2]'
+                          : 'text-[#5B432F] hover:text-[#3A2618]'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveDrawer('none')}
+                  aria-label="Araç Tasarımı Panelini Kapat"
+                  className="p-1.5 rounded-lg bg-[#EDE0C6] hover:bg-[#E2D1B2] text-[#5B432F] transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+
             <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
               {/* Paint Swatches */}
               <div>
@@ -668,7 +964,7 @@ export function GameHUD({
               {/* Accent / Rim Color */}
               <div>
                 <div className="text-[11px] font-semibold text-[#6B5038] mb-1.5">
-                  Jant & Detay
+                  Jant &amp; Detay
                 </div>
                 <div className="flex items-center gap-2">
                   {ACCENT_SWATCHES.map((sw) => (
@@ -759,20 +1055,30 @@ export function GameHUD({
             <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[#B99464]/35">
               <div>
                 <div className="text-xs font-bold text-[#3A2618]">
-                  Evim — Dış Cephe &amp; Mimari Düzenleme Modu
+                  Evim — Dış Cephe &amp; Mimari Düzenleme
                 </div>
                 <div className="text-[11px] text-[#6B5038]">
                   Sevgi Yolu üzerindeki evinin mimarisini ve boya renklerini canlı değiştir.
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={onEnterHome}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#5D8A48] hover:bg-[#4F783C] text-[#FAF2E2] text-xs font-semibold transition-colors cursor-pointer"
-              >
-                <Home className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>İçeri Gir &amp; Mobilya Mağazası</span>
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={onEnterHome}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#5D8A48] hover:bg-[#4F783C] text-[#FAF2E2] text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  <Home className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>İçeri Gir &amp; Mağaza</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveDrawer('none')}
+                  aria-label="Ev Cephesi Panelini Kapat"
+                  className="p-1.5 rounded-lg bg-[#EDE0C6] hover:bg-[#E2D1B2] text-[#5B432F] transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" aria-hidden="true" />
+                </button>
+              </div>
             </div>
 
             <div>
@@ -887,28 +1193,30 @@ export function GameHUD({
           </div>
         )}
 
-        {/* Mobile / Touch Driving Controls */}
-        {touchControlsEnabled && (
+        {/* Mobile / Touch Joystick + Driving/Flight Pedals */}
+        {touchControlsEnabled && activeDrawer === 'none' && (
           <div className="w-full flex items-end justify-between gap-2 px-0.5 sm:px-2">
-            {/* Left Steering Pads */}
-            <div className="pointer-events-auto flex items-center gap-2">
-              <button
-                type="button"
-                aria-label="Sola Dön"
-                {...bindDriveButton('left')}
-                className="w-14 h-14 sm:w-15 sm:h-15 rounded-2xl bg-[#F7EEDC]/94 active:bg-[#E2D0AF] active:scale-95 border-2 border-[#B99464] text-[#3A2618] shadow-lg flex items-center justify-center touch-none select-none cursor-pointer transition-transform"
-              >
-                <ArrowLeft className="w-6 h-6" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                aria-label="Sağa Dön"
-                {...bindDriveButton('right')}
-                className="w-14 h-14 sm:w-15 sm:h-15 rounded-2xl bg-[#F7EEDC]/94 active:bg-[#E2D0AF] active:scale-95 border-2 border-[#B99464] text-[#3A2618] shadow-lg flex items-center justify-center touch-none select-none cursor-pointer transition-transform"
-              >
-                <ArrowRight className="w-6 h-6" aria-hidden="true" />
-              </button>
-            </div>
+            {/* Left Analog Virtual Joystick */}
+            <VirtualJoystick
+              size={116}
+              knobSize={48}
+              accent={explorationMode === 'walk' ? 'olive' : 'terracotta'}
+              ariaLabel={
+                explorationMode === 'sparrow'
+                  ? 'Serçe Yön Joysticki'
+                  : explorationMode === 'walk'
+                    ? 'Yürüme Joysticki'
+                    : 'Sürüş Joysticki'
+              }
+              label={
+                explorationMode === 'sparrow'
+                  ? 'Uç & Yön'
+                  : explorationMode === 'walk'
+                    ? 'Yürü'
+                    : 'Yön & Gaz'
+              }
+              onChange={({ x, y }) => onTouchInput({ joyX: x, joyY: y })}
+            />
 
             {/* Center Quick Mode, Camera & Zoom Buttons on Mobile */}
             <div className="pointer-events-auto flex items-center gap-1 rounded-2xl bg-[#F7EEDC]/92 border-2 border-[#B99464] p-1 shadow-md">
@@ -1065,282 +1373,613 @@ export function GameHUD({
           <button
             type="button"
             onClick={() => setDockCollapsed((v) => !v)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-t-xl bg-[#F7EEDC]/96 border-2 border-b-0 border-[#B99464] text-[11px] font-semibold text-[#6B5038] hover:text-[#3A2618] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 px-4 py-1 rounded-t-xl bg-[#F7EEDC]/96 border-2 border-b-0 border-[#B99464] text-[11px] font-semibold text-[#5B432F] hover:text-[#3A2618] transition-colors cursor-pointer"
           >
             {dockCollapsed ? (
               <span key="collapsed" className="inline-flex items-center gap-1.5">
-                <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Araç &amp; Ayarlar</span>
+                <ChevronUp className="w-3.5 h-3.5 text-[#C85A32]" aria-hidden="true" />
+                <span>
+                  Kontrol Paneli ·{' '}
+                  {explorationMode === 'walk'
+                    ? 'Yürü'
+                    : explorationMode === 'sparrow'
+                      ? 'Serçe'
+                      : vehicleConfig.type === 'car'
+                        ? 'Araba'
+                        : vehicleConfig.type === 'bicycle'
+                          ? 'Bisiklet'
+                          : 'Motor'}
+                </span>
               </span>
             ) : (
               <span key="expanded" className="inline-flex items-center gap-1.5">
                 <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Gizle</span>
+                <span>Paneli Gizle</span>
               </span>
             )}
           </button>
 
           {!dockCollapsed && (
-            <div className="flex items-center gap-1.5 sm:gap-2 rounded-2xl bg-[#F7EEDC]/96 border-2 border-[#B99464] px-2.5 sm:px-3 py-1.5 sm:py-2 text-[#3A2618] shadow-lg max-w-[96vw] overflow-x-auto efeler-scroll">
-              {/* Exploration Mode Switcher: Yürü vs Araç vs Serçe */}
-              <div className="flex items-center gap-1 p-0.5 rounded-xl bg-[#E8D8B9] shrink-0">
-                <button
-                  type="button"
-                  onClick={() => onChangeExplorationMode('walk')}
-                  title="Avatar ile Yürüyerek Gez [V]"
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    explorationMode === 'walk'
-                      ? 'bg-[#5D8A48] text-[#FAF2E2]'
-                      : 'text-[#5B432F] hover:text-[#3A2618]'
-                  }`}
-                >
-                  <Footprints className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Yürü</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onChangeExplorationMode('vehicle')}
-                  title="Araç Sürüşü [V]"
-                  className={`inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    explorationMode === 'vehicle'
-                      ? 'bg-[#5B3D28] text-[#FAF2E2]'
-                      : 'text-[#5B432F] hover:text-[#3A2618]'
-                  }`}
-                >
-                  <Car className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Araç</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onChangeExplorationMode('sparrow')}
-                  title="Serçe Modu — Çatılarda Zıpla ve Uç [V]"
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    explorationMode === 'sparrow'
-                      ? 'bg-[#B84C27] text-[#FAF2E2]'
-                      : 'text-[#5B432F] hover:text-[#3A2618]'
-                  }`}
-                >
-                  <Bird className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Serçe</span>
-                </button>
-              </div>
+            <div className="rounded-2xl bg-[#F7EEDC]/96 border-2 border-[#B99464] px-3 py-2 sm:px-3.5 sm:py-2.5 text-[#3A2618] shadow-xl max-w-[96vw]">
+              {/* Desktop & Tablet Structured 2-Row Layout */}
+              <div className="hidden md:flex flex-col gap-2">
+                {/* Row 1: Gezinti Modu + Özelleştirme */}
+                <div className="flex flex-wrap items-center justify-center gap-2.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-bold text-[#6B5038] whitespace-nowrap">
+                      Gezinti
+                    </span>
+                    <div className="flex items-center gap-1 p-0.5 rounded-xl bg-[#E8D8B9]">
+                      <button
+                        type="button"
+                        onClick={() => onChangeExplorationMode('walk')}
+                        title="Avatar ile Yürüyerek Gez [V]"
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                          explorationMode === 'walk'
+                            ? 'bg-[#5D8A48] text-[#FAF2E2]'
+                            : 'text-[#5B432F] hover:text-[#3A2618]'
+                        }`}
+                      >
+                        <Footprints className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Yürü</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setVehicleType('car')}
+                        title="Araba ile Sür"
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                          explorationMode === 'vehicle' && vehicleConfig.type === 'car'
+                            ? 'bg-[#C85A32] text-[#FAF2E2]'
+                            : 'text-[#5B432F] hover:text-[#3A2618]'
+                        }`}
+                      >
+                        <Car className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Araba</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setVehicleType('bicycle')}
+                        title="Bisiklet ile Gez"
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                          explorationMode === 'vehicle' && vehicleConfig.type === 'bicycle'
+                            ? 'bg-[#C85A32] text-[#FAF2E2]'
+                            : 'text-[#5B432F] hover:text-[#3A2618]'
+                        }`}
+                      >
+                        <Bike className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Bisiklet</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setVehicleType('motorcycle')}
+                        title="Motosiklet ile Sür"
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                          explorationMode === 'vehicle' && vehicleConfig.type === 'motorcycle'
+                            ? 'bg-[#C85A32] text-[#FAF2E2]'
+                            : 'text-[#5B432F] hover:text-[#3A2618]'
+                        }`}
+                      >
+                        <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Motor</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onChangeExplorationMode('sparrow')}
+                        title="Serçe Modu — Çatılarda Zıpla ve Uç [V]"
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                          explorationMode === 'sparrow'
+                            ? 'bg-[#B84C27] text-[#FAF2E2]'
+                            : 'text-[#5B432F] hover:text-[#3A2618]'
+                        }`}
+                      >
+                        <Bird className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Serçe</span>
+                      </button>
+                    </div>
+                  </div>
 
-              {/* Vehicle Selector */}
-              <div className="flex items-center gap-1 p-0.5 rounded-xl bg-[#E8D8B9] shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setVehicleType('car')}
-                  className={`inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    explorationMode === 'vehicle' && vehicleConfig.type === 'car'
-                      ? 'bg-[#C85A32] text-[#FAF2E2]'
-                      : 'text-[#5B432F] hover:text-[#3A2618]'
-                  }`}
-                >
-                  <Car className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Araba</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setVehicleType('bicycle')}
-                  className={`inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    explorationMode === 'vehicle' && vehicleConfig.type === 'bicycle'
-                      ? 'bg-[#C85A32] text-[#FAF2E2]'
-                      : 'text-[#5B432F] hover:text-[#3A2618]'
-                  }`}
-                >
-                  <Bike className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Bisiklet</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setVehicleType('motorcycle')}
-                  className={`inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    explorationMode === 'vehicle' && vehicleConfig.type === 'motorcycle'
-                      ? 'bg-[#C85A32] text-[#FAF2E2]'
-                      : 'text-[#5B432F] hover:text-[#3A2618]'
-                  }`}
-                >
-                  <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Motor</span>
-                </button>
-              </div>
-
-              {/* Garage, House Exterior & Atmosphere Toggles */}
-              <button
-                type="button"
-                onClick={() =>
-                  setActiveDrawer((d) => (d === 'garage' ? 'none' : 'garage'))
-                }
-                className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                  activeDrawer === 'garage'
-                    ? 'bg-[#C85A32] border-[#A74522] text-[#FAF2E2]'
-                    : 'bg-[#EDE0C6] border-[#B99464]/60 text-[#3A2618] hover:bg-[#E2D1B2]'
-                }`}
-              >
-                <Paintbrush className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Garaj</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setActiveDrawer((d) => (d === 'house' ? 'none' : 'house'))
-                }
-                className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                  activeDrawer === 'house'
-                    ? 'bg-[#5D8A48] border-[#4A7138] text-[#FAF2E2]'
-                    : 'bg-[#EDE0C6] border-[#B99464]/60 text-[#3A2618] hover:bg-[#E2D1B2]'
-                }`}
-              >
-                <Home className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Ev Dışı</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setActiveDrawer((d) => (d === 'atmosphere' ? 'none' : 'atmosphere'))
-                }
-                className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                  activeDrawer === 'atmosphere'
-                    ? 'bg-[#5D8A48] border-[#4A7138] text-[#FAF2E2]'
-                    : 'bg-[#EDE0C6] border-[#B99464]/60 text-[#3A2618] hover:bg-[#E2D1B2]'
-                }`}
-              >
-                <CloudRain className="w-3.5 h-3.5 text-[#3B6E8C]" aria-hidden="true" />
-                <span className="inline-flex items-center gap-1">
-                  <span>{SEASON_OPTIONS.find((s) => s.id === season)?.label}</span>
-                  <span>·</span>
-                  <span>{WEATHER_OPTIONS.find((w) => w.id === weather)?.label}</span>
-                </span>
-              </button>
-
-              <span className="hidden sm:inline text-[#B99464]/60">|</span>
-
-              {/* Time of Day Mood */}
-              <div className="flex items-center gap-1 p-0.5 rounded-xl bg-[#E8D8B9] shrink-0">
-                <Sun className="w-3.5 h-3.5 text-[#C85A32] ml-1.5 mr-0.5" aria-hidden="true" />
-                {(['morning', 'noon', 'golden', 'evening'] as TimeOfDay[]).map((tod) => (
-                  <button
-                    key={tod}
-                    type="button"
-                    onClick={() => onChangeTimeOfDay(tod)}
-                    className={`px-2 py-1 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                      timeOfDay === tod
-                        ? 'bg-[#5B3D28] text-[#FAF2E2]'
-                        : 'text-[#6B5038] hover:text-[#3A2618]'
-                    }`}
-                  >
-                    {TIME_MOODS[tod].label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Camera Preset (Always accessible on Desktop & Mobile via dock scroll) */}
-              <div className="flex items-center gap-1 p-0.5 rounded-xl bg-[#E8D8B9] shrink-0">
-                {(
-                  [
-                    ['isometric', 'İzometrik'],
-                    ['perspective', 'Omuz Arkası'],
-                    ['close', 'Yakın'],
-                    ['overview', 'Geniş'],
-                    ['first_person', '1. Şahıs'],
-                  ] as [CameraPreset, string][]
-                ).map(([preset, label]) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => onChangeCameraPreset(preset)}
-                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                      cameraPreset === preset
-                        ? preset === 'first_person' || preset === 'perspective'
-                          ? 'bg-[#C85A32] text-[#FAF2E2]'
-                          : 'bg-[#5B3D28] text-[#FAF2E2]'
-                        : 'text-[#6B5038] hover:text-[#3A2618]'
-                    }`}
-                  >
-                    {preset === 'perspective' && <Camera className="w-3 h-3" aria-hidden="true" />}
-                    {preset === 'first_person' && <Eye className="w-3 h-3" aria-hidden="true" />}
-                    <span>{label}</span>
-                  </button>
-                ))}
-              </div>
-
-              <span className="hidden sm:inline text-[#B99464]/60">|</span>
-
-              {/* Horn / Bell / Chirp, Touch Pad Toggle & Audio Controls */}
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={() =>
-                    explorationMode === 'sparrow' && onChirp ? onChirp() : onHorn()
-                  }
-                  className="px-2.5 py-1.5 rounded-xl bg-[#EDE0C6] hover:bg-[#E2D1B2] border border-[#B99464]/50 text-xs font-semibold text-[#3A2618] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-                >
-                  <span key={explorationMode === 'sparrow' ? 'chirp' : vehicleConfig.type}>
-                    {explorationMode === 'sparrow'
-                      ? 'Öt [Q]'
-                      : vehicleConfig.type === 'bicycle'
-                        ? 'Zil'
-                        : 'Korna'}
+                  <span className="text-[#B99464]/50" aria-hidden="true">
+                    |
                   </span>
-                </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTouchControlsEnabled((prev) => {
-                      if (prev) {
-                        onTouchInput({
-                          forward: false,
-                          backward: false,
-                          left: false,
-                          right: false,
-                          flap: false,
-                          dive: false,
-                        });
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-bold text-[#6B5038] whitespace-nowrap">
+                      Tasarım
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setActiveDrawer((d) => (d === 'garage' ? 'none' : 'garage'))
                       }
-                      return !prev;
-                    });
-                  }}
-                  title="Dokunmatik Sürüş Tuşları"
-                  aria-label="Dokunmatik Sürüş Tuşları"
-                  className={`p-1.5 rounded-xl border transition-colors cursor-pointer ${
-                    touchControlsEnabled
-                      ? 'bg-[#EFE0C3] border-[#C85A32]/60 text-[#B84C27]'
-                      : 'bg-[#EDE0C6] border-[#B99464]/50 text-[#8A735D]'
-                  }`}
-                >
-                  <Gamepad2 className="w-3.5 h-3.5" aria-hidden="true" />
-                </button>
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        activeDrawer === 'garage'
+                          ? 'bg-[#C85A32] border-[#A74522] text-[#FAF2E2]'
+                          : 'bg-[#EDE0C6] border-[#B99464]/60 text-[#3A2618] hover:bg-[#E2D1B2]'
+                      }`}
+                    >
+                      <Paintbrush className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Araç Tasarımı</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setActiveDrawer((d) => (d === 'house' ? 'none' : 'house'))
+                      }
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        activeDrawer === 'house'
+                          ? 'bg-[#5D8A48] border-[#4A7138] text-[#FAF2E2]'
+                          : 'bg-[#EDE0C6] border-[#B99464]/60 text-[#3A2618] hover:bg-[#E2D1B2]'
+                      }`}
+                    >
+                      <Home className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Ev Cephesi</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setActiveDrawer((d) => (d === 'atmosphere' ? 'none' : 'atmosphere'))
+                      }
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        activeDrawer === 'atmosphere'
+                          ? 'bg-[#5D8A48] border-[#4A7138] text-[#FAF2E2]'
+                          : 'bg-[#EDE0C6] border-[#B99464]/60 text-[#3A2618] hover:bg-[#E2D1B2]'
+                      }`}
+                    >
+                      <CloudRain className="w-3.5 h-3.5 text-[#3B6E8C]" aria-hidden="true" />
+                      <span>
+                        Hava &amp; Müzik ({SEASON_OPTIONS.find((s) => s.id === season)?.label} ·{' '}
+                        {WEATHER_OPTIONS.find((w) => w.id === weather)?.label})
+                      </span>
+                    </button>
+                  </div>
+                </div>
 
-                <button
-                  type="button"
-                  onClick={onToggleMusic}
-                  title="Sakinleştirici Müzik"
-                  aria-label="Müziği Aç/Kapat"
-                  className={`p-1.5 rounded-xl border transition-colors cursor-pointer ${
-                    musicEnabled && !isMuted
-                      ? 'bg-[#EFE0C3] border-[#C85A32]/60 text-[#B84C27]'
-                      : 'bg-[#EDE0C6] border-[#B99464]/50 text-[#8A735D]'
-                  }`}
-                >
-                  <Music className="w-3.5 h-3.5" aria-hidden="true" />
-                </button>
+                {/* Row 2: Kamera + Vakit + Hızlı Araçlar */}
+                <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1.5 border-t border-[#B99464]/30">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-bold text-[#6B5038] whitespace-nowrap">
+                      Kamera
+                    </span>
+                    <div className="flex items-center gap-1 p-0.5 rounded-xl bg-[#E8D8B9]">
+                      {(
+                        [
+                          ['isometric', 'İzometrik'],
+                          ['perspective', 'Omuz Arkası'],
+                          ['close', 'Yakın'],
+                          ['overview', 'Geniş'],
+                          ['first_person', '1. Şahıs'],
+                        ] as [CameraPreset, string][]
+                      ).map(([preset, label]) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => onChangeCameraPreset(preset)}
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                            cameraPreset === preset
+                              ? preset === 'first_person' || preset === 'perspective'
+                                ? 'bg-[#C85A32] text-[#FAF2E2]'
+                                : 'bg-[#5B3D28] text-[#FAF2E2]'
+                              : 'text-[#6B5038] hover:text-[#3A2618]'
+                          }`}
+                        >
+                          {preset === 'perspective' && (
+                            <Camera className="w-3 h-3" aria-hidden="true" />
+                          )}
+                          {preset === 'first_person' && (
+                            <Eye className="w-3 h-3" aria-hidden="true" />
+                          )}
+                          <span>{label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-                <button
-                  type="button"
-                  onClick={onToggleMute}
-                  title="Tüm Sesler"
-                  aria-label="Sesi Aç/Kapat"
-                  className="p-1.5 rounded-xl bg-[#EDE0C6] hover:bg-[#E2D1B2] border border-[#B99464]/50 text-[#3A2618] transition-colors cursor-pointer"
-                >
-                  {isMuted ? (
-                    <VolumeX key="muted" className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
-                  ) : (
-                    <Volume2 key="unmuted" className="w-3.5 h-3.5 text-[#4B743B]" aria-hidden="true" />
-                  )}
-                </button>
+                  <span className="text-[#B99464]/50" aria-hidden="true">
+                    |
+                  </span>
+
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-bold text-[#6B5038] whitespace-nowrap inline-flex items-center gap-1">
+                      <Sun className="w-3.5 h-3.5 text-[#C85A32]" aria-hidden="true" />
+                      <span>Vakit</span>
+                    </span>
+                    <div className="flex items-center gap-1 p-0.5 rounded-xl bg-[#E8D8B9]">
+                      {(['morning', 'noon', 'golden', 'evening'] as TimeOfDay[]).map((tod) => (
+                        <button
+                          key={tod}
+                          type="button"
+                          onClick={() => onChangeTimeOfDay(tod)}
+                          className={`px-2 py-1 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                            timeOfDay === tod
+                              ? 'bg-[#5B3D28] text-[#FAF2E2]'
+                              : 'text-[#6B5038] hover:text-[#3A2618]'
+                          }`}
+                        >
+                          {TIME_MOODS[tod].label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <span className="text-[#B99464]/50" aria-hidden="true">
+                    |
+                  </span>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        explorationMode === 'sparrow' && onChirp ? onChirp() : onHorn()
+                      }
+                      className="px-2.5 py-1 rounded-xl bg-[#EDE0C6] hover:bg-[#E2D1B2] border border-[#B99464]/50 text-xs font-semibold text-[#3A2618] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                    >
+                      <span key={explorationMode === 'sparrow' ? 'chirp' : vehicleConfig.type}>
+                        {explorationMode === 'sparrow'
+                          ? 'Öt [Q]'
+                          : vehicleConfig.type === 'bicycle'
+                            ? 'Zil'
+                            : 'Korna'}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTouchControlsEnabled((prev) => {
+                          if (prev) {
+                            onTouchInput({
+                              forward: false,
+                              backward: false,
+                              left: false,
+                              right: false,
+                              joyX: 0,
+                              joyY: 0,
+                              flap: false,
+                              dive: false,
+                            });
+                          }
+                          return !prev;
+                        });
+                      }}
+                      title="Dokunmatik Joystick ve Pedalları Aç/Kapat"
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        touchControlsEnabled
+                          ? 'bg-[#EFE0C3] border-[#C85A32]/60 text-[#B84C27]'
+                          : 'bg-[#EDE0C6] border-[#B99464]/50 text-[#6B5038]'
+                      }`}
+                    >
+                      <Gamepad2 className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Joystick</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setActiveDrawer((d) => (d === 'radio' ? 'none' : 'radio'))
+                      }
+                      title="Efeler Bölge Radyosunu Aç/Kapat"
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        activeDrawer === 'radio'
+                          ? 'bg-[#C85A32] border-[#A74522] text-[#FAF2E2]'
+                          : isRadioPlaying
+                            ? 'bg-[#EFE0C3] border-[#C85A32]/60 text-[#B84C27]'
+                            : 'bg-[#EDE0C6] border-[#B99464]/50 text-[#6B5038]'
+                      }`}
+                    >
+                      <Radio className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Radyo</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={onToggleMusic}
+                      title="Sakinleştirici Müziği Aç/Kapat"
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        musicEnabled && !isMuted
+                          ? 'bg-[#EFE0C3] border-[#C85A32]/60 text-[#B84C27]'
+                          : 'bg-[#EDE0C6] border-[#B99464]/50 text-[#6B5038]'
+                      }`}
+                    >
+                      <Music className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Müzik</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={onToggleMute}
+                      title="Tüm Sesleri Aç/Kapat"
+                      aria-label={isMuted ? 'Sesi Aç' : 'Sesi Kapat'}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-[#EDE0C6] hover:bg-[#E2D1B2] border border-[#B99464]/50 text-xs font-semibold text-[#3A2618] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                    >
+                      {isMuted ? (
+                        <VolumeX key="muted" className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
+                      ) : (
+                        <Volume2 key="unmuted" className="w-3.5 h-3.5 text-[#4B743B]" aria-hidden="true" />
+                      )}
+                      <span>{isMuted ? 'Sessiz' : 'Ses'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Mobile Compact Tabbed Layout (< md) */}
+              <div className="flex md:hidden flex-col gap-2 w-full">
+                <div className="flex items-center justify-center gap-1 p-0.5 rounded-xl bg-[#E8D8B9]">
+                  <button
+                    type="button"
+                    onClick={() => setMobileDockTab('move')}
+                    className={`flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+                      mobileDockTab === 'move'
+                        ? 'bg-[#C85A32] text-[#FAF2E2]'
+                        : 'text-[#5B432F]'
+                    }`}
+                  >
+                    <Car className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>Gezinti</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMobileDockTab('view')}
+                    className={`flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+                      mobileDockTab === 'view'
+                        ? 'bg-[#5B3D28] text-[#FAF2E2]'
+                        : 'text-[#5B432F]'
+                    }`}
+                  >
+                    <Clock className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>Kamera &amp; Vakit</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMobileDockTab('design')}
+                    className={`flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+                      mobileDockTab === 'design'
+                        ? 'bg-[#5D8A48] text-[#FAF2E2]'
+                        : 'text-[#5B432F]'
+                    }`}
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>Tasarım &amp; Ses</span>
+                  </button>
+                </div>
+
+                {mobileDockTab === 'move' && (
+                  <div className="flex flex-wrap items-center justify-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => onChangeExplorationMode('walk')}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                        explorationMode === 'walk'
+                          ? 'bg-[#5D8A48] text-[#FAF2E2]'
+                          : 'bg-[#EDE0C6] text-[#3A2618]'
+                      }`}
+                    >
+                      <Footprints className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Yürü</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVehicleType('car')}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                        explorationMode === 'vehicle' && vehicleConfig.type === 'car'
+                          ? 'bg-[#C85A32] text-[#FAF2E2]'
+                          : 'bg-[#EDE0C6] text-[#3A2618]'
+                      }`}
+                    >
+                      <Car className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Araba</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVehicleType('bicycle')}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                        explorationMode === 'vehicle' && vehicleConfig.type === 'bicycle'
+                          ? 'bg-[#C85A32] text-[#FAF2E2]'
+                          : 'bg-[#EDE0C6] text-[#3A2618]'
+                      }`}
+                    >
+                      <Bike className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Bisiklet</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVehicleType('motorcycle')}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                        explorationMode === 'vehicle' && vehicleConfig.type === 'motorcycle'
+                          ? 'bg-[#C85A32] text-[#FAF2E2]'
+                          : 'bg-[#EDE0C6] text-[#3A2618]'
+                      }`}
+                    >
+                      <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Motor</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onChangeExplorationMode('sparrow')}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                        explorationMode === 'sparrow'
+                          ? 'bg-[#B84C27] text-[#FAF2E2]'
+                          : 'bg-[#EDE0C6] text-[#3A2618]'
+                      }`}
+                    >
+                      <Bird className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Serçe</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        explorationMode === 'sparrow' && onChirp ? onChirp() : onHorn()
+                      }
+                      className="px-2.5 py-1.5 rounded-lg bg-[#EFE0C3] border border-[#B99464]/60 text-xs font-semibold text-[#3A2618] cursor-pointer"
+                    >
+                      {explorationMode === 'sparrow'
+                        ? 'Öt'
+                        : vehicleConfig.type === 'bicycle'
+                          ? 'Zil'
+                          : 'Korna'}
+                    </button>
+                  </div>
+                )}
+
+                {mobileDockTab === 'view' && (
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex flex-wrap items-center justify-center gap-1">
+                      {(
+                        [
+                          ['isometric', 'İzometrik'],
+                          ['perspective', 'Omuz'],
+                          ['close', 'Yakın'],
+                          ['overview', 'Geniş'],
+                          ['first_person', '1. Şahıs'],
+                        ] as [CameraPreset, string][]
+                      ).map(([preset, label]) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => onChangeCameraPreset(preset)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold cursor-pointer ${
+                            cameraPreset === preset
+                              ? 'bg-[#C85A32] text-[#FAF2E2]'
+                              : 'bg-[#EDE0C6] text-[#5B432F]'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-center gap-1">
+                      {(['morning', 'noon', 'golden', 'evening'] as TimeOfDay[]).map((tod) => (
+                        <button
+                          key={tod}
+                          type="button"
+                          onClick={() => onChangeTimeOfDay(tod)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold cursor-pointer ${
+                            timeOfDay === tod
+                              ? 'bg-[#5B3D28] text-[#FAF2E2]'
+                              : 'bg-[#EDE0C6] text-[#5B432F]'
+                          }`}
+                        >
+                          {TIME_MOODS[tod].label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {mobileDockTab === 'design' && (
+                  <div className="flex flex-wrap items-center justify-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setActiveDrawer((d) => (d === 'garage' ? 'none' : 'garage'))
+                      }
+                      className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                        activeDrawer === 'garage'
+                          ? 'bg-[#C85A32] text-[#FAF2E2]'
+                          : 'bg-[#EDE0C6] text-[#3A2618]'
+                      }`}
+                    >
+                      <Paintbrush className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Araç</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setActiveDrawer((d) => (d === 'house' ? 'none' : 'house'))
+                      }
+                      className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                        activeDrawer === 'house'
+                          ? 'bg-[#5D8A48] text-[#FAF2E2]'
+                          : 'bg-[#EDE0C6] text-[#3A2618]'
+                      }`}
+                    >
+                      <Home className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Ev Cephesi</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setActiveDrawer((d) => (d === 'atmosphere' ? 'none' : 'atmosphere'))
+                      }
+                      className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                        activeDrawer === 'atmosphere'
+                          ? 'bg-[#5D8A48] text-[#FAF2E2]'
+                          : 'bg-[#EDE0C6] text-[#3A2618]'
+                      }`}
+                    >
+                      <CloudRain className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Hava &amp; Lo-Fi</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTouchControlsEnabled((prev) => {
+                          if (prev) {
+                            onTouchInput({
+                              forward: false,
+                              backward: false,
+                              left: false,
+                              right: false,
+                              joyX: 0,
+                              joyY: 0,
+                              flap: false,
+                              dive: false,
+                            });
+                          }
+                          return !prev;
+                        });
+                      }}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                        touchControlsEnabled
+                          ? 'bg-[#EFE0C3] border border-[#C85A32]/60 text-[#B84C27]'
+                          : 'bg-[#EDE0C6] text-[#5B432F]'
+                      }`}
+                    >
+                      <Gamepad2 className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Joystick</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setActiveDrawer((d) => (d === 'radio' ? 'none' : 'radio'))
+                      }
+                      className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                        activeDrawer === 'radio'
+                          ? 'bg-[#C85A32] text-[#FAF2E2]'
+                          : isRadioPlaying
+                            ? 'bg-[#EFE0C3] border border-[#C85A32]/60 text-[#B84C27]'
+                            : 'bg-[#EDE0C6] text-[#5B432F]'
+                      }`}
+                    >
+                      <Radio className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Radyo</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onToggleMusic}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                        musicEnabled && !isMuted
+                          ? 'bg-[#EFE0C3] border border-[#C85A32]/60 text-[#B84C27]'
+                          : 'bg-[#EDE0C6] text-[#5B432F]'
+                      }`}
+                    >
+                      <Music className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Müzik</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onToggleMute}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#EDE0C6] text-xs font-semibold text-[#3A2618] cursor-pointer"
+                    >
+                      {isMuted ? (
+                        <VolumeX key="muted" className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
+                      ) : (
+                        <Volume2 key="unmuted" className="w-3.5 h-3.5 text-[#4B743B]" aria-hidden="true" />
+                      )}
+                      <span>{isMuted ? 'Sessiz' : 'Ses'}</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}

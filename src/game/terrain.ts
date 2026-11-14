@@ -165,11 +165,19 @@ export function getWalkableSurfaceHeightAt(x: number, z: number): number {
     }
   }
 
-  // Atatürk Kent Meydanı Circular Plaza & Diagonal Paths
-  const dMeydan = Math.hypot(x, z - 12);
-  if (dMeydan <= 16.0) {
+  // Western Magnesia Highway Extension along z = -22 (x in [-149..-96]) + Sanctuary Turnoff
+  if (x >= -149 && x <= -95 && Math.abs(z + 22) <= 5.5) {
+    y = Math.max(y, surfaceY + (Math.abs(z + 22) <= 4.2 && x >= -148 ? 0.13 : 0.09));
+  }
+  if (Math.abs(x + 132) <= 5.2 && z >= -29.5 && z <= -22) {
+    y = Math.max(y, surfaceY + (Math.abs(x + 132) <= 4.0 ? 0.148 : 0.105));
+  }
+
+  // Atatürk Kent Meydanı Expanded Plaza, Pool Promenade & Open Event Square
+  if (Math.abs(x) <= 13.4 && z >= -15.8 && z <= 28.4) {
     const meydanBase = getTerrainHeightAt(0, 12);
-    y = Math.max(y, meydanBase + (dMeydan <= 14.2 ? 0.26 : 0.245));
+    const inner = Math.abs(x) <= 12.8 && z >= -15.2 && z <= 27.8;
+    y = Math.max(y, meydanBase + (inner ? 0.26 : 0.245));
   }
 
   // Historic & Modern Landmark Courtyards / Terraces / Platforms
@@ -184,8 +192,8 @@ export function getWalkableSurfaceHeightAt(x: number, z: number): number {
     y = Math.max(y, getTerrainHeightAt(-36, -36) + 0.35);
   } else if (Math.abs(x + 72) <= 7.5 && Math.abs(z + 6) <= 7.5) {
     y = Math.max(y, getTerrainHeightAt(-72, -6) + 0.4);
-  } else if (Math.abs(x - 36) <= 8.0 && Math.abs(z - 28) <= 7.0) {
-    y = Math.max(y, getTerrainHeightAt(36, 28) + 0.45);
+  } else if (x >= 26.8 && x <= 46.0 && Math.abs(z - 28) <= 8.4) {
+    y = Math.max(y, getTerrainHeightAt(36, 28) + 0.42);
   } else if (Math.abs(x + 74) <= 13.0 && Math.abs(z - 30) <= 12.0) {
     const b = getTerrainHeightAt(-74, 30);
     let top = b + 0.18;
@@ -206,6 +214,8 @@ export function getWalkableSurfaceHeightAt(x: number, z: number): number {
       (Math.abs(x - 77) <= 13.0 && Math.abs(z + 78) <= 1.8) ||
       (Math.abs(x - 76.5) <= 1.8 && Math.abs(z + 78) <= 10.5);
     y = Math.max(y, b + (onWalk ? 0.27 : 0.22));
+  } else if (Math.abs(x + 132) <= 11.2 && Math.abs(z + 40) <= 11.2) {
+    y = Math.max(y, getTerrainHeightAt(-132, -40) + 0.42);
   }
 
   return y;

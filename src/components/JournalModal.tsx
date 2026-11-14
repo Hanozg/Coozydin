@@ -154,14 +154,14 @@ export function JournalModal({
               <div className="md:col-span-2 rounded-xl p-4 bg-[#EFE0C3] border border-[#C85A32]/45 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <div className="text-xs text-[#B84C27] font-semibold">
-                    Sonraki Aşama · Çok Yakında
+                    Harita Genişlemesi · 1. Etap Açıldı!
                   </div>
                   <div className="font-display text-sm md:text-base font-bold text-[#3A2618] mt-0.5">
-                    Aydın’a Ait Diğer Antik Kentler Çok Yakında!
+                    Magnesia Antik Kenti Açıldı — Diğer Antik Kentler Yolda!
                   </div>
                   <p className="text-xs text-[#5E4530] mt-0.5">
-                    Nysa, Aphrodisias, Magnesia, Miletos, Priene ve Alinda rotaları Efeler dışındaki
-                    yeni harita genişlemeleriyle oyuna eklenecek.
+                    Batı yolu üzerinden Magnesia Artemis Tapınağı’nı ziyaret edebilirsiniz. Sıradaki genişlemelerde
+                    Nysa, Alabanda, Alinda, Priene, Milet, Afrodisias ve Didyma eklenecek.
                   </p>
                 </div>
               </div>

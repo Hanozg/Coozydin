@@ -1,93 +1,287 @@
 import { LofiTrackId, VehicleType, WeatherType } from '../types/game';
 
+type InstrumentStyle = 'felt' | 'oud' | 'pad' | 'rhodes';
+
 interface TrackPreset {
   stepMs: number;
+  swingMs: number;
   chords: number[][];
-  melody: number[];
+  /** 32-step melodic pattern per bar-cycle (null = lyrical rest so music breathes) */
+  melodyPattern: (number | null)[];
+  /** Optional quiet emotional counter-note on sparse steps */
+  counterPattern?: (number | null)[];
   brightness: number;
   hasBrushHat: boolean;
+  hasSoftKick: boolean;
+  hasRimSnare: boolean;
   hasCrackle: boolean;
+  crackleLevel: number;
   musicActive: boolean;
+  instrument: InstrumentStyle;
+  reverbSend: number;
+  tapeDetuneCents: number;
 }
 
 const TRACK_PRESETS: Record<LofiTrackId, TrackPreset> = {
   aegean: {
-    stepMs: 920,
+    // 92.4 FM · Kent Meydanı & Sevgi Yolu — Nostalgic warm Rhodes & felt ballad (Fmaj9 - Dm9 - Bbmaj7 - C6/9)
+    stepMs: 430,
+    swingMs: 28,
     chords: [
-      [146.83, 220.0, 261.63, 329.63], // Dm9
-      [116.54, 174.61, 220.0, 293.66], // Bbmaj7
-      [98.0, 146.83, 174.61, 220.0], // Gm9
-      [110.0, 164.81, 220.0, 261.63], // Am7
+      [174.61, 220.0, 261.63, 329.63, 392.0], // Fmaj9
+      [146.83, 220.0, 261.63, 329.63, 349.23], // Dm9
+      [116.54, 174.61, 220.0, 293.66, 349.23], // Bbmaj7
+      [130.81, 196.0, 220.0, 293.66, 329.63], // C6/9
     ],
-    melody: [293.66, 329.63, 349.23, 440.0, 493.88, 523.25, 587.33, 659.25],
-    brightness: 1150,
-    hasBrushHat: false,
+    melodyPattern: [
+      523.25, null, 440.0, null, 392.0, null, 440.0, 349.23,
+      329.63, null, null, null, 293.66, 329.63, 349.23, null,
+      440.0, null, 392.0, 349.23, 293.66, null, null, 349.23,
+      329.63, null, 293.66, null, 261.63, null, null, null,
+    ],
+    counterPattern: [
+      null, null, null, null, null, null, null, null,
+      null, null, 659.25, null, null, null, null, null,
+      null, null, null, null, null, null, 587.33, null,
+      null, null, null, null, null, null, 392.0, null,
+    ],
+    brightness: 1080,
+    hasBrushHat: true,
+    hasSoftKick: true,
+    hasRimSnare: false,
     hasCrackle: true,
+    crackleLevel: 0.013,
     musicActive: true,
+    instrument: 'rhodes',
+    reverbSend: 0.42,
+    tapeDetuneCents: 6,
   },
-  rainy_piano: {
-    stepMs: 1080,
+  bazaar_oud: {
+    // 95.8 FM · Tarihi Çarşı & Nasuh Paşa — Emotional Anatolian Hijaz acoustic oud lo-fi
+    stepMs: 410,
+    swingMs: 24,
     chords: [
-      [130.81, 196.0, 246.94, 293.66], // Cmaj9
-      [110.0, 164.81, 196.0, 246.94], // Am9
-      [87.31, 130.81, 164.81, 220.0], // Fmaj7
-      [98.0, 146.83, 196.0, 246.94], // G6
+      [146.83, 220.0, 293.66, 369.99], // D Hijaz open chord
+      [155.56, 233.08, 293.66, 392.0], // Ebmaj7
+      [130.81, 196.0, 233.08, 293.66], // Cm9
+      [146.83, 220.0, 261.63, 369.99], // D7sus/Hijaz
     ],
-    melody: [261.63, 329.63, 392.0, 440.0, 493.88, 523.25, 659.25, 587.33],
+    melodyPattern: [
+      587.33, null, 554.37, 587.33, 440.0, null, 466.16, 440.0,
+      392.0, null, 369.99, null, 311.13, 293.66, null, null,
+      466.16, null, 440.0, 392.0, 369.99, null, 392.0, 440.0,
+      369.99, 311.13, 293.66, null, null, null, 369.99, null,
+    ],
+    brightness: 1260,
+    hasBrushHat: true,
+    hasSoftKick: true,
+    hasRimSnare: true,
+    hasCrackle: true,
+    crackleLevel: 0.015,
+    musicActive: true,
+    instrument: 'oud',
+    reverbSend: 0.48,
+    tapeDetuneCents: 5,
+  },
+  tralleis_echo: {
+    // 98.2 FM · Tralleis & Magnesia Antik — Deeply emotional ambient lo-fi across ancient marble
+    stepMs: 560,
+    swingMs: 0,
+    chords: [
+      [110.0, 164.81, 246.94, 329.63], // Am9
+      [87.31, 130.81, 196.0, 261.63, 329.63], // Fmaj9
+      [130.81, 196.0, 246.94, 329.63], // Cmaj7
+      [98.0, 146.83, 220.0, 293.66], // G6/9
+    ],
+    melodyPattern: [
+      659.25, null, null, 587.33, 523.25, null, null, null,
+      493.88, null, 523.25, null, 440.0, null, null, null,
+      392.0, null, 440.0, null, 523.25, null, 587.33, null,
+      493.88, null, null, 440.0, 392.0, null, null, null,
+    ],
+    counterPattern: [
+      null, null, null, null, null, null, 329.63, null,
+      null, null, null, null, null, null, 261.63, null,
+      null, null, null, null, null, null, null, null,
+      null, null, 293.66, null, null, null, 220.0, null,
+    ],
     brightness: 820,
     hasBrushHat: false,
+    hasSoftKick: false,
+    hasRimSnare: false,
     hasCrackle: true,
+    crackleLevel: 0.008,
     musicActive: true,
+    instrument: 'pad',
+    reverbSend: 0.68,
+    tapeDetuneCents: 9,
   },
-  night_lofi: {
-    stepMs: 680,
+  aytepe_campus: {
+    // 101.6 FM · ADÜ Aytepe Üniversitesi — Cozy swung chillhop study beat (Em9 - A13 - Dmaj9 - Bm7)
+    stepMs: 365,
+    swingMs: 34,
     chords: [
       [164.81, 246.94, 293.66, 369.99], // Em9
-      [130.81, 196.0, 246.94, 293.66], // Cmaj9
-      [110.0, 164.81, 196.0, 261.63], // Am7
+      [110.0, 196.0, 277.18, 329.63], // A13
+      [146.83, 220.0, 277.18, 329.63], // Dmaj9
       [123.47, 185.0, 220.0, 293.66], // Bm7
     ],
-    melody: [329.63, 392.0, 440.0, 493.88, 587.33, 659.25, 739.99, 587.33],
-    brightness: 980,
+    melodyPattern: [
+      587.33, null, 554.37, 493.88, null, 440.0, 493.88, null,
+      554.37, null, 493.88, null, 440.0, null, null, null,
+      369.99, null, 440.0, 493.88, null, 554.37, 587.33, null,
+      493.88, null, 440.0, null, 369.99, null, null, null,
+    ],
+    brightness: 1180,
     hasBrushHat: true,
+    hasSoftKick: true,
+    hasRimSnare: true,
     hasCrackle: true,
+    crackleLevel: 0.014,
     musicActive: true,
+    instrument: 'rhodes',
+    reverbSend: 0.36,
+    tapeDetuneCents: 6,
+  },
+  rainy_piano: {
+    // 103.5 FM · Tabakhane Dere Boyu — Intimate, emotional solo felt piano (Am9 - Fmaj7 - Cmaj9 - G6)
+    stepMs: 520,
+    swingMs: 14,
+    chords: [
+      [110.0, 164.81, 246.94, 261.63], // Am9
+      [87.31, 130.81, 164.81, 220.0], // Fmaj7
+      [130.81, 196.0, 246.94, 293.66], // Cmaj9
+      [98.0, 146.83, 196.0, 246.94], // G6
+    ],
+    melodyPattern: [
+      523.25, null, 493.88, null, 440.0, null, 392.0, null,
+      329.63, null, null, 349.23, 392.0, null, null, null,
+      493.88, null, 523.25, null, 587.33, null, 523.25, null,
+      493.88, null, 440.0, null, 392.0, null, null, null,
+    ],
+    counterPattern: [
+      null, null, null, null, null, null, null, 261.63,
+      null, null, 220.0, null, null, null, 261.63, null,
+      null, null, null, null, null, null, null, 293.66,
+      null, null, null, null, null, null, 246.94, null,
+    ],
+    brightness: 740,
+    hasBrushHat: false,
+    hasSoftKick: false,
+    hasRimSnare: false,
+    hasCrackle: true,
+    crackleLevel: 0.015,
+    musicActive: true,
+    instrument: 'felt',
+    reverbSend: 0.56,
+    tapeDetuneCents: 7,
+  },
+  night_lofi: {
+    // 106.0 FM · İstasyon & Gece Bulvarı — Smoky midnight jazz-hop (Cm9 - Fm9 - Abmaj7 - G7alt)
+    stepMs: 390,
+    swingMs: 36,
+    chords: [
+      [130.81, 196.0, 233.08, 293.66], // Cm9
+      [87.31, 130.81, 155.56, 207.65], // Fm9
+      [103.83, 155.56, 196.0, 261.63], // Abmaj7
+      [98.0, 146.83, 185.0, 233.08], // G7#9/soft
+    ],
+    melodyPattern: [
+      587.33, null, 466.16, null, 392.0, null, 466.16, 523.25,
+      415.3, null, null, 392.0, 349.23, null, null, null,
+      466.16, null, 523.25, 587.33, null, 466.16, 415.3, null,
+      392.0, null, 349.23, null, 293.66, null, null, null,
+    ],
+    brightness: 880,
+    hasBrushHat: true,
+    hasSoftKick: true,
+    hasRimSnare: true,
+    hasCrackle: true,
+    crackleLevel: 0.016,
+    musicActive: true,
+    instrument: 'rhodes',
+    reverbSend: 0.45,
+    tapeDetuneCents: 8,
   },
   ambient_only: {
     stepMs: 1200,
+    swingMs: 0,
     chords: [],
-    melody: [],
+    melodyPattern: [],
     brightness: 600,
     hasBrushHat: false,
+    hasSoftKick: false,
+    hasRimSnare: false,
     hasCrackle: false,
+    crackleLevel: 0,
     musicActive: false,
+    instrument: 'felt',
+    reverbSend: 0.3,
+    tapeDetuneCents: 0,
   },
 };
 
 // Harmandalı / Zeybek-inspired Hijaz-kar phrase in D (D, Eb, F#, G, A, Bb, C, D)
 const ZEYBEK_PHRASE: { freq: number; beat: number; len: number }[] = [
-  { freq: 587.33, beat: 0, len: 0.45 },
-  { freq: 554.37, beat: 2, len: 0.35 },
-  { freq: 587.33, beat: 3, len: 0.3 },
-  { freq: 440.0, beat: 4, len: 0.55 },
-  { freq: 466.16, beat: 6, len: 0.35 },
-  { freq: 440.0, beat: 7, len: 0.4 },
-  { freq: 369.99, beat: 9, len: 0.45 },
-  { freq: 392.0, beat: 11, len: 0.35 },
-  { freq: 369.99, beat: 12, len: 0.35 },
-  { freq: 311.13, beat: 14, len: 0.4 },
-  { freq: 293.66, beat: 16, len: 0.9 },
+  { freq: 587.33, beat: 0, len: 0.5 },
+  { freq: 554.37, beat: 2, len: 0.4 },
+  { freq: 587.33, beat: 3, len: 0.35 },
+  { freq: 440.0, beat: 4, len: 0.62 },
+  { freq: 466.16, beat: 6, len: 0.4 },
+  { freq: 440.0, beat: 7, len: 0.45 },
+  { freq: 369.99, beat: 9, len: 0.5 },
+  { freq: 392.0, beat: 11, len: 0.38 },
+  { freq: 369.99, beat: 12, len: 0.4 },
+  { freq: 311.13, beat: 14, len: 0.48 },
+  { freq: 293.66, beat: 16, len: 1.05 },
 ];
+
+function createSoftTapeCurve(): Float32Array<ArrayBuffer> {
+  const n = 1024;
+  const buffer = new ArrayBuffer(n * 4);
+  const curve = new Float32Array(buffer);
+  for (let i = 0; i < n; i++) {
+    const x = (i * 2) / n - 1;
+    curve[i] = Math.tanh(x * 1.45) * 0.92;
+  }
+  return curve;
+}
+
+function createWarmReverbBuffer(ctx: AudioContext, durationSec = 2.4): AudioBuffer {
+  const len = Math.floor(ctx.sampleRate * durationSec);
+  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = buf.getChannelData(ch);
+    let lp = 0;
+    for (let i = 0; i < len; i++) {
+      const t = i / len;
+      // Smooth exponential room decay + gentle early reflection swell
+      const env = Math.pow(1 - t, 2.55) * (0.28 + 0.72 * Math.min(1, i / (ctx.sampleRate * 0.035)));
+      const white = Math.random() * 2 - 1;
+      // Lowpass smoothing inside the impulse response for silky warm reverb tail
+      lp = lp * 0.76 + white * 0.24;
+      data[i] = lp * env;
+    }
+  }
+  return buf;
+}
 
 class CozyAudioEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private musicGain: GainNode | null = null;
+  private musicWarmFilter: BiquadFilterNode | null = null;
+  private reverbNode: ConvolverNode | null = null;
+  private reverbReturn: GainNode | null = null;
+  private musicReverbSend: GainNode | null = null;
   private ambientGain: GainNode | null = null;
   private sfxGain: GainNode | null = null;
   private delayNode: DelayNode | null = null;
+
   private engineOsc: OscillatorNode | null = null;
+  private engineSubOsc: OscillatorNode | null = null;
   private engineGain: GainNode | null = null;
+  private engineNoiseGain: GainNode | null = null;
 
   private weatherFilter: BiquadFilterNode | null = null;
   private weatherGain: GainNode | null = null;
@@ -126,50 +320,95 @@ class CozyAudioEngine {
     const ctx = new AudioCtx();
     this.ctx = ctx;
 
+    // Gentle master warmth compressor/limiter so overlapping chords & chimes never clip
+    const compressor = ctx.createDynamicsCompressor();
+    compressor.threshold.value = -16;
+    compressor.knee.value = 18;
+    compressor.ratio.value = 3.2;
+    compressor.attack.value = 0.015;
+    compressor.release.value = 0.25;
+
     const master = ctx.createGain();
-    master.gain.value = this.isMuted ? 0 : 0.74;
-    master.connect(ctx.destination);
+    master.gain.value = this.isMuted ? 0 : 0.78;
+    master.connect(compressor);
+    compressor.connect(ctx.destination);
     this.masterGain = master;
 
+    // Lush shared stereo warm hall reverb
+    const reverb = ctx.createConvolver();
+    reverb.buffer = createWarmReverbBuffer(ctx, 2.5);
+    const reverbReturn = ctx.createGain();
+    reverbReturn.gain.value = 0.44;
+    const reverbWarm = ctx.createBiquadFilter();
+    reverbWarm.type = 'lowpass';
+    reverbWarm.frequency.value = 1650;
+    reverb.connect(reverbWarm);
+    reverbWarm.connect(reverbReturn);
+    reverbReturn.connect(master);
+    this.reverbNode = reverb;
+    this.reverbReturn = reverbReturn;
+
+    // Warm Tape Bus for Music (Soft Saturator -> Gentle Lowpass -> Music Gain -> Master & Reverb)
     const music = ctx.createGain();
-    music.gain.value = this.musicEnabled ? 0.54 : 0;
+    music.gain.value = this.musicEnabled ? 0.58 : 0;
+
+    const tapeSat = ctx.createWaveShaper();
+    tapeSat.curve = createSoftTapeCurve();
+    tapeSat.oversample = '2x';
+
+    const musicWarmFilter = ctx.createBiquadFilter();
+    musicWarmFilter.type = 'lowpass';
+    musicWarmFilter.frequency.value = 2150;
+    musicWarmFilter.Q.value = 0.6;
+
+    const musicReverbSend = ctx.createGain();
+    musicReverbSend.gain.value = TRACK_PRESETS[this.currentTrack].reverbSend;
+
+    musicWarmFilter.connect(tapeSat);
+    tapeSat.connect(music);
     music.connect(master);
+    music.connect(musicReverbSend);
+    musicReverbSend.connect(reverb);
+
     this.musicGain = music;
+    this.musicWarmFilter = musicWarmFilter;
+    this.musicReverbSend = musicReverbSend;
 
     const ambient = ctx.createGain();
-    ambient.gain.value = 0.65;
+    ambient.gain.value = 0.6;
     ambient.connect(master);
     this.ambientGain = ambient;
 
     const sfx = ctx.createGain();
-    sfx.gain.value = this.sfxEnabled ? 0.68 : 0;
+    sfx.gain.value = this.sfxEnabled ? 0.64 : 0;
     sfx.connect(master);
     this.sfxGain = sfx;
 
+    // Soft analog tape echo feeding into musicWarmFilter
     const delay = ctx.createDelay(1.0);
-    delay.delayTime.value = 0.42;
+    delay.delayTime.value = 0.39;
     const fb = ctx.createGain();
-    fb.gain.value = 0.28;
+    fb.gain.value = 0.26;
     const delayFilter = ctx.createBiquadFilter();
     delayFilter.type = 'lowpass';
-    delayFilter.frequency.value = 1400;
+    delayFilter.frequency.value = 1050;
 
     delay.connect(delayFilter);
     delayFilter.connect(fb);
     fb.connect(delay);
-    delayFilter.connect(music);
+    delayFilter.connect(musicWarmFilter);
     this.delayNode = delay;
 
-    // Pink/Brown noise buffer for soothing weather & vinyl texture
-    const bufLen = ctx.sampleRate * 3;
+    // Smooth Pink/Brown noise buffer for soothing weather, rain & tire whisper
+    const bufLen = ctx.sampleRate * 4;
     const buf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
     const data = buf.getChannelData(0);
     let lastOut = 0;
     for (let i = 0; i < bufLen; i++) {
       const white = Math.random() * 2 - 1;
-      data[i] = (lastOut + 0.03 * white) / 1.03;
+      data[i] = (lastOut + 0.024 * white) / 1.024;
       lastOut = data[i];
-      data[i] *= 2.4;
+      data[i] *= 2.5;
     }
     this.noiseBuffer = buf;
 
@@ -208,12 +447,12 @@ class CozyAudioEngine {
     weatherSrc.loop = true;
 
     const weatherFilter = ctx.createBiquadFilter();
-    weatherFilter.type = 'bandpass';
-    weatherFilter.frequency.value = 280;
-    weatherFilter.Q.value = 0.7;
+    weatherFilter.type = 'lowpass';
+    weatherFilter.frequency.value = 320;
+    weatherFilter.Q.value = 0.6;
 
     const weatherGain = ctx.createGain();
-    weatherGain.gain.value = 0.035;
+    weatherGain.gain.value = 0.03;
 
     weatherSrc.connect(weatherFilter);
     weatherFilter.connect(weatherGain);
@@ -222,43 +461,73 @@ class CozyAudioEngine {
     this.weatherFilter = weatherFilter;
     this.weatherGain = weatherGain;
 
-    // Subtle warm vinyl crackle buffer
-    const crackleLen = ctx.sampleRate * 4;
+    // Warm Vintage Vinyl Crackle & Dust (gentle low-mid dusty pops, zero harsh fizz)
+    const crackleLen = ctx.sampleRate * 5;
     const crackleBuf = ctx.createBuffer(1, crackleLen, ctx.sampleRate);
     const cData = crackleBuf.getChannelData(0);
+    let dustLp = 0;
     for (let i = 0; i < crackleLen; i++) {
-      cData[i] = Math.random() < 0.0025 ? (Math.random() * 2 - 1) * 0.45 : (Math.random() * 2 - 1) * 0.015;
+      const pop = Math.random() < 0.0016 ? (Math.random() * 2 - 1) * 0.5 : 0;
+      const bed = (Math.random() * 2 - 1) * 0.012;
+      dustLp = dustLp * 0.55 + (pop + bed) * 0.45;
+      cData[i] = dustLp;
     }
     const crackleSrc = ctx.createBufferSource();
     crackleSrc.buffer = crackleBuf;
     crackleSrc.loop = true;
-    const crackleFilter = ctx.createBiquadFilter();
-    crackleFilter.type = 'highpass';
-    crackleFilter.frequency.value = 1800;
+    const crackleBp = ctx.createBiquadFilter();
+    crackleBp.type = 'bandpass';
+    crackleBp.frequency.value = 1250;
+    crackleBp.Q.value = 0.8;
     const crackleGain = ctx.createGain();
-    crackleGain.gain.value = 0.016;
-    crackleSrc.connect(crackleFilter);
-    crackleFilter.connect(crackleGain);
+    crackleGain.gain.value = 0.014;
+    crackleSrc.connect(crackleBp);
+    crackleBp.connect(crackleGain);
     crackleGain.connect(music);
     crackleSrc.start();
     this.crackleGain = crackleGain;
 
-    // Engine oscillator
+    // Silky Muffled Vehicle Purr + Gentle Tire Road Whisper (no harsh oscillator buzz)
     const engOsc = ctx.createOscillator();
-    engOsc.type = 'triangle';
-    engOsc.frequency.value = 64;
+    engOsc.type = 'sine';
+    engOsc.frequency.value = 48;
+    const engSub = ctx.createOscillator();
+    engSub.type = 'triangle';
+    engSub.frequency.value = 72;
+    const engSubMix = ctx.createGain();
+    engSubMix.gain.value = 0.25;
+
     const engFilter = ctx.createBiquadFilter();
     engFilter.type = 'lowpass';
-    engFilter.frequency.value = 210;
+    engFilter.frequency.value = 145;
     const engGain = ctx.createGain();
     engGain.gain.value = 0;
 
     engOsc.connect(engFilter);
+    engSub.connect(engSubMix);
+    engSubMix.connect(engFilter);
     engFilter.connect(engGain);
     engGain.connect(sfx);
     engOsc.start();
+    engSub.start();
     this.engineOsc = engOsc;
+    this.engineSubOsc = engSub;
     this.engineGain = engGain;
+
+    const tireSrc = ctx.createBufferSource();
+    tireSrc.buffer = buf;
+    tireSrc.loop = true;
+    const tireFilter = ctx.createBiquadFilter();
+    tireFilter.type = 'bandpass';
+    tireFilter.frequency.value = 260;
+    tireFilter.Q.value = 0.7;
+    const tireGain = ctx.createGain();
+    tireGain.gain.value = 0;
+    tireSrc.connect(tireFilter);
+    tireFilter.connect(tireGain);
+    tireGain.connect(sfx);
+    tireSrc.start();
+    this.engineNoiseGain = tireGain;
 
     this.initialized = true;
     this.applyWeatherAudio();
@@ -270,31 +539,33 @@ class CozyAudioEngine {
   private applyTrackTexture() {
     if (!this.ctx || !this.crackleGain) return;
     const preset = TRACK_PRESETS[this.currentTrack];
-    const target = this.musicEnabled && preset.hasCrackle && preset.musicActive ? 0.018 : 0;
-    this.crackleGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.15);
+    const target =
+      this.musicEnabled && preset.hasCrackle && preset.musicActive ? preset.crackleLevel : 0;
+    this.crackleGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.25);
+    if (this.musicReverbSend) {
+      this.musicReverbSend.gain.setTargetAtTime(preset.reverbSend, this.ctx.currentTime, 0.35);
+    }
   }
 
   private applyWeatherAudio() {
     if (!this.ctx || !this.weatherFilter || !this.weatherGain) return;
     const now = this.ctx.currentTime;
     if (this.currentWeather === 'rain') {
-      this.weatherFilter.type = 'bandpass';
-      this.weatherFilter.frequency.setTargetAtTime(860, now, 0.4);
-      this.weatherFilter.Q.setTargetAtTime(0.65, now, 0.3);
-      this.weatherGain.gain.setTargetAtTime(0.11, now, 0.4);
+      this.weatherFilter.type = 'lowpass';
+      this.weatherFilter.frequency.setTargetAtTime(760, now, 0.5);
+      this.weatherGain.gain.setTargetAtTime(0.095, now, 0.5);
     } else if (this.currentWeather === 'storm') {
-      this.weatherFilter.type = 'bandpass';
-      this.weatherFilter.frequency.setTargetAtTime(580, now, 0.4);
-      this.weatherFilter.Q.setTargetAtTime(0.55, now, 0.3);
-      this.weatherGain.gain.setTargetAtTime(0.16, now, 0.4);
+      this.weatherFilter.type = 'lowpass';
+      this.weatherFilter.frequency.setTargetAtTime(520, now, 0.5);
+      this.weatherGain.gain.setTargetAtTime(0.135, now, 0.5);
     } else if (this.currentWeather === 'snow') {
       this.weatherFilter.type = 'lowpass';
-      this.weatherFilter.frequency.setTargetAtTime(240, now, 0.4);
-      this.weatherGain.gain.setTargetAtTime(0.055, now, 0.4);
+      this.weatherFilter.frequency.setTargetAtTime(220, now, 0.5);
+      this.weatherGain.gain.setTargetAtTime(0.045, now, 0.5);
     } else {
       this.weatherFilter.type = 'lowpass';
-      this.weatherFilter.frequency.setTargetAtTime(290, now, 0.4);
-      this.weatherGain.gain.setTargetAtTime(0.025, now, 0.4);
+      this.weatherFilter.frequency.setTargetAtTime(260, now, 0.5);
+      this.weatherGain.gain.setTargetAtTime(0.022, now, 0.5);
     }
   }
 
@@ -306,11 +577,11 @@ class CozyAudioEngine {
         this.ctx.state === 'running' &&
         this.currentWeather === 'storm' &&
         !this.isMuted &&
-        Math.random() < 0.48
+        Math.random() < 0.45
       ) {
         this.playDistantThunder();
       }
-      this.thunderTimer = window.setTimeout(check, 6500 + Math.random() * 7500);
+      this.thunderTimer = window.setTimeout(check, 7000 + Math.random() * 8000);
     };
     this.thunderTimer = window.setTimeout(check, 4500);
   }
@@ -323,25 +594,66 @@ class CozyAudioEngine {
 
     const filter = this.ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(140, now);
-    filter.frequency.exponentialRampToValueAtTime(55, now + 2.8);
+    filter.frequency.setValueAtTime(125, now);
+    filter.frequency.exponentialRampToValueAtTime(48, now + 3.2);
 
     const g = this.ctx.createGain();
     g.gain.setValueAtTime(0.001, now);
-    g.gain.linearRampToValueAtTime(0.24, now + 0.35);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 3.2);
+    g.gain.linearRampToValueAtTime(0.22, now + 0.45);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 3.5);
 
     src.connect(filter);
     filter.connect(g);
     g.connect(this.ambientGain);
+    if (this.reverbNode) g.connect(this.reverbNode);
     src.start(now);
-    src.stop(now + 3.3);
+    src.stop(now + 3.6);
   }
 
-  public setLofiTrack(trackId: LofiTrackId) {
+  public setLofiTrack(trackId: LofiTrackId, withTuneClick = false) {
+    const changed = this.currentTrack !== trackId;
     this.currentTrack = trackId;
     this.step = 0;
     this.applyTrackTexture();
+    if (withTuneClick && changed) {
+      this.playRadioTuneClick();
+    }
+  }
+
+  public playRadioTuneClick() {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    const now = this.ctx.currentTime;
+    // Soft analog knob click
+    const clickOsc = this.ctx.createOscillator();
+    clickOsc.type = 'sine';
+    clickOsc.frequency.setValueAtTime(520, now);
+    clickOsc.frequency.exponentialRampToValueAtTime(160, now + 0.03);
+    const cg = this.ctx.createGain();
+    cg.gain.setValueAtTime(0.06, now);
+    cg.gain.exponentialRampToValueAtTime(0.0001, now + 0.038);
+    clickOsc.connect(cg);
+    cg.connect(this.sfxGain);
+    clickOsc.start(now);
+    clickOsc.stop(now + 0.045);
+
+    // Warm muffled FM band breath
+    if (this.noiseBuffer) {
+      const staticSrc = this.ctx.createBufferSource();
+      staticSrc.buffer = this.noiseBuffer;
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime(1350, now);
+      bp.Q.value = 1.1;
+      const sg = this.ctx.createGain();
+      sg.gain.setValueAtTime(0.001, now);
+      sg.gain.linearRampToValueAtTime(0.024, now + 0.03);
+      sg.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+      staticSrc.connect(bp);
+      bp.connect(sg);
+      sg.connect(this.sfxGain);
+      staticSrc.start(now);
+      staticSrc.stop(now + 0.18);
+    }
   }
 
   public setWeatherAudio(weather: WeatherType) {
@@ -353,6 +665,7 @@ class CozyAudioEngine {
     if (this.musicTimer !== null) return;
     const tickMusic = () => {
       const preset = TRACK_PRESETS[this.currentTrack];
+      const swingOffset = this.step % 2 === 1 ? preset.swingMs : -preset.swingMs * 0.4;
       if (
         this.ctx &&
         this.ctx.state === 'running' &&
@@ -364,109 +677,275 @@ class CozyAudioEngine {
         this.playMusicBeat(this.step, preset);
         this.step++;
       }
-      this.musicTimer = window.setTimeout(tickMusic, preset.stepMs);
+      const nextDelay = Math.max(180, preset.stepMs + swingOffset);
+      this.musicTimer = window.setTimeout(tickMusic, nextDelay);
     };
     tickMusic();
   }
 
   private playMusicBeat(step: number, preset: TrackPreset) {
-    if (!this.ctx || !this.musicGain || !this.delayNode) return;
+    if (!this.ctx || !this.musicWarmFilter) return;
     const now = this.ctx.currentTime;
+    const inst = preset.instrument;
+    const barStep = step % 32;
 
-    if (step % 8 === 0 && preset.chords.length > 0) {
-      const chordIdx = Math.floor(step / 8) % preset.chords.length;
+    // Gentle chord pad / rolled emotional voicing every 8 steps (1 bar)
+    if (barStep % 8 === 0 && preset.chords.length > 0) {
+      const chordIdx = Math.floor(barStep / 8) % preset.chords.length;
       const chord = preset.chords[chordIdx];
+      const strumGap = inst === 'oud' ? 0.055 : inst === 'pad' ? 0.11 : 0.075;
+      const chordDur = (preset.stepMs / 1000) * 7.6;
+      const chordGain = inst === 'pad' ? 0.028 : inst === 'felt' ? 0.032 : 0.03;
+
       chord.forEach((freq, i) => {
-        this.triggerFeltNote(freq, now + i * 0.08, 4.4, 0.038, preset.brightness);
+        const humanTime = now + i * strumGap + (Math.random() - 0.5) * 0.014;
+        this.triggerLoFiVoice(
+          freq,
+          humanTime,
+          chordDur,
+          chordGain,
+          preset.brightness * 0.85,
+          inst,
+          preset.tapeDetuneCents
+        );
       });
-      // Soft sub bass root
-      this.triggerBassNote(chord[0] * 0.5, now, 2.2);
+
+      // Warm sub-bass root gently hugging the chord
+      this.triggerBassNote(chord[0] * 0.5, now + 0.015, chordDur * 0.72);
     }
 
-    if ((step % 2 === 0 || step % 7 === 3) && preset.melody.length > 0) {
-      const noteIdx = (step * 3 + Math.floor(step / 4)) % preset.melody.length;
-      const freq = preset.melody[noteIdx];
-      this.triggerFeltNote(freq, now + 0.04, 2.2, 0.052, preset.brightness);
+    // Subtle secondary warm bass pulse on beat 3 (step % 8 === 4) for groove stations
+    if (barStep % 8 === 4 && preset.hasSoftKick && preset.chords.length > 0) {
+      const chordIdx = Math.floor(barStep / 8) % preset.chords.length;
+      const chord = preset.chords[chordIdx];
+      this.triggerBassNote(chord[0] * 0.5, now + 0.02, 1.1, 0.042);
     }
 
-    if (preset.hasBrushHat && step % 2 === 1) {
-      this.triggerBrushHat(now);
+    // Lyrical emotional melody pattern (with breathing rests!)
+    const melodyFreq =
+      preset.melodyPattern.length > 0
+        ? preset.melodyPattern[barStep % preset.melodyPattern.length]
+        : null;
+    if (melodyFreq !== null) {
+      const humanDelay = 0.02 + Math.random() * 0.025;
+      const velocityVar = 0.86 + Math.random() * 0.24;
+      const noteDur = inst === 'pad' ? 3.2 : inst === 'felt' ? 2.4 : inst === 'oud' ? 1.45 : 1.85;
+      const baseGain = inst === 'pad' ? 0.04 : inst === 'felt' ? 0.052 : 0.046;
+
+      // Occasional expressive grace-slide on oud
+      this.triggerLoFiVoice(
+        melodyFreq,
+        now + humanDelay,
+        noteDur,
+        baseGain * velocityVar,
+        preset.brightness,
+        inst,
+        preset.tapeDetuneCents,
+        inst === 'oud' && Math.random() < 0.35
+      );
+    }
+
+    // Sparse tender counter-note
+    const counterFreq =
+      preset.counterPattern && preset.counterPattern.length > 0
+        ? preset.counterPattern[barStep % preset.counterPattern.length]
+        : null;
+    if (counterFreq !== null) {
+      this.triggerLoFiVoice(
+        counterFreq,
+        now + 0.04,
+        2.6,
+        0.028,
+        preset.brightness * 0.75,
+        'felt',
+        preset.tapeDetuneCents
+      );
+    }
+
+    // Dusty Lo-Fi Drum Pocket (Kick on 0 & 3/5, soft rim/snare on 2 & 6, gentle brush hats)
+    if (preset.hasSoftKick && (barStep % 8 === 0 || barStep % 8 === 5)) {
+      this.triggerSoftKick(now + Math.random() * 0.01);
+    }
+
+    if (preset.hasRimSnare && (barStep % 8 === 2 || barStep % 8 === 6)) {
+      this.triggerLoFiSnare(now + 0.012 + Math.random() * 0.012);
+    }
+
+    if (preset.hasBrushHat && barStep % 2 === 1) {
+      this.triggerBrushHat(now + Math.random() * 0.01, barStep % 4 === 3 ? 0.014 : 0.02);
     }
   }
 
-  private triggerBassNote(freq: number, startTime: number, duration: number) {
-    if (!this.ctx || !this.musicGain) return;
+  private triggerSoftKick(startTime: number) {
+    if (!this.ctx || !this.musicWarmFilter) return;
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(92, startTime);
+    osc.frequency.exponentialRampToValueAtTime(38, startTime + 0.14);
+
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 210;
+
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, startTime);
+    g.gain.linearRampToValueAtTime(0.11, startTime + 0.014);
+    g.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.25);
+
+    osc.connect(lp);
+    lp.connect(g);
+    g.connect(this.musicWarmFilter);
+    osc.start(startTime);
+    osc.stop(startTime + 0.27);
+  }
+
+  private triggerLoFiSnare(startTime: number) {
+    if (!this.ctx || !this.musicWarmFilter) return;
+    // Soft wooden rim tone
+    const body = this.ctx.createOscillator();
+    body.type = 'triangle';
+    body.frequency.setValueAtTime(195, startTime);
+    body.frequency.exponentialRampToValueAtTime(115, startTime + 0.065);
+    const bg = this.ctx.createGain();
+    bg.gain.setValueAtTime(0.0001, startTime);
+    bg.gain.linearRampToValueAtTime(0.042, startTime + 0.006);
+    bg.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.08);
+    body.connect(bg);
+    bg.connect(this.musicWarmFilter);
+    body.start(startTime);
+    body.stop(startTime + 0.1);
+
+    // Muffled vinyl brush puff
+    if (this.noiseBuffer) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.noiseBuffer;
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1150;
+      bp.Q.value = 0.9;
+      const ng = this.ctx.createGain();
+      ng.gain.setValueAtTime(0.0001, startTime);
+      ng.gain.linearRampToValueAtTime(0.026, startTime + 0.008);
+      ng.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.13);
+      src.connect(bp);
+      bp.connect(ng);
+      ng.connect(this.musicWarmFilter);
+      src.start(startTime);
+      src.stop(startTime + 0.15);
+    }
+  }
+
+  private triggerBassNote(freq: number, startTime: number, duration: number, peak = 0.062) {
+    if (!this.ctx || !this.musicWarmFilter) return;
     const osc = this.ctx.createOscillator();
     osc.type = 'sine';
     osc.frequency.setValueAtTime(freq, startTime);
     const env = this.ctx.createGain();
     env.gain.setValueAtTime(0.0001, startTime);
-    env.gain.linearRampToValueAtTime(0.065, startTime + 0.06);
+    env.gain.linearRampToValueAtTime(peak, startTime + 0.075);
     env.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
     osc.connect(env);
-    env.connect(this.musicGain);
+    env.connect(this.musicWarmFilter);
     osc.start(startTime);
-    osc.stop(startTime + duration + 0.05);
+    osc.stop(startTime + duration + 0.06);
   }
 
-  private triggerBrushHat(startTime: number) {
-    if (!this.ctx || !this.musicGain || !this.noiseBuffer) return;
+  private triggerBrushHat(startTime: number, level = 0.018) {
+    if (!this.ctx || !this.musicWarmFilter || !this.noiseBuffer) return;
     const src = this.ctx.createBufferSource();
     src.buffer = this.noiseBuffer;
-    const hp = this.ctx.createBiquadFilter();
-    hp.type = 'highpass';
-    hp.frequency.value = 3400;
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 2600;
+    bp.Q.value = 1.0;
     const g = this.ctx.createGain();
     g.gain.setValueAtTime(0.0001, startTime);
-    g.gain.linearRampToValueAtTime(0.022, startTime + 0.008);
-    g.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.09);
-    src.connect(hp);
-    hp.connect(g);
-    g.connect(this.musicGain);
+    g.gain.linearRampToValueAtTime(level, startTime + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.075);
+    src.connect(bp);
+    bp.connect(g);
+    g.connect(this.musicWarmFilter);
     src.start(startTime);
-    src.stop(startTime + 0.11);
+    src.stop(startTime + 0.09);
   }
 
-  private triggerFeltNote(
+  private triggerLoFiVoice(
     freq: number,
     startTime: number,
     duration: number,
     peakGain: number,
-    brightness: number
+    brightness: number,
+    instrument: InstrumentStyle,
+    tapeDetuneCents: number,
+    slideFromBelow = false
   ) {
-    if (!this.ctx || !this.musicGain || !this.delayNode) return;
-    const osc = this.ctx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(freq, startTime);
+    if (!this.ctx || !this.musicWarmFilter || !this.delayNode) return;
+    // Subtle analog tape wow/drift per note
+    const driftCents = (Math.random() - 0.5) * tapeDetuneCents * 2;
 
-    const sub = this.ctx.createOscillator();
-    sub.type = 'triangle';
-    sub.frequency.setValueAtTime(freq * 2, startTime);
+    const oscA = this.ctx.createOscillator();
+    oscA.type = instrument === 'oud' ? 'triangle' : 'sine';
+    if (slideFromBelow) {
+      oscA.frequency.setValueAtTime(freq * 0.94, startTime);
+      oscA.frequency.exponentialRampToValueAtTime(freq, startTime + 0.085);
+    } else {
+      oscA.frequency.setValueAtTime(freq, startTime);
+    }
+    oscA.detune.setValueAtTime(driftCents - 3.5, startTime);
 
-    const subGain = this.ctx.createGain();
-    subGain.gain.setValueAtTime(0.14, startTime);
+    // Warm slightly detuned second voice for organic Rhodes / felt tape chorus
+    const oscB = this.ctx.createOscillator();
+    oscB.type = instrument === 'pad' ? 'sine' : 'triangle';
+    oscB.frequency.setValueAtTime(instrument === 'oud' ? freq * 2.0 : freq, startTime);
+    oscB.detune.setValueAtTime(driftCents + 4.5, startTime);
+
+    const mixB = this.ctx.createGain();
+    mixB.gain.setValueAtTime(
+      instrument === 'oud' ? 0.18 : instrument === 'pad' ? 0.35 : 0.24,
+      startTime
+    );
 
     const filter = this.ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.setValueAtTime(brightness, startTime);
-    filter.frequency.exponentialRampToValueAtTime(340, startTime + duration);
+    filter.frequency.exponentialRampToValueAtTime(
+      Math.max(240, brightness * 0.28),
+      startTime + duration
+    );
 
+    const attack =
+      instrument === 'pad' ? 0.36 : instrument === 'oud' ? 0.016 : instrument === 'felt' ? 0.032 : 0.026;
     const env = this.ctx.createGain();
     env.gain.setValueAtTime(0.0001, startTime);
-    env.gain.linearRampToValueAtTime(peakGain, startTime + 0.045);
+    env.gain.linearRampToValueAtTime(peakGain, startTime + attack);
     env.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
 
-    osc.connect(filter);
-    sub.connect(subGain);
-    subGain.connect(filter);
+    // Soft mechanical felt hammer thump on intimate felt piano
+    if (instrument === 'felt' && this.flapBuf) {
+      const hammer = this.ctx.createBufferSource();
+      hammer.buffer = this.flapBuf;
+      const hLp = this.ctx.createBiquadFilter();
+      hLp.type = 'lowpass';
+      hLp.frequency.value = 380;
+      const hg = this.ctx.createGain();
+      hg.gain.value = peakGain * 0.16;
+      hammer.connect(hLp);
+      hLp.connect(hg);
+      hg.connect(this.musicWarmFilter);
+      hammer.start(startTime);
+    }
+
+    oscA.connect(filter);
+    oscB.connect(mixB);
+    mixB.connect(filter);
     filter.connect(env);
-    env.connect(this.musicGain);
+    env.connect(this.musicWarmFilter);
     env.connect(this.delayNode);
 
-    osc.start(startTime);
-    sub.start(startTime);
-    osc.stop(startTime + duration + 0.05);
-    sub.stop(startTime + duration + 0.05);
+    oscA.start(startTime);
+    oscB.start(startTime);
+    oscA.stop(startTime + duration + 0.08);
+    oscB.stop(startTime + duration + 0.08);
   }
 
   public playPetSound(pet: 'cat' | 'dog') {
@@ -475,40 +954,49 @@ class CozyAudioEngine {
     const now = this.ctx.currentTime;
 
     if (pet === 'cat') {
-      // Gentle warm meow + soft purr
+      // Soft, affectionate warm meow through gentle formant filter + reverb
       const osc = this.ctx.createOscillator();
       osc.type = 'triangle';
-      osc.frequency.setValueAtTime(520, now);
-      osc.frequency.linearRampToValueAtTime(760, now + 0.12);
-      osc.frequency.exponentialRampToValueAtTime(420, now + 0.42);
+      osc.frequency.setValueAtTime(480, now);
+      osc.frequency.linearRampToValueAtTime(660, now + 0.14);
+      osc.frequency.exponentialRampToValueAtTime(380, now + 0.44);
+
+      const lp = this.ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(1100, now);
+
       const g = this.ctx.createGain();
       g.gain.setValueAtTime(0.001, now);
-      g.gain.linearRampToValueAtTime(0.09, now + 0.06);
-      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
-      osc.connect(g);
+      g.gain.linearRampToValueAtTime(0.068, now + 0.07);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.48);
+
+      osc.connect(lp);
+      lp.connect(g);
       g.connect(this.sfxGain);
+      if (this.reverbNode) g.connect(this.reverbNode);
       osc.start(now);
-      osc.stop(now + 0.48);
+      osc.stop(now + 0.5);
     } else {
-      // Friendly playful double woof
-      [0, 0.16].forEach((offset) => {
+      // Warm muffled playful double-woof (no harsh sawtooth)
+      [0, 0.18].forEach((offset) => {
         const t = now + offset;
         const osc = this.ctx!.createOscillator();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(240, t);
-        osc.frequency.exponentialRampToValueAtTime(145, t + 0.11);
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(220, t);
+        osc.frequency.exponentialRampToValueAtTime(125, t + 0.12);
         const lp = this.ctx!.createBiquadFilter();
         lp.type = 'lowpass';
-        lp.frequency.value = 680;
+        lp.frequency.value = 460;
         const g = this.ctx!.createGain();
         g.gain.setValueAtTime(0.001, t);
-        g.gain.linearRampToValueAtTime(0.09, t + 0.015);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+        g.gain.linearRampToValueAtTime(0.075, t + 0.018);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
         osc.connect(lp);
         lp.connect(g);
         g.connect(this.sfxGain!);
+        if (this.reverbNode) g.connect(this.reverbNode);
         osc.start(t);
-        osc.stop(t + 0.15);
+        osc.stop(t + 0.17);
       });
     }
   }
@@ -527,6 +1015,7 @@ class CozyAudioEngine {
         const now = this.ctx.currentTime;
         const beatSec = 0.28;
 
+        // Deep warm Davul skin beats
         const drumHits = [
           { beat: 0, low: true },
           { beat: 4, low: false },
@@ -540,40 +1029,67 @@ class CozyAudioEngine {
           const t = now + h.beat * beatSec;
           const osc = this.ctx!.createOscillator();
           osc.type = 'sine';
-          osc.frequency.setValueAtTime(h.low ? 96 : 165, t);
-          osc.frequency.exponentialRampToValueAtTime(h.low ? 42 : 75, t + 0.22);
+          osc.frequency.setValueAtTime(h.low ? 88 : 145, t);
+          osc.frequency.exponentialRampToValueAtTime(h.low ? 38 : 68, t + 0.24);
+          const lp = this.ctx!.createBiquadFilter();
+          lp.type = 'lowpass';
+          lp.frequency.value = 260;
           const g = this.ctx!.createGain();
           g.gain.setValueAtTime(0.001, t);
-          g.gain.linearRampToValueAtTime(h.low ? 0.16 : 0.08, t + 0.015);
-          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
-          osc.connect(g);
+          g.gain.linearRampToValueAtTime(h.low ? 0.15 : 0.075, t + 0.015);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+          osc.connect(lp);
+          lp.connect(g);
           g.connect(this.sfxGain!);
+          if (this.reverbNode) g.connect(this.reverbNode);
           osc.start(t);
-          osc.stop(t + 0.3);
+          osc.stop(t + 0.32);
         });
 
+        // Expressive, warm Ney/Keman-style Hijaz lead with gentle vibrato & lush reverb
         ZEYBEK_PHRASE.forEach((n) => {
           const t = now + n.beat * beatSec;
           const osc = this.ctx!.createOscillator();
-          osc.type = 'sawtooth';
-          osc.frequency.setValueAtTime(n.freq, t);
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(n.freq * 0.96, t);
+          osc.frequency.exponentialRampToValueAtTime(n.freq, t + 0.06);
+
+          const oscWarm = this.ctx!.createOscillator();
+          oscWarm.type = 'sine';
+          oscWarm.frequency.setValueAtTime(n.freq, t);
+          oscWarm.detune.value = 5;
+
+          const vib = this.ctx!.createOscillator();
+          vib.type = 'sine';
+          vib.frequency.value = 5.2;
+          const vibGain = this.ctx!.createGain();
+          vibGain.gain.value = 6.5;
+          vib.connect(vibGain);
+          vibGain.connect(osc.frequency);
+          vibGain.connect(oscWarm.frequency);
 
           const filter = this.ctx!.createBiquadFilter();
-          filter.type = 'bandpass';
-          filter.frequency.setValueAtTime(n.freq * 1.8, t);
-          filter.Q.value = 1.6;
+          filter.type = 'lowpass';
+          filter.frequency.setValueAtTime(1400, t);
+          filter.frequency.exponentialRampToValueAtTime(680, t + n.len);
 
           const g = this.ctx!.createGain();
           g.gain.setValueAtTime(0.001, t);
-          g.gain.linearRampToValueAtTime(0.085, t + 0.04);
+          g.gain.linearRampToValueAtTime(0.065, t + 0.065);
           g.gain.exponentialRampToValueAtTime(0.0001, t + n.len);
 
           osc.connect(filter);
+          oscWarm.connect(filter);
           filter.connect(g);
           g.connect(this.sfxGain!);
+          if (this.reverbNode) g.connect(this.reverbNode);
           if (this.delayNode) g.connect(this.delayNode);
           osc.start(t);
-          osc.stop(t + n.len + 0.05);
+          oscWarm.start(t);
+          vib.start(t);
+          osc.stop(t + n.len + 0.06);
+          oscWarm.stop(t + n.len + 0.06);
+          vib.stop(t + n.len + 0.06);
         });
       }, offsetMs);
       this.zeybekTimers.push(id);
@@ -592,19 +1108,31 @@ class CozyAudioEngine {
     this.init();
     if (!this.ctx || !this.sfxGain || !this.sfxEnabled || this.isMuted) return;
     const now = this.ctx.currentTime;
-    [523.25, 659.25, 783.99].forEach((f, i) => {
-      const t = now + i * 0.07;
+    // Warm golden harp/celesta chord (Gmaj9)
+    [392.0, 493.88, 587.33, 739.99].forEach((f, i) => {
+      const t = now + i * 0.075;
       const osc = this.ctx!.createOscillator();
-      osc.type = 'triangle';
+      osc.type = 'sine';
       osc.frequency.setValueAtTime(f, t);
+      const harm = this.ctx!.createOscillator();
+      harm.type = 'triangle';
+      harm.frequency.setValueAtTime(f * 2, t);
+      const harmG = this.ctx!.createGain();
+      harmG.gain.value = 0.08;
+
       const g = this.ctx!.createGain();
       g.gain.setValueAtTime(0.001, t);
-      g.gain.linearRampToValueAtTime(0.1, t + 0.015);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+      g.gain.linearRampToValueAtTime(0.075, t + 0.022);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.95);
       osc.connect(g);
+      harm.connect(harmG);
+      harmG.connect(g);
       g.connect(this.sfxGain!);
+      if (this.reverbNode) g.connect(this.reverbNode);
       osc.start(t);
-      osc.stop(t + 0.6);
+      harm.start(t);
+      osc.stop(t + 1.0);
+      harm.stop(t + 1.0);
     });
   }
 
@@ -612,39 +1140,56 @@ class CozyAudioEngine {
     this.init();
     if (!this.ctx || !this.sfxGain || !this.sfxEnabled || this.isMuted) return;
     const now = this.ctx.currentTime;
-    [440, 523.25].forEach((f, i) => {
-      const t = now + i * 0.11;
+    // Cozy warm wooden marimba greeting (E4 -> A4 -> B4)
+    [329.63, 440.0, 493.88].forEach((f, i) => {
+      const t = now + i * 0.095;
       const osc = this.ctx!.createOscillator();
       osc.type = 'sine';
       osc.frequency.setValueAtTime(f, t);
       const g = this.ctx!.createGain();
       g.gain.setValueAtTime(0.001, t);
-      g.gain.linearRampToValueAtTime(0.06, t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+      g.gain.linearRampToValueAtTime(0.055, t + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.48);
       osc.connect(g);
       g.connect(this.sfxGain!);
+      if (this.reverbNode) g.connect(this.reverbNode);
       osc.start(t);
-      osc.stop(t + 0.4);
+      osc.stop(t + 0.52);
     });
   }
 
   public updateEngineSound(speedAbs: number, vehicleType: VehicleType, isPlaying: boolean) {
     if (!this.ctx || !this.engineOsc || !this.engineGain) return;
     const now = this.ctx.currentTime;
-    if (!isPlaying || !this.sfxEnabled || this.isMuted || speedAbs < 0.35) {
-      this.engineGain.gain.setTargetAtTime(0, now, 0.12);
+    if (!isPlaying || !this.sfxEnabled || this.isMuted || speedAbs < 0.4) {
+      this.engineGain.gain.setTargetAtTime(0, now, 0.16);
+      if (this.engineNoiseGain) this.engineNoiseGain.gain.setTargetAtTime(0, now, 0.16);
       return;
     }
 
+    const speedRatio = Math.min(1, speedAbs / 18);
     if (vehicleType === 'bicycle') {
-      this.engineOsc.frequency.setTargetAtTime(110 + speedAbs * 3.5, now, 0.1);
-      this.engineGain.gain.setTargetAtTime(0.008, now, 0.12);
+      // Pure soft rolling breeze/tire whisper on bicycle (zero oscillator hum!)
+      this.engineGain.gain.setTargetAtTime(0, now, 0.15);
+      if (this.engineNoiseGain) {
+        this.engineNoiseGain.gain.setTargetAtTime(0.008 * speedRatio, now, 0.15);
+      }
     } else if (vehicleType === 'motorcycle') {
-      this.engineOsc.frequency.setTargetAtTime(72 + speedAbs * 3.2, now, 0.08);
-      this.engineGain.gain.setTargetAtTime(0.032, now, 0.1);
+      const baseFreq = 58 + speedAbs * 2.1;
+      this.engineOsc.frequency.setTargetAtTime(baseFreq, now, 0.12);
+      if (this.engineSubOsc) this.engineSubOsc.frequency.setTargetAtTime(baseFreq * 1.5, now, 0.12);
+      this.engineGain.gain.setTargetAtTime(0.014 + speedRatio * 0.008, now, 0.14);
+      if (this.engineNoiseGain) {
+        this.engineNoiseGain.gain.setTargetAtTime(0.01 * speedRatio, now, 0.15);
+      }
     } else {
-      this.engineOsc.frequency.setTargetAtTime(52 + speedAbs * 2.4, now, 0.08);
-      this.engineGain.gain.setTargetAtTime(0.025, now, 0.1);
+      const baseFreq = 44 + speedAbs * 1.65;
+      this.engineOsc.frequency.setTargetAtTime(baseFreq, now, 0.12);
+      if (this.engineSubOsc) this.engineSubOsc.frequency.setTargetAtTime(baseFreq * 1.5, now, 0.12);
+      this.engineGain.gain.setTargetAtTime(0.012 + speedRatio * 0.007, now, 0.14);
+      if (this.engineNoiseGain) {
+        this.engineNoiseGain.gain.setTargetAtTime(0.011 * speedRatio, now, 0.15);
+      }
     }
   }
 
@@ -654,49 +1199,56 @@ class CozyAudioEngine {
     const now = this.ctx.currentTime;
 
     if (vehicleType === 'bicycle') {
-      [0, 0.14].forEach((offset) => {
+      // Warm sparkling brass bell into lush reverb
+      [0, 0.15].forEach((offset) => {
         const osc = this.ctx!.createOscillator();
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(1980, now + offset);
+        osc.frequency.setValueAtTime(1567.98, now + offset);
         const harm = this.ctx!.createOscillator();
         harm.type = 'sine';
-        harm.frequency.setValueAtTime(2970, now + offset);
+        harm.frequency.setValueAtTime(2349.32, now + offset);
+        const harmG = this.ctx!.createGain();
+        harmG.gain.value = 0.25;
         const g = this.ctx!.createGain();
         g.gain.setValueAtTime(0.001, now + offset);
-        g.gain.linearRampToValueAtTime(0.12, now + offset + 0.01);
-        g.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.45);
+        g.gain.linearRampToValueAtTime(0.085, now + offset + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.65);
         osc.connect(g);
-        harm.connect(g);
+        harm.connect(harmG);
+        harmG.connect(g);
         g.connect(this.sfxGain!);
+        if (this.reverbNode) g.connect(this.reverbNode);
         osc.start(now + offset);
         harm.start(now + offset);
-        osc.stop(now + offset + 0.5);
-        harm.stop(now + offset + 0.5);
+        osc.stop(now + offset + 0.7);
+        harm.stop(now + offset + 0.7);
       });
       return;
     }
 
+    // Warm rounded vintage two-tone horn (no harsh sawtooth buzz)
     const freqs = vehicleType === 'motorcycle' ? [440, 554.37] : [329.63, 415.3];
     freqs.forEach((f) => {
       const osc = this.ctx!.createOscillator();
-      osc.type = 'sawtooth';
+      osc.type = 'triangle';
       osc.frequency.setValueAtTime(f, now);
 
       const filter = this.ctx!.createBiquadFilter();
       filter.type = 'lowpass';
-      filter.frequency.value = 900;
+      filter.frequency.value = 620;
 
       const g = this.ctx!.createGain();
       g.gain.setValueAtTime(0.001, now);
-      g.gain.linearRampToValueAtTime(0.06, now + 0.02);
-      g.gain.setValueAtTime(0.06, now + 0.18);
-      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.34);
+      g.gain.linearRampToValueAtTime(0.055, now + 0.025);
+      g.gain.setValueAtTime(0.052, now + 0.14);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.36);
 
       osc.connect(filter);
       filter.connect(g);
       g.connect(this.sfxGain!);
+      if (this.reverbNode) g.connect(this.reverbNode);
       osc.start(now);
-      osc.stop(now + 0.36);
+      osc.stop(now + 0.38);
     });
   }
 
@@ -704,34 +1256,47 @@ class CozyAudioEngine {
     this.init();
     if (!this.ctx || !this.sfxGain || !this.sfxEnabled || this.isMuted) return;
     const now = this.ctx.currentTime;
-    const notes = [587.33, 739.99, 880.0, 1174.66];
+    // Emotional warm Dmaj9 celesta/harp arpeggio blooming in reverb
+    const notes = [293.66, 440.0, 554.37, 659.25, 739.99];
     notes.forEach((f, idx) => {
-      const start = now + idx * 0.09;
+      const start = now + idx * 0.095;
       const osc = this.ctx!.createOscillator();
       osc.type = 'sine';
       osc.frequency.setValueAtTime(f, start);
+      const shimmer = this.ctx!.createOscillator();
+      shimmer.type = 'triangle';
+      shimmer.frequency.setValueAtTime(f * 2, start);
+      const shimmerG = this.ctx!.createGain();
+      shimmerG.gain.value = 0.07;
+
       const g = this.ctx!.createGain();
       g.gain.setValueAtTime(0.001, start);
-      g.gain.linearRampToValueAtTime(0.11, start + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, start + 1.1);
+      g.gain.linearRampToValueAtTime(0.082, start + 0.028);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + 1.65);
+
       osc.connect(g);
+      shimmer.connect(shimmerG);
+      shimmerG.connect(g);
       g.connect(this.sfxGain!);
+      if (this.reverbNode) g.connect(this.reverbNode);
       osc.start(start);
-      osc.stop(start + 1.15);
+      shimmer.start(start);
+      osc.stop(start + 1.7);
+      shimmer.stop(start + 1.7);
     });
   }
 
   public setMuted(muted: boolean) {
     this.isMuted = muted;
     if (this.ctx && this.masterGain) {
-      this.masterGain.gain.setTargetAtTime(muted ? 0 : 0.74, this.ctx.currentTime, 0.08);
+      this.masterGain.gain.setTargetAtTime(muted ? 0 : 0.78, this.ctx.currentTime, 0.1);
     }
   }
 
   public setMusicEnabled(enabled: boolean) {
     this.musicEnabled = enabled;
     if (this.ctx && this.musicGain) {
-      this.musicGain.gain.setTargetAtTime(enabled ? 0.54 : 0, this.ctx.currentTime, 0.12);
+      this.musicGain.gain.setTargetAtTime(enabled ? 0.58 : 0, this.ctx.currentTime, 0.16);
     }
     this.applyTrackTexture();
   }
@@ -739,7 +1304,7 @@ class CozyAudioEngine {
   public setSfxEnabled(enabled: boolean) {
     this.sfxEnabled = enabled;
     if (this.ctx && this.sfxGain) {
-      this.sfxGain.gain.setTargetAtTime(enabled ? 0.68 : 0, this.ctx.currentTime, 0.08);
+      this.sfxGain.gain.setTargetAtTime(enabled ? 0.64 : 0, this.ctx.currentTime, 0.1);
     }
   }
 
@@ -821,6 +1386,12 @@ class CozyAudioEngine {
     mixB.connect(formant);
     formant.connect(env);
     env.connect(this.sfxGain);
+    if (this.reverbNode) {
+      const revSend = this.ctx.createGain();
+      revSend.gain.value = 0.22;
+      env.connect(revSend);
+      revSend.connect(this.reverbNode);
+    }
 
     oscA.start(t0);
     oscB.start(t0);
@@ -832,7 +1403,7 @@ class CozyAudioEngine {
     this.init();
     if (!this.ctx || !this.sfxGain || !this.sfxEnabled || this.isMuted) return;
     const now = this.ctx.currentTime;
-    const baseHz = 2700 + Math.random() * 520;
+    const baseHz = 2550 + Math.random() * 480;
     const jitter = 0.96 + Math.random() * 0.08;
     const style = melodicTrill ? Math.floor(Math.random() * 2) : Math.floor(Math.random() * 3);
 
@@ -845,7 +1416,7 @@ class CozyAudioEngine {
         fEnd: baseHz * 0.92 * jitter,
         voice2Ratio: 1.33,
         voice2Mix: 0.32,
-        gain: 0.135,
+        gain: 0.115,
       });
       this.triggerSyrinxSyllable({
         t0: now + 0.095,
@@ -853,7 +1424,7 @@ class CozyAudioEngine {
         fStart: baseHz * 1.12 * jitter,
         fPeak: baseHz * 1.44 * jitter,
         fEnd: baseHz * 1.06 * jitter,
-        gain: 0.115,
+        gain: 0.098,
       });
       this.triggerSyrinxSyllable({
         t0: now + 0.165,
@@ -863,7 +1434,7 @@ class CozyAudioEngine {
         fEnd: baseHz * 0.82 * jitter,
         trillHz: 46,
         trillDepth: 110,
-        gain: 0.125,
+        gain: 0.108,
       });
     } else if (style === 1) {
       this.triggerSyrinxSyllable({
@@ -872,7 +1443,7 @@ class CozyAudioEngine {
         fStart: baseHz * 0.88 * jitter,
         fPeak: baseHz * 1.34 * jitter,
         fEnd: baseHz * 1.02 * jitter,
-        gain: 0.128,
+        gain: 0.11,
       });
       this.triggerSyrinxSyllable({
         t0: now + 0.086,
@@ -882,7 +1453,7 @@ class CozyAudioEngine {
         fEnd: baseHz * 0.88 * jitter,
         trillHz: 38,
         trillDepth: 90,
-        gain: 0.12,
+        gain: 0.105,
       });
     } else {
       this.triggerSyrinxSyllable({
@@ -893,7 +1464,7 @@ class CozyAudioEngine {
         fEnd: baseHz * 0.95 * jitter,
         trillHz: 42,
         trillDepth: 95,
-        gain: 0.13,
+        gain: 0.11,
       });
     }
   }
@@ -902,7 +1473,7 @@ class CozyAudioEngine {
     this.init();
     if (!this.ctx || !this.sfxGain || !this.sfxEnabled || this.isMuted) return;
     const now = this.ctx.currentTime;
-    const rootHz = 2750 + Math.random() * 480;
+    const rootHz = 2600 + Math.random() * 440;
     const jitter = 0.95 + Math.random() * 0.1;
 
     if (mood === 'takeoff') {
@@ -912,7 +1483,7 @@ class CozyAudioEngine {
         fStart: rootHz * 0.86 * jitter,
         fPeak: rootHz * 1.18 * jitter,
         fEnd: rootHz * 1.04 * jitter,
-        gain: 0.085,
+        gain: 0.075,
       });
       this.triggerSyrinxSyllable({
         t0: now + 0.055,
@@ -921,7 +1492,7 @@ class CozyAudioEngine {
         fPeak: rootHz * 1.38 * jitter,
         fEnd: rootHz * 1.16 * jitter,
         peakRatio: 0.65,
-        gain: 0.092,
+        gain: 0.082,
       });
     } else if (mood === 'perch') {
       this.triggerSyrinxSyllable({
@@ -932,7 +1503,7 @@ class CozyAudioEngine {
         fEnd: rootHz * 0.78 * jitter,
         trillHz: 40,
         trillDepth: 85,
-        gain: 0.082,
+        gain: 0.072,
       });
     } else if (mood === 'hop') {
       this.triggerSyrinxSyllable({
@@ -941,7 +1512,7 @@ class CozyAudioEngine {
         fStart: rootHz * 0.92 * jitter,
         fPeak: rootHz * 1.24 * jitter,
         fEnd: rootHz * 0.98 * jitter,
-        gain: 0.068,
+        gain: 0.06,
       });
     } else {
       this.triggerSyrinxSyllable({
@@ -952,7 +1523,7 @@ class CozyAudioEngine {
         fEnd: rootHz * 0.88 * jitter,
         trillHz: 36,
         trillDepth: 65,
-        gain: 0.074,
+        gain: 0.065,
       });
     }
   }
@@ -968,11 +1539,11 @@ class CozyAudioEngine {
       src.playbackRate.value = 0.94 + Math.random() * 0.12;
       const bp = this.ctx.createBiquadFilter();
       bp.type = 'bandpass';
-      bp.frequency.setValueAtTime(490 - beat * 55, t0);
-      bp.frequency.exponentialRampToValueAtTime(210, t0 + 0.05);
-      bp.Q.value = 1.1;
+      bp.frequency.setValueAtTime(460 - beat * 50, t0);
+      bp.frequency.exponentialRampToValueAtTime(195, t0 + 0.05);
+      bp.Q.value = 1.0;
       const g = this.ctx.createGain();
-      g.gain.value = 0.085 * strength * (1.0 - beat * 0.22);
+      g.gain.value = 0.075 * strength * (1.0 - beat * 0.22);
       src.connect(bp);
       bp.connect(g);
       g.connect(this.sfxGain);
@@ -990,11 +1561,11 @@ class CozyAudioEngine {
     whoosh.playbackRate.value = 0.92 * jitter;
     const bp = this.ctx.createBiquadFilter();
     bp.type = 'bandpass';
-    bp.frequency.setValueAtTime(415 * jitter, now);
-    bp.frequency.exponentialRampToValueAtTime(185, now + 0.052);
+    bp.frequency.setValueAtTime(400 * jitter, now);
+    bp.frequency.exponentialRampToValueAtTime(180, now + 0.052);
     bp.Q.value = 0.85;
     const wg = this.ctx.createGain();
-    wg.gain.value = 0.028 * amp;
+    wg.gain.value = 0.025 * amp;
     whoosh.connect(bp);
     bp.connect(wg);
     wg.connect(this.sfxGain);
@@ -1006,11 +1577,11 @@ class CozyAudioEngine {
       quill.playbackRate.value = 0.82 * jitter;
       const qbp = this.ctx.createBiquadFilter();
       qbp.type = 'bandpass';
-      qbp.frequency.setValueAtTime(2150 * jitter, now + 0.004);
-      qbp.frequency.exponentialRampToValueAtTime(1320, now + 0.022);
+      qbp.frequency.setValueAtTime(1950 * jitter, now + 0.004);
+      qbp.frequency.exponentialRampToValueAtTime(1220, now + 0.022);
       qbp.Q.value = 1.2;
       const qg = this.ctx.createGain();
-      qg.gain.value = 0.009 * amp;
+      qg.gain.value = 0.008 * amp;
       quill.connect(qbp);
       qbp.connect(qg);
       qg.connect(this.sfxGain);
@@ -1030,14 +1601,14 @@ class CozyAudioEngine {
     const jitter = 0.94 + Math.random() * 0.12;
     const bodyPitch =
       surface === 'wood'
-        ? 245
+        ? 230
         : surface === 'metal'
-          ? 760
+          ? 680
           : surface === 'fabric'
-            ? 145
+            ? 140
             : surface === 'foliage'
-              ? 310
-              : 410;
+              ? 290
+              : 380;
 
     for (let tap = 0; tap < 2; tap++) {
       const t0 = now + tap * 0.026;
@@ -1047,7 +1618,7 @@ class CozyAudioEngine {
       bodyOsc.frequency.setValueAtTime(bodyPitch * jitter * (tap === 1 ? 1.08 : 1.0), t0);
       bodyOsc.frequency.exponentialRampToValueAtTime(bodyPitch * 0.44, t0 + 0.042);
       const bg = this.ctx.createGain();
-      bg.gain.setValueAtTime(0.078 * ampScale, t0);
+      bg.gain.setValueAtTime(0.065 * ampScale, t0);
       bg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.048);
       bodyOsc.connect(bg);
       bg.connect(this.sfxGain);
@@ -1068,11 +1639,11 @@ class CozyAudioEngine {
       slap.playbackRate.value = 1.15 * jitter;
       const bp = this.ctx.createBiquadFilter();
       bp.type = 'bandpass';
-      bp.frequency.setValueAtTime(1950 * jitter, now);
-      bp.frequency.exponentialRampToValueAtTime(920, now + 0.065);
-      bp.Q.value = 1.4;
+      bp.frequency.setValueAtTime(1750 * jitter, now);
+      bp.frequency.exponentialRampToValueAtTime(840, now + 0.065);
+      bp.Q.value = 1.3;
       const sg = this.ctx.createGain();
-      sg.gain.setValueAtTime(0.088, now);
+      sg.gain.setValueAtTime(0.075, now);
       sg.gain.exponentialRampToValueAtTime(0.0001, now + 0.072);
       slap.connect(bp);
       bp.connect(sg);
@@ -1082,13 +1653,14 @@ class CozyAudioEngine {
 
     const osc = this.ctx.createOscillator();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(295 * jitter, now);
-    osc.frequency.exponentialRampToValueAtTime(790 * jitter, now + 0.082);
+    osc.frequency.setValueAtTime(280 * jitter, now);
+    osc.frequency.exponentialRampToValueAtTime(720 * jitter, now + 0.082);
     const g = this.ctx.createGain();
-    g.gain.setValueAtTime(0.14, now);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.105);
+    g.gain.setValueAtTime(0.11, now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
     osc.connect(g);
     g.connect(this.sfxGain);
+    if (this.reverbNode) g.connect(this.reverbNode);
     osc.start(now);
     osc.stop(now + 0.12);
   }
@@ -1097,20 +1669,21 @@ class CozyAudioEngine {
     this.init();
     if (!this.ctx || !this.sfxGain || !this.sfxEnabled || this.isMuted) return;
     const now = this.ctx.currentTime;
-    [680, 960].forEach((f, idx) => {
-      const t = now + idx * 0.055;
+    // Soft warm marimba-like double note
+    [523.25, 783.99].forEach((f, idx) => {
+      const t = now + idx * 0.06;
       const osc = this.ctx!.createOscillator();
       osc.type = 'sine';
       osc.frequency.setValueAtTime(f, t);
-      osc.frequency.exponentialRampToValueAtTime(f * 1.24, t + 0.08);
       const g = this.ctx!.createGain();
       g.gain.setValueAtTime(0.001, t);
-      g.gain.linearRampToValueAtTime(0.095, t + 0.012);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+      g.gain.linearRampToValueAtTime(0.07, t + 0.014);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.24);
       osc.connect(g);
       g.connect(this.sfxGain!);
+      if (this.reverbNode) g.connect(this.reverbNode);
       osc.start(t);
-      osc.stop(t + 0.16);
+      osc.stop(t + 0.26);
     });
   }
 
@@ -1125,6 +1698,7 @@ class CozyAudioEngine {
     }
     this.zeybekTimers.forEach((t) => clearTimeout(t));
     this.zeybekTimers = [];
+    this.zeybekPlaying = false;
     if (this.ctx) {
       void this.ctx.close();
       this.ctx = null;

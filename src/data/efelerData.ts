@@ -6,6 +6,8 @@ import {
   HouseExteriorConfig,
   HouseExteriorStyle,
   LandmarkDef,
+  LofiTrackId,
+  RadioStationDef,
   SeasonType,
   TimeOfDay,
   VehicleConfig,
@@ -114,26 +116,26 @@ export const LANDMARKS: LandmarkDef[] = [
     era: 'Cumhuriyet Meydanı',
     district: 'Efeler Merkez',
     position: [0, 0, 12],
-    interactionRadius: 18,
+    interactionRadius: 24,
     summary:
-      'Palmiyelerle bezeli Adnan Menderes Bulvarı’nın kalbindeki geniş meydan; yansıtma havuzları, Efeler Anıtı ve tam ortasında büyüyen Aydın İncir Ağacı ile buluşma noktasıdır.',
+      'Adnan Menderes Bulvarı’nın kalbindeki büyük turkuaz havuz, karşısında yükselen Atatürk & Efeler Anıtı, havuz kenarındaki belediye kafeleri, Burger King, Popeyes ve Usta Döner’in yer aldığı geniş etkinlik alanıyla şehrin buluşma noktasıdır.',
     architectureNote:
-      'Geniş traverten dairesel meydan, iki kanatta yansıtma havuzları, oturma bankları, pergolalar ve bronz Efeler heykel kaidesi etrafında canlı bir kent yaşamı sunar.',
+      'Geometrik desenli dev turkuaz yansıtma havuzu, yeşil çatılı dairesel seyir adaları, dalgalanan Türk bayrağı, anıt kaidesi, belediye kafeleri ve kuzeydeki geniş taş tören meydanından oluşur.',
     rewardCoins: 25,
   },
   {
     id: 'saribelediye',
-    name: 'Tarihi Sarı Belediye Binası',
-    era: 'Cumhuriyet Dönemi · Simge Yapı',
+    name: 'Aydın Büyükşehir Belediyesi Binası',
+    era: 'Modern Kent Yönetimi · Cam Silindir',
     district: 'Hükümet & Meydan',
     position: [36, 0, 28],
-    interactionRadius: 14,
+    interactionRadius: 15,
     summary:
-      'Sıcak hardal sarısı cephesi ve klasik taş detaylarıyla Efeler kent merkezinin en sevilen sivil mimari simgelerinden biridir.',
+      'Altın yansımalı eğrisel cam cephesi, kademeli üst kulesi, önündeki siyah basamaklı kaide üzerinde yükselen Atatürk Anıtı ve dalgalanan Türk bayrağıyla Aydın Büyükşehir Belediyesi’nin simge binasıdır.',
     architectureNote:
-      'Sütunlu giriş sahanlığı, kemerli yüksek pencereler, simetrik alınlık saati ve kırma alaturka kiremit çatısıyla Aydın’ın sıcak tonunu taşır.',
+      'Geniş eğrisel bronz-altın alt baza, kademeli silindirik cam kule, üst taç yazıtı ve ön avludaki dört basamaklı siyah granit kaideli Atatürk heykeli modern Efeler silüetini tamamlar.',
     rewardCoins: 35,
-    doorPosition: [28.5, 28],
+    doorPosition: [30.6, 23.8],
   },
   {
     id: 'tekstilpark',
@@ -205,6 +207,20 @@ export const LANDMARKS: LandmarkDef[] = [
     rewardCoins: 45,
     doorPosition: [63.5, -78],
   },
+  {
+    id: 'magnesia',
+    name: 'Magnesia Antik Kenti (Artemis Tapınağı)',
+    era: 'MÖ 4. Yüzyıl · Hellenistik & Roma',
+    district: 'Batı Yolu · Germencik Etabı',
+    position: [-132, 0, -40],
+    interactionRadius: 18,
+    summary:
+      'Efeler’in batı uzantısındaki ilk büyük antik kent durağı olan Magnesia; Artemis Leukophryene Tapınağı’nın görkemli üçgen alınlıklı sütunlu cephesi, yan stoa kanatları ve geometrik mozaik döşemeli agorasıyla Aydın tarihinin batı kapısıdır.',
+    architectureNote:
+      'Üç basamaklı mermer krepidoma üzerinde yükselen altı sütunlu İyon tapınak cephesi, yan sütun dizileri, menderes desenli mozaik halıları ve ön avluda ayakta kalan sütun tamburlarıyla inşa edilmiştir.',
+    rewardCoins: 50,
+    doorPosition: [-132, -28.5],
+  },
 ];
 
 export const COZY_ERRANDS: ErrandDef[] = [
@@ -232,7 +248,7 @@ export const COZY_ERRANDS: ErrandDef[] = [
     fromLandmarkId: 'saribelediye',
     toLandmarkId: 'tekstilpark',
     description:
-      'Tarihi Sarı Belediye Binası’ndan alınan Efeler fotoğraf albümünü Tekstil Park kültür salonuna ulaştırın.',
+      'Aydın Büyükşehir Belediyesi’nden alınan Efeler fotoğraf albümünü Tekstil Park kültür salonuna ulaştırın.',
     rewardCoins: 35,
   },
   {
@@ -262,9 +278,27 @@ export const COZY_ERRANDS: ErrandDef[] = [
       'ADÜ Ziraat bahçesinde yetiştirilen özel incir fidanını Kent Meydanı’ndaki bahçıvanlara teslim edin.',
     rewardCoins: 40,
   },
+  {
+    id: 'errand-magnesia',
+    title: 'Magnesia Kazı Arşivi Defteri',
+    fromLandmarkId: 'tralleis',
+    toLandmarkId: 'magnesia',
+    description:
+      'Tralleis kazı alanından hazırlanan seramik envanter defterini batı yoluyla Magnesia Artemis Tapınağı önündeki kazı ekibine ulaştırın.',
+    rewardCoins: 45,
+  },
 ];
 
 export const DISTRICT_ZONES: DistrictZone[] = [
+  {
+    id: 'magnesia-west',
+    name: 'Magnesia Antik Kenti & Batı Yolu',
+    subtitle: 'Germencik Antik Yolu',
+    minX: -175,
+    maxX: -96,
+    minZ: -75,
+    maxZ: 25,
+  },
   {
     id: 'kalfakoy-west',
     name: 'Kalfaköy & Kuzey Yamaç',
@@ -339,7 +373,7 @@ export const DISTRICT_ZONES: DistrictZone[] = [
   },
   {
     id: 'kent-meydani',
-    name: 'Efeler Merkez & Sarı Belediye',
+    name: 'Efeler Merkez & Büyükşehir',
     subtitle: 'Adnan Menderes Blv.',
     minX: -54,
     maxX: 54,
@@ -397,12 +431,100 @@ export const WEATHER_OPTIONS: { id: WeatherType; label: string }[] = [
   { id: 'storm', label: 'Fırtına' },
 ];
 
-export const LOFI_TRACKS: { id: 'aegean' | 'rainy_piano' | 'night_lofi' | 'ambient_only'; label: string }[] = [
-  { id: 'aegean', label: 'Ege Akşamı Lo-Fi' },
-  { id: 'rainy_piano', label: 'Yağmurlu Piyano' },
-  { id: 'night_lofi', label: 'Gece Kahvesi Lo-Fi' },
-  { id: 'ambient_only', label: 'Sadece Doğa Sesi' },
+export const RADIO_STATIONS: RadioStationDef[] = [
+  {
+    id: 'aegean',
+    frequency: '92.4 FM',
+    label: 'Ege Akşamı Lo-Fi',
+    region: 'Kent Meydanı & Sevgi Yolu',
+    mood: 'Ilık Ege meltemi, sıcak Rhodes akorları ve akşam çayı huzuru.',
+    bpmLabel: '65 BPM · Sıcak Rhodes',
+    accentColor: '#C85A32',
+    matchingDistricts: [
+      'Efeler Merkez & Büyükşehir',
+      'Tekstil Park & Batı Efeler',
+      'Forum Aydın & Doğu Bulvarı',
+    ],
+  },
+  {
+    id: 'bazaar_oud',
+    frequency: '95.8 FM',
+    label: 'Çarşı Nostaljisi',
+    region: 'Tarihi Çarşı & Nasuh Paşa',
+    mood: 'Hicaz esintili akustik ud tınıları ve taş han avlusu dinginliği.',
+    bpmLabel: '72 BPM · Hicaz Akustik',
+    accentColor: '#A96B2B',
+    matchingDistricts: [
+      'Tarihi Çarşı & Yağcılar İçi',
+      'Bey Camii & Tabakhane Kenarı',
+    ],
+  },
+  {
+    id: 'tralleis_echo',
+    frequency: '98.2 FM',
+    label: 'Antik Mermer Yankısı',
+    region: 'Tralleis & Magnesia Antik',
+    mood: 'Antik sütunlar ve zeytinlikler arasında süzülen dingin ambiyans.',
+    bpmLabel: '58 BPM · Antik Ambient',
+    accentColor: '#7A543E',
+    matchingDistricts: [
+      'Magnesia Antik Kenti & Batı Yolu',
+      'Kalfaköy & Kuzey Yamaç',
+      'Tralleis & Kalfaköy Yamacı',
+    ],
+  },
+  {
+    id: 'aytepe_campus',
+    frequency: '101.6 FM',
+    label: 'Aytepe Kampüs Beats',
+    region: 'ADÜ Aytepe Üniversitesi',
+    mood: 'Tepe manzarasında ders ve keşif için ritmik kampüs chillhop.',
+    bpmLabel: '96 BPM · Kampüs Chillhop',
+    accentColor: '#4E7D4A',
+    matchingDistricts: ['ADÜ Aytepe Üniversitesi (Yokuş Yukarı)'],
+  },
+  {
+    id: 'rainy_piano',
+    frequency: '103.5 FM',
+    label: 'Tabakhane Dere Piyanosu',
+    region: 'Orta Mahalle & Dere Boyu',
+    mood: 'Su sesi ve taş köprülerle uyumlu yumuşak keçe piyano melodileri.',
+    bpmLabel: '56 BPM · Keçe Piyano',
+    accentColor: '#3B6E8C',
+    matchingDistricts: ['Orta Mahalle (Tabakhane Doğu Yakası)'],
+  },
+  {
+    id: 'night_lofi',
+    frequency: '106.0 FM',
+    label: 'Gece Kahvesi Lo-Fi',
+    region: 'İstasyon & Gece Bulvarı',
+    mood: 'Tarihi tren garı ışıkları altında caz fırçalı gece ritimleri.',
+    bpmLabel: '88 BPM · Caz Lo-Fi',
+    accentColor: '#5B4570',
+    matchingDistricts: ['İstasyon & Gar Çevresi'],
+  },
+  {
+    id: 'ambient_only',
+    frequency: 'DOĞA',
+    label: 'Sadece Efeler Doğası',
+    region: 'Tüm Efeler',
+    mood: 'Radyo kapalı — yalnızca kuş cıvıltıları, rüzgar ve dere sesi.',
+    bpmLabel: 'Doğal Ambiyans',
+    accentColor: '#6B5038',
+    matchingDistricts: [],
+  },
 ];
+
+export const LOFI_TRACKS: { id: LofiTrackId; label: string }[] = RADIO_STATIONS.map((s) => ({
+  id: s.id,
+  label: `${s.frequency === 'DOĞA' ? '' : `${s.frequency} · `}${s.label}`,
+}));
+
+export function getRadioStationForDistrict(districtName: string): RadioStationDef {
+  return (
+    RADIO_STATIONS.find((s) => s.matchingDistricts.includes(districtName)) ?? RADIO_STATIONS[0]
+  );
+}
 
 export const ROOM_WALL_SWATCHES = [
   { id: 'warm-cream', name: 'Sıcak Krem', hex: '#EADEC9' },
@@ -802,10 +924,10 @@ export const DEFAULT_UNLOCKED_FURNITURE_STYLES: string[] = FURNITURE_STYLE_SHOP
 
 export const UPCOMING_ANCIENT_CITIES = [
   'Nysa Antik Kenti (Sultanhisar)',
-  'Aphrodisias Antik Kenti (Karacasu)',
-  'Magnesia ad Maeandrum (Germencik)',
-  'Miletos & Priene (Didim / Söke)',
-  'Alinda & Alabanda (Karpuzlu / Çine)',
+  'Alabanda & Alinda (Çine / Karpuzlu)',
+  'Priene & Milet (Söke / Didim)',
+  'Afrodisias Antik Kenti (Karacasu)',
+  'Didyma Apollon Tapınağı (Didim)',
 ];
 
 export interface LightingMood {
@@ -1053,11 +1175,11 @@ export const EFELER_GEZGINI_BADGES: GezginBadgeDef[] = [
     id: 'badge-landmark-saribelediye',
     category: 'landmark',
     targetId: 'saribelediye',
-    title: 'Efeler Gezgini: Sarı Konak Tarihçisi',
-    subtitle: 'Tarihi Sarı Belediye Binası',
-    description: 'Hardal sarısı Cumhuriyet dönemi sivil mimari simgesini keşfettiniz.',
-    icon: '🕰️',
-    accentColor: '#D4923F',
+    title: 'Efeler Gezgini: Büyükşehir Kaşifi',
+    subtitle: 'Aydın Büyükşehir Belediyesi',
+    description: 'Altın yansımalı cam kule ve önündeki Atatürk Anıtı’nı keşfettiniz.',
+    icon: '🏛️',
+    accentColor: '#D4A843',
   },
   {
     id: 'badge-landmark-tekstilpark',
@@ -1109,6 +1231,16 @@ export const EFELER_GEZGINI_BADGES: GezginBadgeDef[] = [
     icon: '🎓',
     accentColor: '#6E4555',
   },
+  {
+    id: 'badge-landmark-magnesia',
+    category: 'landmark',
+    targetId: 'magnesia',
+    title: 'Efeler Gezgini: Artemis Tapınağı Seyyahı',
+    subtitle: 'Magnesia Antik Kenti',
+    description: 'Batı yolundan büyüyen haritada Artemis Tapınağı ve mozaik agorayı keşfettiniz.',
+    icon: '🏛️',
+    accentColor: '#C99A5B',
+  },
 
   // Sakin Görev (Errand) Efeler Gezgini Rozetleri
   {
@@ -1136,7 +1268,7 @@ export const EFELER_GEZGINI_BADGES: GezginBadgeDef[] = [
     category: 'errand',
     targetId: 'errand-belediye',
     title: 'Efeler Gezgini: Kent Arşivcisi',
-    subtitle: 'Görev · Sarı Belediye → Tekstil Park',
+    subtitle: 'Görev · Büyükşehir → Tekstil Park',
     description: 'Efeler fotoğraf albümünü Tekstil Park kültür salonuna eksiksiz teslim ettiniz.',
     icon: '🎞️',
     accentColor: '#D4923F',
@@ -1170,6 +1302,16 @@ export const EFELER_GEZGINI_BADGES: GezginBadgeDef[] = [
     description: 'Ziraat bahçesinden alınan özel incir fidanını Kent Meydanı’na ulaştırdınız.',
     icon: '🌱',
     accentColor: '#4B743B',
+  },
+  {
+    id: 'badge-errand-magnesia',
+    category: 'errand',
+    targetId: 'errand-magnesia',
+    title: 'Efeler Gezgini: Antik Kent Arkeoloğu',
+    subtitle: 'Görev · Tralleis → Magnesia',
+    description: 'Kazı envanter defterini batı yolu üzerinden Magnesia Artemis Tapınağı’na ulaştırdınız.',
+    icon: '📜',
+    accentColor: '#C99A5B',
   },
 ];
 

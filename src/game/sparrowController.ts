@@ -15,6 +15,8 @@ export interface SparrowInputState {
   backward: boolean;
   left: boolean;
   right: boolean;
+  joyX?: number;
+  joyY?: number;
   flapHeld: boolean;
   flapPressed: boolean;
   diveHeld: boolean;
@@ -180,7 +182,7 @@ export class SparrowController {
   }
 
   private resolveHorizontalWalls(x: number, y: number, z: number): [number, number] {
-    let nx = THREE.MathUtils.clamp(x, -99, 105);
+    let nx = THREE.MathUtils.clamp(x, -155, 105);
     let nz = THREE.MathUtils.clamp(z, -108, 74);
     const radius = 0.36;
     const birdFeetY = y - this.getStandOffset() * 0.65;
@@ -325,22 +327,18 @@ export class SparrowController {
     let moveInX = 0;
     let moveInZ = 0;
     if (isPlaying) {
-      if (input.forward) {
-        moveInX += fwdX;
-        moveInZ += fwdZ;
-      }
-      if (input.backward) {
-        moveInX -= fwdX;
-        moveInZ -= fwdZ;
-      }
-      if (input.right) {
-        moveInX += rightX;
-        moveInZ += rightZ;
-      }
-      if (input.left) {
-        moveInX -= rightX;
-        moveInZ -= rightZ;
-      }
+      const fwdAmt = THREE.MathUtils.clamp(
+        (input.forward ? 1 : 0) - (input.backward ? 1 : 0) + (input.joyY ?? 0),
+        -1,
+        1
+      );
+      const rightAmt = THREE.MathUtils.clamp(
+        (input.right ? 1 : 0) - (input.left ? 1 : 0) + (input.joyX ?? 0),
+        -1,
+        1
+      );
+      moveInX = fwdX * fwdAmt + rightX * rightAmt;
+      moveInZ = fwdZ * fwdAmt + rightZ * rightAmt;
     }
     const moveLen = Math.hypot(moveInX, moveInZ);
     const hasMove = moveLen > 0.05;
@@ -402,7 +400,11 @@ export class SparrowController {
       if (isPlaying && this.jumpBufferTimer > 0) {
         this.jumpBufferTimer = 0;
         this.enterFlight(6.2, hasMove ? 4.2 : 2.6);
-      } else if (isPlaying && input.backward && !input.forward && this.perchIgnoreTimer <= 0) {
+      } else if (
+        isPlaying &&
+        ((input.backward && !input.forward) || (input.joyY ?? 0) < -0.5) &&
+        this.perchIgnoreTimer <= 0
+      ) {
         this.lastPerchId = this.activePerch.id;
         this.perchIgnoreTimer = 0.55;
         this.activePerch = null;

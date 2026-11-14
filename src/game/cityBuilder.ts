@@ -34,6 +34,7 @@ import {
 import { CityMaterialLibrary } from './materials';
 import { BuildingNpcSystem, createBuildingNpcSystem } from './cityNpcs';
 import { PerchSystem } from './perchSystem';
+import { buildMainRoadSignposts } from './roadSignposts';
 import { createGableRoofGeometry } from './roofGeometry';
 import {
   createSeasonalFoliageSystem,
@@ -322,8 +323,8 @@ export function buildEfelerCity(
     [138, 36, 46, 76, mats.wheatField],
     [138, -34, 44, 52, mats.lavenderField],
     [138, -84, 46, 44, mats.wheatField],
-    [-130, 14, 46, 74, mats.wheatField],
-    [-128, -56, 42, 56, mats.lavenderField],
+    [-128, 20, 46, 56, mats.wheatField],
+    [-132, -74, 48, 30, mats.lavenderField],
     [-58, -124, 64, 24, mats.wheatField],
     [76, -124, 62, 24, mats.lavenderField],
     [-56, 98, 66, 32, mats.wheatField],
@@ -351,10 +352,10 @@ export function buildEfelerCity(
     [-35, -154, 65, 28, 45],
     [35, -150, 62, 25, 44],
     [98, -144, 56, 24, 42],
-    [-160, -52, 42, 14, 52],
+    [-204, -52, 42, 14, 52],
     [164, -52, 42, 16, 52],
     [146, 65, 36, 5.5, 34],
-    [-142, 62, 34, 5.0, 34],
+    [-182, 62, 34, 5.0, 34],
   ];
   hillConfigs.forEach(([hx, hz, rx, ry, rz]) => {
     const hillGeo = new THREE.SphereGeometry(1, 22, 14, 0, Math.PI * 2, 0, Math.PI * 0.5);
@@ -726,6 +727,39 @@ export function buildEfelerCity(
     }
   });
 
+  // 5b. Western Highway Extension toward Magnesia Antik Kenti (along z = -22, x in [-148..-96])
+  const westRoadCurb = new THREE.Mesh(
+    createTerrainConformingRibbon(-149, -22, -96, -22, roadW + 2.6, 36, 4, 0.09, true),
+    mats.sidewalk
+  );
+  westRoadCurb.receiveShadow = true;
+  const westRoadAsphalt = new THREE.Mesh(
+    createTerrainConformingRibbon(-148, -22, -96, -22, roadW, 36, 4, 0.13, true),
+    mats.asphalt
+  );
+  westRoadAsphalt.receiveShadow = true;
+  const magSpurCurb = new THREE.Mesh(
+    createTerrainConformingRibbon(-132, -29.5, -132, -21, 10.4, 12, 4, 0.105, true),
+    mats.sidewalk
+  );
+  magSpurCurb.receiveShadow = true;
+  const magSpurRoad = new THREE.Mesh(
+    createTerrainConformingRibbon(-132, -29.2, -132, -21.5, 8.0, 12, 4, 0.148, true),
+    mats.cobble
+  );
+  magSpurRoad.receiveShadow = true;
+  group.add(westRoadCurb, westRoadAsphalt, magSpurCurb, magSpurRoad);
+
+  for (let dx = -145; dx <= -98; dx += 6.5) {
+    const dy = getSurfaceHeightAt(dx, -22) + 0.165;
+    const slopes = getSurfaceSlopeAngles(dx, -22, -Math.PI / 2);
+    const dash = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 0.22), mats.roadStripe);
+    dash.rotation.order = 'YXZ';
+    dash.rotation.set(-Math.PI / 2 + slopes.roll, 0, -slopes.pitch);
+    dash.position.set(dx, dy, -22);
+    group.add(dash);
+  }
+
   ROAD_X_COORDS.forEach((rx) => {
     const isSevgiYolu = rx === -18;
     const curb = new THREE.Mesh(
@@ -799,6 +833,10 @@ export function buildEfelerCity(
 
   const signposts = buildAncientCitiesSignposts(mats, colliders);
   group.add(signposts);
+
+  const mainRoadSignposts = buildMainRoadSignposts(mats, colliders, perches);
+  group.add(mainRoadSignposts.group);
+  localDisposables.push(mainRoadSignposts);
 
   const musicians = createStreetMusiciansZeybek(mats);
   group.add(musicians.group);
@@ -1038,7 +1076,8 @@ export function buildEfelerCity(
         if (Math.hypot(x - lm.doorPosition[0], z - lm.doorPosition[1]) < 3.6) return false;
       }
     }
-    if (avoidMeydan && Math.hypot(x, z - 12) < 16.4) return false;
+    if (avoidMeydan && Math.abs(x) < 14.0 && z > -16.6 && z < 28.6) return false;
+    if (Math.abs(x + 132) < 12.2 && Math.abs(z + 40) < 12.2) return false;
     if (overlapsAny(x, z, clearance * 2, clearance * 2, colliders, 0.7)) return false;
     return true;
   };
@@ -1107,7 +1146,12 @@ export function buildEfelerCity(
     [-45, -42],
     [-81, -14],
     [64, -50],
-    [94, -50]
+    [94, -50],
+    [-108, -15],
+    [-122, -15],
+    [-145, -15],
+    [-114, -29],
+    [-146, -29]
   );
 
   const broadleafSpots: TreePlacement[] = rawBroadleaf
@@ -1237,28 +1281,46 @@ export function buildEfelerCity(
 
   // Curated rooftop, bridge, and plaza golden sesame & fig crumb spots
   crumbSpots.push(
-    [0, getTerrainHeightAt(0, 12) + 6.9, 9.5], // Kent Meydanı Anıtı üstü
-    [-9.5, getTerrainHeightAt(-9.5, 11) + 1.55, 11], // Kent Meydanı Batı Havuz
-    [9.5, getTerrainHeightAt(9.5, 11) + 1.55, 11], // Kent Meydanı Doğu Havuz
+    [8.8, getTerrainHeightAt(8.8, 12.6) + 6.7, 12.6], // Kent Meydanı Anıt Heykeli üstü
+    [-7.8, getTerrainHeightAt(-7.8, 15.5) + 2.9, 15.5], // Kent Meydanı Havuz Yeşil Adası
+    [0, getTerrainHeightAt(0, -11.6) + 4.2, -11.6], // Kent Meydanı Popeyes & Yemek Alanı çatısı
     [getTabakhaneCenterX(12), getSurfaceHeightAt(getTabakhaneCenterX(12), 12) + 1.85, 12 + 4.3], // Merkez Köprü
     [getTabakhaneCenterX(-22), getSurfaceHeightAt(getTabakhaneCenterX(-22), -22) + 1.85, -22 - 4.3], // Çarşı Köprüsü
     [getTabakhaneCenterX(-58), getSurfaceHeightAt(getTabakhaneCenterX(-58), -58) + 1.85, -58 + 4.3], // Kuzey Köprüsü
-    [18, getTerrainHeightAt(18, -14) + 10.2, -14], // Tarihi Sarı Belediye çatısı
+    [38.2, getTerrainHeightAt(38.2, 28) + 10.8, 28], // Aydın Büyükşehir Belediyesi çatısı
     [-38, getTerrainHeightAt(-38, -22) + 10.2, -22], // Bey Camii üstü
     [0, getTerrainHeightAt(0, -80) + 9.8, -80], // Tralleis Üç Gözler kemer üstü
     [76, getTerrainHeightAt(76, -40) + 3.4, -40 + 4.8], // Orta Mahalle asma çardağı
     [-54, getTerrainHeightAt(-54, 48) + 9.2, 49.5], // Tarihi Tren Garı çatısı
-    [82, getTerrainHeightAt(82, -80) + 10.1, -74.2] // ADÜ Kütüphane kubbesi
+    [82, getTerrainHeightAt(82, -80) + 10.1, -74.2], // ADÜ Kütüphane kubbesi
+    [-132, getTerrainHeightAt(-132, -45.7) + 8.9, -45.7] // Magnesia Artemis Tapınağı alınlığı
+  );
+  const magY = getTerrainHeightAt(-132, -40);
+  perches.addStaticSegment(
+    'magnesia_temple_ridge',
+    new THREE.Vector3(-136.5, magY + 8.35, -45.7),
+    new THREE.Vector3(-127.5, magY + 8.35, -45.7),
+    0.18,
+    'stone'
   );
 
-  // 10f. Warm Cozy Pergola String Lights in Kent Meydanı & Orta Mahalle (east of Tabakhane)
+  // 10f. Warm Cozy Pergola String Lights over Kent Meydanı Belediye Kafeleri & Orta Mahalle
   const garlandPoints: [number, number, number][] = [];
-  for (let i = 0; i < 6; i++) {
-    const a = (i * Math.PI * 2) / 6;
-    const gx = -7.5 + Math.cos(a) * 1.85;
-    const gz = 1.2 + Math.sin(a) * 1.85;
-    garlandPoints.push([gx, getTerrainHeightAt(gx, gz) + 2.32, gz]);
-  }
+  [-6.3, 0.9].forEach((cafeX) => {
+    for (let dx = -2.3; dx <= 2.3; dx += 1.15) {
+      const gx = cafeX + dx;
+      const gz = 7.45;
+      garlandPoints.push([gx, getTerrainHeightAt(gx, gz) + 2.95, gz]);
+    }
+    const baseY = getTerrainHeightAt(cafeX, 5.5);
+    perches.addStaticSegment(
+      `belediye_kafe_${cafeX}`,
+      new THREE.Vector3(cafeX - 2.6, baseY + 3.08, 7.3),
+      new THREE.Vector3(cafeX + 2.6, baseY + 3.08, 7.3),
+      0.16,
+      'wood'
+    );
+  });
   const ortaBaseY = getTerrainHeightAt(76, -40);
   for (let gx = -2.2; gx <= 2.2; gx += 1.1) {
     garlandPoints.push([76 + 4.2 + gx, ortaBaseY + 3.05, -40 + 4.8 + 1.4]);
