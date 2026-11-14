@@ -281,7 +281,7 @@ export function buildEfelerCity(
   };
 
   // 1. Sculpted 3D Horizon Terrain (Flat Efeler Plain -> Northern Foothills -> ADÜ Aytepe Hill + Tabakhane Channel)
-  const terrainGeo = new THREE.PlaneGeometry(520, 520, 160, 160);
+  const terrainGeo = new THREE.PlaneGeometry(520, 520, 104, 104);
   terrainGeo.rotateX(-Math.PI / 2);
   const tPos = terrainGeo.attributes.position as THREE.BufferAttribute;
   const tColors = new Float32Array(tPos.count * 3);

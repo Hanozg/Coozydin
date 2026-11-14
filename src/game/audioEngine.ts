@@ -300,14 +300,73 @@ class CozyAudioEngine {
   private sfxEnabled = true;
   private zeybekPlaying = false;
   private initialized = false;
+  private audioUnlocked = false;
+  private globalUnlockBound = false;
 
   private currentTrack: LofiTrackId = 'aegean';
   private currentWeather: WeatherType = 'clear';
 
+  private playSilentUnlockBuffer(ctx: AudioContext) {
+    if (this.audioUnlocked) return;
+    try {
+      const silentBuf = ctx.createBuffer(1, 1, 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = silentBuf;
+      src.connect(ctx.destination);
+      src.start(0);
+      this.audioUnlocked = true;
+    } catch {
+      // Ignore if context is not ready yet
+    }
+  }
+
+  public unlock() {
+    if (!this.initialized) {
+      this.init();
+    }
+    const ctx = this.ctx;
+    if (!ctx) return;
+    if (ctx.state !== 'running') {
+      void ctx.resume().then(() => {
+        this.playSilentUnlockBuffer(ctx);
+      });
+    }
+    this.playSilentUnlockBuffer(ctx);
+  }
+
+  public bindGlobalUnlock() {
+    if (this.globalUnlockBound || typeof window === 'undefined') return;
+    this.globalUnlockBound = true;
+
+    const handleGesture = () => {
+      this.unlock();
+      if (this.ctx && this.ctx.state === 'running' && this.audioUnlocked) {
+        window.removeEventListener('touchstart', handleGesture, true);
+        window.removeEventListener('touchend', handleGesture, true);
+        window.removeEventListener('pointerdown', handleGesture, true);
+        window.removeEventListener('keydown', handleGesture, true);
+      }
+    };
+
+    window.addEventListener('touchstart', handleGesture, { capture: true, passive: true });
+    window.addEventListener('touchend', handleGesture, { capture: true, passive: true });
+    window.addEventListener('pointerdown', handleGesture, { capture: true, passive: true });
+    window.addEventListener('keydown', handleGesture, { capture: true, passive: true });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && this.ctx && this.ctx.state !== 'running') {
+        void this.ctx.resume();
+      }
+    });
+  }
+
   public init() {
     if (this.initialized) {
-      if (this.ctx && this.ctx.state === 'suspended') {
-        void this.ctx.resume();
+      if (this.ctx) {
+        if (this.ctx.state !== 'running') {
+          void this.ctx.resume();
+        }
+        this.playSilentUnlockBuffer(this.ctx);
       }
       return;
     }
@@ -317,7 +376,7 @@ class CozyAudioEngine {
       (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AudioCtx) return;
 
-    const ctx = new AudioCtx();
+    const ctx = new AudioCtx({ latencyHint: 'playback' });
     this.ctx = ctx;
 
     // Gentle master warmth compressor/limiter so overlapping chords & chimes never clip
@@ -334,11 +393,11 @@ class CozyAudioEngine {
     compressor.connect(ctx.destination);
     this.masterGain = master;
 
-    // Lush shared stereo warm hall reverb
+    // Lush shared stereo warm hall reverb (lightweight 1.75s IR for mobile CPU efficiency)
     const reverb = ctx.createConvolver();
-    reverb.buffer = createWarmReverbBuffer(ctx, 2.5);
+    reverb.buffer = createWarmReverbBuffer(ctx, 1.75);
     const reverbReturn = ctx.createGain();
-    reverbReturn.gain.value = 0.44;
+    reverbReturn.gain.value = 0.42;
     const reverbWarm = ctx.createBiquadFilter();
     reverbWarm.type = 'lowpass';
     reverbWarm.frequency.value = 1650;
@@ -354,7 +413,7 @@ class CozyAudioEngine {
 
     const tapeSat = ctx.createWaveShaper();
     tapeSat.curve = createSoftTapeCurve();
-    tapeSat.oversample = '2x';
+    tapeSat.oversample = 'none';
 
     const musicWarmFilter = ctx.createBiquadFilter();
     musicWarmFilter.type = 'lowpass';
@@ -530,6 +589,12 @@ class CozyAudioEngine {
     this.engineNoiseGain = tireGain;
 
     this.initialized = true;
+    this.playSilentUnlockBuffer(ctx);
+    if (ctx.state !== 'running') {
+      void ctx.resume().then(() => {
+        this.playSilentUnlockBuffer(ctx);
+      });
+    }
     this.applyWeatherAudio();
     this.applyTrackTexture();
     this.startMusicLoop();

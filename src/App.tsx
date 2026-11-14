@@ -782,6 +782,7 @@ export default function App() {
   }, [activeNpc, agendaOpen, inHome, journalOpen, phase, profileOpen, realMapOpen]);
 
   useEffect(() => {
+    audioEngine.bindGlobalUnlock();
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       audioEngine.dispose();
@@ -794,8 +795,17 @@ export default function App() {
       : phase;
 
   const handleTouchInput = useCallback((next: Partial<TouchDriveInput>) => {
-    if (next.forward || next.backward || next.left || next.right) {
-      audioEngine.init();
+    if (
+      next.forward ||
+      next.backward ||
+      next.left ||
+      next.right ||
+      next.flap ||
+      next.dive ||
+      Math.abs(next.joyX ?? 0) > 0.05 ||
+      Math.abs(next.joyY ?? 0) > 0.05
+    ) {
+      audioEngine.unlock();
     }
     canvasRef.current?.setTouchInput(next);
   }, []);

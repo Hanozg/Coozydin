@@ -182,6 +182,7 @@ interface WalkerAgent {
   timer: number;
   scale: number;
   phaseOffset: number;
+  groundY: number;
 }
 
 export interface PedestrianSystem {
@@ -205,7 +206,7 @@ export function createPedestrianSystem(): PedestrianSystem {
     metalness: 0.02,
   });
   const bodyInst = new THREE.InstancedMesh(bodyGeo, bodyMat, count);
-  bodyInst.castShadow = true;
+  bodyInst.castShadow = false;
   bodyInst.frustumCulled = false;
 
   const headMat = new THREE.MeshStandardMaterial({
@@ -215,7 +216,7 @@ export function createPedestrianSystem(): PedestrianSystem {
     metalness: 0.02,
   });
   const headInst = new THREE.InstancedMesh(headGeo, headMat, count);
-  headInst.castShadow = true;
+  headInst.castShadow = false;
   headInst.frustumCulled = false;
 
   const colorTmp = new THREE.Color();
@@ -292,15 +293,18 @@ export function createPedestrianSystem(): PedestrianSystem {
         timer: Math.random() * 2,
         scale: 1,
         phaseOffset: Math.random() * Math.PI * 2,
+        groundY: getWalkableSurfaceHeightAt(sx, sz),
       });
     } else {
       const doorLm = doorLandmarks[i % doorLandmarks.length];
       const [dx, dz] = doorLm.doorPosition!;
       const wp = streetWaypoints[(i * 3) % streetWaypoints.length];
       const startAtDoor = i % 2 === 0;
+      const sx = startAtDoor ? dx + (Math.random() - 0.5) * 2 : wp[0];
+      const sz = startAtDoor ? dz + (Math.random() - 0.5) * 2 : wp[1];
       agents.push({
-        x: startAtDoor ? dx + (Math.random() - 0.5) * 2 : wp[0],
-        z: startAtDoor ? dz + (Math.random() - 0.5) * 2 : wp[1],
+        x: sx,
+        z: sz,
         targetX: dx,
         targetZ: dz,
         speed: 1.15 + Math.random() * 0.5,
@@ -311,6 +315,7 @@ export function createPedestrianSystem(): PedestrianSystem {
         timer: 0,
         scale: 1,
         phaseOffset: Math.random() * Math.PI * 2,
+        groundY: getWalkableSurfaceHeightAt(sx, sz),
       });
     }
   }
@@ -381,6 +386,7 @@ export function createPedestrianSystem(): PedestrianSystem {
             const step = Math.min(dist, a.speed * dt);
             a.x += (dx / dist) * step;
             a.z += (dz / dist) * step;
+            a.groundY = getWalkableSurfaceHeightAt(a.x, a.z);
           }
         }
 
@@ -388,7 +394,7 @@ export function createPedestrianSystem(): PedestrianSystem {
           a.state === 'walking' && Math.hypot(a.targetX - a.x, a.targetZ - a.z) > 0.6;
         const bob = isMoving ? Math.abs(Math.sin(elapsed * 6.5 + a.phaseOffset)) * 0.06 : 0;
 
-        dummy.position.set(a.x, getWalkableSurfaceHeightAt(a.x, a.z) + bob, a.z);
+        dummy.position.set(a.x, a.groundY + bob, a.z);
         dummy.scale.setScalar(a.scale * 1.12);
         dummy.rotation.y = Math.atan2(a.targetX - a.x, a.targetZ - a.z);
         dummy.updateMatrix();

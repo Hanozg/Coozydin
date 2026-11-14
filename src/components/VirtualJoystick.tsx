@@ -15,25 +15,31 @@ export interface VirtualJoystickProps {
   ariaLabel?: string;
 }
 
-const DEADZONE = 0.12;
+const DEADZONE = 0.08;
 
 export function VirtualJoystick({
   onChange,
-  size = 116,
-  knobSize = 48,
+  size = 112,
+  knobSize = 46,
   accent = 'terracotta',
   label,
   ariaLabel = 'Yön Joysticki',
 }: VirtualJoystickProps) {
   const baseRef = useRef<HTMLDivElement | null>(null);
+  const knobRef = useRef<HTMLDivElement | null>(null);
   const pointerIdRef = useRef<number | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
-  const [knobOffset, setKnobOffset] = useState({ x: 0, y: 0 });
   const [active, setActive] = useState(false);
 
-  const maxTravel = Math.max(20, (size - knobSize) * 0.5);
+  const maxTravel = Math.max(22, (size - knobSize) * 0.52);
+
+  const applyKnobVisual = (px: number, py: number) => {
+    if (knobRef.current) {
+      knobRef.current.style.transform = `translate3d(${px}px, ${py}px, 0)`;
+    }
+  };
 
   const emitFromClient = (clientX: number, clientY: number) => {
     const el = baseRef.current;
@@ -50,7 +56,7 @@ export function VirtualJoystick({
     const px = dist > 0.001 ? Math.cos(angle) * clampedDist : 0;
     const py = dist > 0.001 ? Math.sin(angle) * clampedDist : 0;
 
-    setKnobOffset({ x: px, y: py });
+    applyKnobVisual(px, py);
 
     const normMag = clampedDist / maxTravel;
     if (normMag <= DEADZONE) {
@@ -71,7 +77,7 @@ export function VirtualJoystick({
   const resetStick = () => {
     pointerIdRef.current = null;
     setActive(false);
-    setKnobOffset({ x: 0, y: 0 });
+    applyKnobVisual(0, 0);
     onChangeRef.current({ x: 0, y: 0 });
   };
 
@@ -120,7 +126,7 @@ export function VirtualJoystick({
     accent === 'olive' ? 'border-[#5D8A48]' : 'border-[#C85A32]';
 
   return (
-    <div className="pointer-events-auto flex flex-col items-center gap-1 select-none">
+    <div className="pointer-events-auto flex flex-col items-center gap-0.5 select-none">
       <div
         ref={baseRef}
         role="slider"
@@ -134,52 +140,53 @@ export function VirtualJoystick({
         onLostPointerCapture={() => resetStick()}
         onContextMenu={(e: ReactMouseEvent<HTMLDivElement>) => e.preventDefault()}
         style={{ width: size, height: size }}
-        className={`relative rounded-full bg-[#F7EEDC]/90 backdrop-blur-xs border-2 ${
+        className={`relative rounded-full bg-[#F7EEDC]/92 border-2 ${
           active ? ringActiveBorder : 'border-[#B99464]'
         } shadow-lg flex items-center justify-center touch-none cursor-grab active:cursor-grabbing transition-colors`}
       >
         {/* Inner Guide Ring */}
         <div
           aria-hidden="true"
-          className="absolute inset-3 rounded-full border border-dashed border-[#B99464]/55 pointer-events-none"
+          className="absolute inset-2.5 rounded-full border border-dashed border-[#B99464]/55 pointer-events-none"
         />
 
         {/* Subtle Cardinal Dots */}
         <span
           aria-hidden="true"
-          className="absolute top-2 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[#9C7A52]/65 pointer-events-none"
+          className="absolute top-1.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[#9C7A52]/65 pointer-events-none"
         />
         <span
           aria-hidden="true"
-          className="absolute bottom-2 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[#9C7A52]/65 pointer-events-none"
+          className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[#9C7A52]/65 pointer-events-none"
         />
         <span
           aria-hidden="true"
-          className="absolute left-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-[#9C7A52]/65 pointer-events-none"
+          className="absolute left-1.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-[#9C7A52]/65 pointer-events-none"
         />
         <span
           aria-hidden="true"
-          className="absolute right-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-[#9C7A52]/65 pointer-events-none"
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-[#9C7A52]/65 pointer-events-none"
         />
 
-        {/* Movable Analog Thumb Puck */}
+        {/* Movable Analog Thumb Puck — moved directly via DOM transform for 0 React re-renders */}
         <div
+          ref={knobRef}
           aria-hidden="true"
           style={{
             width: knobSize,
             height: knobSize,
-            transform: `translate3d(${knobOffset.x}px, ${knobOffset.y}px, 0)`,
+            transform: 'translate3d(0px, 0px, 0)',
           }}
           className={`rounded-full border-2 ${knobBg} shadow-md flex items-center justify-center pointer-events-none ${
             active ? '' : 'transition-transform duration-150 ease-out'
           }`}
         >
-          <div className="w-3.5 h-3.5 rounded-full bg-[#FAF2E2]/40" />
+          <div className="w-3.5 h-3.5 rounded-full bg-[#FAF2E2]/45" />
         </div>
       </div>
 
       {label && (
-        <span className="text-[10px] font-bold tracking-wide text-[#3A2618] bg-[#F7EEDC]/90 border border-[#B99464]/70 px-2 py-0.5 rounded-md shadow-xs">
+        <span className="text-[10px] font-bold tracking-wide text-[#3A2618] bg-[#F7EEDC]/92 border border-[#B99464]/70 px-2 py-0.5 rounded-md shadow-xs">
           {label}
         </span>
       )}

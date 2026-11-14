@@ -249,30 +249,7 @@
 }
 
 .efeler-canvas-stage {
-  filter: brightness(1) saturate(1);
-  transition: filter 2.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.efeler-cycle-morning .efeler-canvas-stage {
-  filter: brightness(1.02) saturate(1.03);
-}
-.efeler-cycle-noon .efeler-canvas-stage {
-  filter: brightness(1.01) saturate(1.01);
-}
-.efeler-cycle-golden .efeler-canvas-stage {
-  filter: sepia(0.06) brightness(1.01) saturate(1.09);
-}
-.efeler-cycle-evening .efeler-canvas-stage {
-  filter: brightness(0.94) contrast(1.04) saturate(0.92);
-}
-.efeler-weather-rain .efeler-canvas-stage {
-  filter: brightness(0.93) saturate(0.88);
-}
-.efeler-weather-storm .efeler-canvas-stage {
-  filter: brightness(0.86) contrast(1.07) saturate(0.82);
-}
-.efeler-weather-snow .efeler-canvas-stage {
-  filter: brightness(1.03) saturate(0.9);
+  transform: translateZ(0);
 }
 
 .efeler-lighting-overlay {

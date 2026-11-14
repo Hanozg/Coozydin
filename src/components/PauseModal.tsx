@@ -18,10 +18,10 @@ export function PauseModal({
   onResetPosition,
 }: PauseModalProps) {
   return (
-    <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#2E1E12]/65 p-6">
-      <div className="w-full max-w-md rounded-2xl bg-[#F7EEDC] border-2 border-[#B99464] p-7 text-[#3A2618] shadow-2xl">
+    <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#2E1E12]/65 p-3 sm:p-6">
+      <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto efeler-scroll rounded-2xl bg-[#F7EEDC] border-2 border-[#B99464] p-4 sm:p-7 text-[#3A2618] shadow-2xl">
         <p className="text-xs text-[#B84C27] font-semibold mb-1">Oyun Duraklatıldı</p>
-        <h2 className="font-display text-2xl font-bold tracking-tight mb-5 text-[#3A2618]">
+        <h2 className="font-display text-xl sm:text-2xl font-bold tracking-tight mb-4 sm:mb-5 text-[#3A2618]">
           Efeler Sokaklarında Mola
         </h2>
 

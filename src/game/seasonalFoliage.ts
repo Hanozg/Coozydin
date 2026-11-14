@@ -354,7 +354,7 @@ export function createSeasonalFoliageSystem(
   const blMounds = new THREE.InstancedMesh(moundGeo, moundMat, blCount);
   const blBirds = new THREE.InstancedMesh(birdGeo, birdMat, blCount);
 
-  blTrunks.castShadow = true;
+  blTrunks.castShadow = false;
   blTrunks.receiveShadow = true;
   blCrowns.castShadow = true;
   blCrowns.receiveShadow = true;
@@ -483,7 +483,7 @@ export function createSeasonalFoliageSystem(
 
   const sCount = Math.max(1, shrubSpots.length);
   const shrubInst = new THREE.InstancedMesh(shrubGeo, shrubMat, sCount);
-  shrubInst.castShadow = true;
+  shrubInst.castShadow = false;
   shrubSpots.forEach((spot, i) => {
     dummy.position.set(spot.x, getTerrainHeightAt(spot.x, spot.z), spot.z);
     dummy.rotation.set(0, spot.rotY, 0);
@@ -558,6 +558,13 @@ export function createSeasonalFoliageSystem(
   };
 
   let prevSnowMode = -1;
+  let swayAccum = 1; // Trigger update on first frame
+  let colorsDirty = true;
+  let lastSpringW = -1;
+  let lastSummerW = -1;
+  let lastAutumnW = -1;
+  let lastWinterW = -1;
+  let lastFrost = -1;
 
   return {
     group,
@@ -572,82 +579,121 @@ export function createSeasonalFoliageSystem(
       const winterBirdPresence = THREE.MathUtils.smoothstep(seasonW.winter, 0.35, 0.92);
       const snowBlend = THREE.MathUtils.clamp(Math.max(seasonW.winter * 0.92, state.frostFactor), 0, 1);
 
-      // Update Trunk & Base Mound Colors smoothly
-      trunkMat.color.copy(cBarkNormal).lerp(cBarkWinter, snowBlend * 0.72);
-      moundMat.color
-        .copy(cMoundGreen)
-        .lerp(cMoundAutumn, seasonW.autumn * 0.85)
-        .lerp(cMoundSnow, snowBlend);
-
-      // Update Broadleaf Instances (wind sway + winter leaf-drop + perched birds)
-      for (let i = 0; i < broadleafSpots.length; i++) {
-        const spot = broadleafSpots[i];
-        const gy = broadleafBaseY[i];
-        const swayZ = Math.sin(elapsed * (1.2 + state.windStrength * 0.45) + i * 0.7) * 0.025 * state.windStrength;
-        const swayX = Math.cos(elapsed * 1.05 + i * 1.1) * 0.018 * state.windStrength;
-
-        // Crown scales down to 0 in winter so bare branches stand out crisply
-        const crownS = spot.scale * Math.max(0.001, leafPresence);
-        dummy.position.set(spot.x, gy, spot.z);
-        dummy.rotation.set(swayX, spot.rotY, swayZ);
-        dummy.scale.set(crownS, crownS * spot.heightScale, crownS);
-        dummy.updateMatrix();
-        blCrowns.setMatrixAt(i, dummy.matrix);
-        blCrowns.visible = leafPresence > 0.03;
-
-        // Winter red birds appear cleanly once leaves drop
-        const birdS = spot.scale * Math.max(0.001, winterBirdPresence);
-        dummy.scale.set(birdS, birdS * spot.heightScale, birdS);
-        dummy.updateMatrix();
-        blBirds.setMatrixAt(i, dummy.matrix);
-
-        blendSeasonalColor(SEASON_BROADLEAF_PALETTES, spot.variant, state.frostFactor * 0.7, cTmp);
-        blCrowns.setColorAt(i, cTmp);
+      if (
+        Math.abs(seasonW.spring - lastSpringW) > 0.006 ||
+        Math.abs(seasonW.summer - lastSummerW) > 0.006 ||
+        Math.abs(seasonW.autumn - lastAutumnW) > 0.006 ||
+        Math.abs(seasonW.winter - lastWinterW) > 0.006 ||
+        Math.abs(state.frostFactor - lastFrost) > 0.008
+      ) {
+        colorsDirty = true;
+        lastSpringW = seasonW.spring;
+        lastSummerW = seasonW.summer;
+        lastAutumnW = seasonW.autumn;
+        lastWinterW = seasonW.winter;
+        lastFrost = state.frostFactor;
       }
-      blCrowns.instanceMatrix.needsUpdate = true;
-      if (blCrowns.instanceColor) blCrowns.instanceColor.needsUpdate = true;
-      blBirds.instanceMatrix.needsUpdate = true;
-      blBirds.visible = winterBirdPresence > 0.03;
 
-      // Update Low-Poly Tiered Pines (gentle wind sway + snow frosting)
-      for (let i = 0; i < pineSpots.length; i++) {
-        const spot = pineSpots[i];
-        const gy = pineBaseY[i];
-        const swayZ = Math.sin(elapsed * 1.4 + i * 0.9) * 0.022 * state.windStrength;
-        dummy.position.set(spot.x, gy, spot.z);
-        dummy.rotation.set(0, spot.rotY, swayZ);
-        dummy.scale.set(spot.scale, spot.scale * spot.heightScale, spot.scale);
-        dummy.updateMatrix();
-        pineCrowns.setMatrixAt(i, dummy.matrix);
-
-        blendSeasonalColor(SEASON_PINE_PALETTES, spot.variant, state.frostFactor * 0.68, cTmp);
-        pineCrowns.setColorAt(i, cTmp);
+      if (colorsDirty) {
+        // Update Trunk & Base Mound Colors only when season/frost shifts
+        trunkMat.color.copy(cBarkNormal).lerp(cBarkWinter, snowBlend * 0.72);
+        moundMat.color
+          .copy(cMoundGreen)
+          .lerp(cMoundAutumn, seasonW.autumn * 0.85)
+          .lerp(cMoundSnow, snowBlend);
       }
-      pineCrowns.instanceMatrix.needsUpdate = true;
-      if (pineCrowns.instanceColor) pineCrowns.instanceColor.needsUpdate = true;
 
-      // Update Palms & Shrubs colors
-      for (let i = 0; i < palmSpots.length; i++) {
-        const spot = palmSpots[i];
-        const gy = palmBaseY[i];
-        const swayZ = Math.sin(elapsed * 1.5 + i * 0.6) * 0.03 * state.windStrength;
-        dummy.position.set(spot.x, gy, spot.z);
-        dummy.rotation.set(0, spot.rotY, swayZ);
-        dummy.scale.setScalar(spot.scale);
-        dummy.updateMatrix();
-        palmCrowns.setMatrixAt(i, dummy.matrix);
+      swayAccum += dt;
+      const shouldUpdateMatrices = swayAccum >= 0.036 || colorsDirty;
+      if (shouldUpdateMatrices) {
+        swayAccum = 0;
 
-        blendSeasonalColor(SEASON_PALM_PALETTES, spot.variant, state.frostFactor * 0.45, cTmp);
-        palmCrowns.setColorAt(i, cTmp);
+        // Update Broadleaf Instances (wind sway + winter leaf-drop + perched birds)
+        const showCrowns = leafPresence > 0.03;
+        const showBirds = winterBirdPresence > 0.03;
+        blCrowns.visible = showCrowns;
+        blBirds.visible = showBirds;
+
+        for (let i = 0; i < broadleafSpots.length; i++) {
+          const spot = broadleafSpots[i];
+          const gy = broadleafBaseY[i];
+          const swayZ = Math.sin(elapsed * (1.2 + state.windStrength * 0.45) + i * 0.7) * 0.025 * state.windStrength;
+          const swayX = Math.cos(elapsed * 1.05 + i * 1.1) * 0.018 * state.windStrength;
+
+          if (showCrowns) {
+            const crownS = spot.scale * Math.max(0.001, leafPresence);
+            dummy.position.set(spot.x, gy, spot.z);
+            dummy.rotation.set(swayX, spot.rotY, swayZ);
+            dummy.scale.set(crownS, crownS * spot.heightScale, crownS);
+            dummy.updateMatrix();
+            blCrowns.setMatrixAt(i, dummy.matrix);
+          }
+
+          if (showBirds) {
+            const birdS = spot.scale * Math.max(0.001, winterBirdPresence);
+            dummy.position.set(spot.x, gy, spot.z);
+            dummy.rotation.set(swayX, spot.rotY, swayZ);
+            dummy.scale.set(birdS, birdS * spot.heightScale, birdS);
+            dummy.updateMatrix();
+            blBirds.setMatrixAt(i, dummy.matrix);
+          }
+
+          if (colorsDirty) {
+            blendSeasonalColor(SEASON_BROADLEAF_PALETTES, spot.variant, state.frostFactor * 0.7, cTmp);
+            blCrowns.setColorAt(i, cTmp);
+          }
+        }
+        if (showCrowns) blCrowns.instanceMatrix.needsUpdate = true;
+        if (showBirds) blBirds.instanceMatrix.needsUpdate = true;
+        if (colorsDirty && blCrowns.instanceColor) blCrowns.instanceColor.needsUpdate = true;
+
+        // Update Low-Poly Tiered Pines (gentle wind sway + snow frosting)
+        for (let i = 0; i < pineSpots.length; i++) {
+          const spot = pineSpots[i];
+          const gy = pineBaseY[i];
+          const swayZ = Math.sin(elapsed * 1.4 + i * 0.9) * 0.022 * state.windStrength;
+          dummy.position.set(spot.x, gy, spot.z);
+          dummy.rotation.set(0, spot.rotY, swayZ);
+          dummy.scale.set(spot.scale, spot.scale * spot.heightScale, spot.scale);
+          dummy.updateMatrix();
+          pineCrowns.setMatrixAt(i, dummy.matrix);
+
+          if (colorsDirty) {
+            blendSeasonalColor(SEASON_PINE_PALETTES, spot.variant, state.frostFactor * 0.68, cTmp);
+            pineCrowns.setColorAt(i, cTmp);
+          }
+        }
+        pineCrowns.instanceMatrix.needsUpdate = true;
+        if (colorsDirty && pineCrowns.instanceColor) pineCrowns.instanceColor.needsUpdate = true;
+
+        // Update Palms & Shrubs
+        for (let i = 0; i < palmSpots.length; i++) {
+          const spot = palmSpots[i];
+          const gy = palmBaseY[i];
+          const swayZ = Math.sin(elapsed * 1.5 + i * 0.6) * 0.03 * state.windStrength;
+          dummy.position.set(spot.x, gy, spot.z);
+          dummy.rotation.set(0, spot.rotY, swayZ);
+          dummy.scale.setScalar(spot.scale);
+          dummy.updateMatrix();
+          palmCrowns.setMatrixAt(i, dummy.matrix);
+
+          if (colorsDirty) {
+            blendSeasonalColor(SEASON_PALM_PALETTES, spot.variant, state.frostFactor * 0.45, cTmp);
+            palmCrowns.setColorAt(i, cTmp);
+          }
+        }
+        palmCrowns.instanceMatrix.needsUpdate = true;
+        if (colorsDirty && palmCrowns.instanceColor) palmCrowns.instanceColor.needsUpdate = true;
+
+        if (colorsDirty) {
+          for (let i = 0; i < shrubSpots.length; i++) {
+            blendSeasonalColor(SEASON_SHRUB_PALETTES, shrubSpots[i].variant, state.frostFactor * 0.72, cTmp);
+            shrubInst.setColorAt(i, cTmp);
+          }
+          if (shrubInst.instanceColor) shrubInst.instanceColor.needsUpdate = true;
+          colorsDirty = false;
+        }
       }
-      palmCrowns.instanceMatrix.needsUpdate = true;
-      if (palmCrowns.instanceColor) palmCrowns.instanceColor.needsUpdate = true;
-
-      for (let i = 0; i < shrubSpots.length; i++) {
-        blendSeasonalColor(SEASON_SHRUB_PALETTES, shrubSpots[i].variant, state.frostFactor * 0.72, cTmp);
-        shrubInst.setColorAt(i, cTmp);
-      }
-      if (shrubInst.instanceColor) shrubInst.instanceColor.needsUpdate = true;
 
       // Floating Spring Blossom Petals & Autumn Falling Leaves
       const particleWeight = Math.max(seasonW.spring, seasonW.autumn);

@@ -498,13 +498,20 @@ export class SparrowController {
         }
       }
     } else {
-      // Flying mode (intermittent flap-bounding + dive swoop + airbrake)
+      // Flying mode (intermittent flap-bounding + dive swoop + airbrake + full analog joystick)
+      const joyX = input.joyX ?? 0;
+      const joyY = input.joyY ?? 0;
       const isDiving = isPlaying && input.diveHeld;
-      const isBraking = isPlaying && input.backward && !input.forward;
+      const isBraking = isPlaying && ((input.backward && !input.forward) || joyY < -0.45);
+      const isForwardThrust = isPlaying && (input.forward || joyY > 0.22);
 
       if (isPlaying) {
-        const turnInput = (input.left ? 1 : 0) - (input.right ? 1 : 0);
-        const turnSpeed = isBraking ? 2.8 : 2.3;
+        const turnInput = THREE.MathUtils.clamp(
+          (input.left ? 1 : 0) - (input.right ? 1 : 0) - joyX,
+          -1,
+          1
+        );
+        const turnSpeed = isBraking ? 2.9 : 2.45;
         this.yaw += turnInput * turnSpeed * safeDt;
         const targetBank = -turnInput * (isDiving ? 0.82 : 0.64);
         this.bankAngle = THREE.MathUtils.damp(this.bankAngle, targetBank, 9, safeDt);
@@ -518,7 +525,7 @@ export class SparrowController {
         ? 22.0
         : isBraking
           ? 3.8
-          : isPlaying && input.forward
+          : isForwardThrust
             ? 14.8
             : 10.6;
 
@@ -547,7 +554,7 @@ export class SparrowController {
         this.flightStamina = Math.min(1.0, this.flightStamina + safeDt * 0.08);
         this.boundCycleTimer = (this.boundCycleTimer + safeDt) % 0.92;
         const inFlapBurst = this.boundCycleTimer < 0.34;
-        if (inFlapBurst && input.forward) {
+        if (inFlapBurst && isForwardThrust) {
           this.flapAnimTimer = Math.max(this.flapAnimTimer, 0.12);
           this.wingTuckAmount = THREE.MathUtils.damp(this.wingTuckAmount, 0, 14, safeDt);
           this.flightWingbeatTimer -= safeDt;

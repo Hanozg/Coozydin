@@ -333,6 +333,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       steerAngle: 0,
       wheelSpin: 0,
       zoomFactor: 1.0,
+      isoYawOffset: 0,
       fpYaw: 0,
       fpPitch: -0.04,
       rebuildVehicleRequested: false,
@@ -531,8 +532,10 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       if (!container) return;
 
       const isSoftwareGl = detectSoftwareWebGL();
+      const isTouchDevice =
+        window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
       const renderer = new THREE.WebGLRenderer({
-        antialias: !isSoftwareGl,
+        antialias: !isSoftwareGl && !isTouchDevice,
         alpha: true,
         powerPreference: 'high-performance',
       });
@@ -540,9 +543,10 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.18;
-      renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio, 2));
+      const maxDpr = isSoftwareGl ? 1 : isTouchDevice ? 1.35 : 2;
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
       renderer.shadowMap.enabled = !isSoftwareGl;
-      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.shadowMap.type = THREE.PCFShadowMap;
       renderer.setSize(container.clientWidth, container.clientHeight);
       renderer.domElement.style.display = 'block';
       renderer.domElement.style.width = '100%';
@@ -570,11 +574,19 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       scene.environment = envRT.texture;
       pmrem.dispose();
 
-      const getEffectiveFrustum = (asp: number) =>
-        asp < 1 ? 32 / Math.max(0.62, Math.pow(asp, 0.48)) : 32;
+      const getEffectiveFrustum = (asp: number, heightPx: number) => {
+        if (asp < 1) {
+          return 32 / Math.max(0.62, Math.pow(asp, 0.48));
+        }
+        // Compact landscape mobile viewports need slightly wider vertical frustum so buildings & roads read comfortably
+        if (heightPx <= 520 && asp > 1.25) {
+          return 36;
+        }
+        return 32;
+      };
 
       const aspect = container.clientWidth / Math.max(1, container.clientHeight);
-      const initialFrustum = getEffectiveFrustum(aspect);
+      const initialFrustum = getEffectiveFrustum(aspect, container.clientHeight);
       const camera = new THREE.OrthographicCamera(
         (-initialFrustum * aspect) / 2,
         (initialFrustum * aspect) / 2,
@@ -587,10 +599,10 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       _lookCurrent.set(simRef.current.x, 1, simRef.current.z);
       camera.lookAt(_lookCurrent);
 
-      const fpCamera = new THREE.PerspectiveCamera(62, aspect, 0.12, 280);
+      const fpCamera = new THREE.PerspectiveCamera(64, aspect, 0.12, 280);
       fpCamera.position.set(simRef.current.x, simRef.current.y + 1.46, simRef.current.z);
 
-      const chaseCamera = new THREE.PerspectiveCamera(58, aspect, 0.12, 320);
+      const chaseCamera = new THREE.PerspectiveCamera(60, aspect, 0.12, 320);
       const sparrowChaseCam = new SparrowChaseCamera();
       const unbindChaseDrag = sparrowChaseCam.bindDrag(
         renderer.domElement,
@@ -612,18 +624,19 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       );
       sunLight.position.set(...initialMood.sunPosition);
       sunLight.castShadow = !isSoftwareGl;
-      sunLight.shadow.mapSize.width = 2048;
-      sunLight.shadow.mapSize.height = 2048;
+      const shadowRes = isTouchDevice ? 1024 : 1536;
+      sunLight.shadow.mapSize.width = shadowRes;
+      sunLight.shadow.mapSize.height = shadowRes;
       sunLight.shadow.camera.near = 5;
       sunLight.shadow.camera.far = 210;
-      const d = 42;
+      const d = isTouchDevice ? 34 : 42;
       sunLight.shadow.camera.left = -d;
       sunLight.shadow.camera.right = d;
       sunLight.shadow.camera.top = d;
       sunLight.shadow.camera.bottom = -d;
       sunLight.shadow.bias = -0.0004;
       sunLight.shadow.normalBias = 0.02;
-      sunLight.shadow.radius = 2.2;
+      sunLight.shadow.radius = isTouchDevice ? 1.4 : 2.0;
       scene.add(sunLight);
       scene.add(sunLight.target);
 
@@ -745,7 +758,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       const pDummy = new THREE.Object3D();
 
       // Pooled 3D Weather Particles (Rain / Snow / Storm)
-      const weatherCount = 240;
+      const weatherCount = isTouchDevice ? 120 : 220;
       const weatherGeo = new THREE.BoxGeometry(0.08, 0.85, 0.08);
       const weatherMat = new THREE.MeshBasicMaterial({
         color: 0xd6e6f5,
@@ -770,13 +783,15 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         renderer.compile(scene, camera);
       }
 
-      // Raycasting for Clicking Street Encounters & Building NPCs + Drag-to-Look in First-Person
+      // Raycasting for Clicking Street Encounters & Building NPCs + Drag-to-Look / Isometric Orbit
       const raycaster = new THREE.Raycaster();
       let lastMoveRaycast = 0;
-      let isPointerDragging = false;
+      let activeDragPointerId: number | null = null;
       let lastDragX = 0;
       let lastDragY = 0;
       let pointerDragDist = 0;
+      let pinchStartDist = 0;
+      let pinchStartZoom = 1;
 
       const updatePointer = (clientX: number, clientY: number) => {
         const rect = renderer.domElement.getBoundingClientRect();
@@ -785,8 +800,8 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       };
 
       const onPointerDown = (e: PointerEvent) => {
-        if (phaseRef.current !== 'playing') return;
-        isPointerDragging = true;
+        if (phaseRef.current !== 'playing' || activeDragPointerId !== null || pinchStartDist > 0) return;
+        activeDragPointerId = e.pointerId;
         lastDragX = e.clientX;
         lastDragY = e.clientY;
         pointerDragDist = 0;
@@ -794,7 +809,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
 
       const onPointerMove = (e: PointerEvent) => {
         if (phaseRef.current !== 'playing') return;
-        if (isPointerDragging) {
+        if (activeDragPointerId === e.pointerId && pinchStartDist === 0) {
           const dx = e.clientX - lastDragX;
           const dy = e.clientY - lastDragY;
           lastDragX = e.clientX;
@@ -811,8 +826,14 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
               -0.52,
               0.45
             );
+          } else if (
+            explorationModeRef.current !== 'sparrow' &&
+            cameraPresetRef.current !== 'perspective'
+          ) {
+            simRef.current.isoYawOffset -= dx * 0.0052;
           }
         }
+        if (e.pointerType === 'touch') return;
         const now = performance.now();
         if (now - lastMoveRaycast < 65) return;
         lastMoveRaycast = now;
@@ -829,8 +850,10 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         renderer.domElement.style.cursor = hits.length > 0 ? 'pointer' : 'default';
       };
 
-      const onPointerUp = () => {
-        isPointerDragging = false;
+      const onPointerUp = (e: PointerEvent) => {
+        if (activeDragPointerId === e.pointerId) {
+          activeDragPointerId = null;
+        }
       };
 
       const onPointerClick = (e: MouseEvent) => {
@@ -924,14 +947,13 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         );
       };
 
-      let pinchStartDist = 0;
-      let pinchStartZoom = 1;
       const getTouchDist = (t1: Touch, t2: Touch) =>
         Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
 
       const onTouchStart = (e: TouchEvent) => {
         if (phaseRef.current !== 'playing') return;
         if (e.touches.length === 2) {
+          activeDragPointerId = null;
           pinchStartDist = getTouchDist(e.touches[0], e.touches[1]);
           pinchStartZoom = simRef.current.zoomFactor;
         }
@@ -965,7 +987,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         const w = container.clientWidth;
         const h = Math.max(1, container.clientHeight);
         const asp = w / h;
-        const frustum = getEffectiveFrustum(asp);
+        const frustum = getEffectiveFrustum(asp, h);
         camera.left = (-frustum * asp) / 2;
         camera.right = (frustum * asp) / 2;
         camera.top = frustum / 2;
@@ -1276,10 +1298,10 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
 
         if (cameraPresetRef.current === 'perspective' && prevCamPreset !== 'perspective') {
           if (isSparrow) {
-            sparrowChaseCam.snapTo(sparrowController.position, sparrowController.yaw);
+            sparrowChaseCam.snapTo(sparrowController.position, sparrowController.yaw, false);
           } else {
             _chaseTarget.set(sim.x, sim.y, sim.z);
-            sparrowChaseCam.snapTo(_chaseTarget, sim.heading + Math.PI);
+            sparrowChaseCam.snapTo(_chaseTarget, sim.heading + Math.PI, !isWalking);
           }
         }
         prevCamPreset = cameraPresetRef.current;
@@ -1425,26 +1447,41 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
             const isIsoCam =
               cameraPresetRef.current !== 'first_person' &&
               cameraPresetRef.current !== 'perspective';
+            const isoAzimuth = Math.PI / 4 + sim.isoYawOffset;
 
-            if (isWalking && isIsoCam && joyMag > 0.05 && !hasKeyMove && !touchButtonsActive) {
-              // 360-degree screen-relative isometric analog walking
-              const worldDirX = (joyX - joyY) * Math.SQRT1_2;
-              const worldDirZ = (-joyX - joyY) * Math.SQRT1_2;
+            if (isIsoCam && joyMag > 0.08 && !hasKeyMove && !touchButtonsActive) {
+              // Smart 360-degree screen-relative isometric analog control for both walking and driving!
+              const cosA = Math.cos(isoAzimuth);
+              const sinA = Math.sin(isoAzimuth);
+              const worldDirX = joyX * cosA - joyY * sinA;
+              const worldDirZ = -joyX * sinA - joyY * cosA;
               const targetHeading = Math.atan2(-worldDirX, -worldDirZ);
               let diff = targetHeading - sim.heading;
               while (diff > Math.PI) diff -= Math.PI * 2;
               while (diff < -Math.PI) diff += Math.PI * 2;
-              sim.heading += diff * Math.min(1, dt * 11);
-              sim.speed = THREE.MathUtils.damp(sim.speed, maxSpeed * joyMag, 14, dt);
-              sim.steerAngle = THREE.MathUtils.damp(sim.steerAngle, -joyX * 0.35, 10, dt);
+              const steerResponsiveness = isWalking ? 12 : vType === 'bicycle' ? 8.5 : vType === 'motorcycle' ? 7.8 : 6.4;
+              sim.heading += diff * Math.min(1, dt * steerResponsiveness);
+              // Ease forward speed cleanly on sharp 180° turns so vehicle pivots smoothly
+              const cornerFactor = isWalking ? 1.0 : Math.max(0.35, 1.0 - Math.abs(diff) / (Math.PI * 1.15));
+              const targetSpeed = maxSpeed * joyMag * cornerFactor;
+              sim.speed = THREE.MathUtils.damp(sim.speed, targetSpeed, isWalking ? 14 : 6.5, dt);
+              sim.steerAngle = THREE.MathUtils.damp(
+                sim.steerAngle,
+                THREE.MathUtils.clamp(diff * 0.55, -0.45, 0.45),
+                10,
+                dt
+              );
             } else {
+              // In chase/1P mode or when pedals/keys are held: never reverse accidentally when steering left/right on joystick
+              const joyFwd = joyY > 0.1 ? joyY : Math.abs(joyX) > 0.25 && joyY > -0.2 ? Math.abs(joyX) * 0.42 : 0;
+              const joyRev = joyY < -0.35 ? (-joyY - 0.35) / 0.65 : 0;
               const forwardStrength = Math.max(
                 keyForward || touchInputRef.current.forward ? 1 : 0,
-                Math.max(0, joyY)
+                joyFwd
               );
               const backwardStrength = Math.max(
                 keyBackward || touchInputRef.current.backward ? 1 : 0,
-                Math.max(0, -joyY)
+                joyRev
               );
 
               if (forwardStrength > 0.05) {
@@ -1480,8 +1517,11 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
                 sim.heading += steerInput * turnRate * dt;
               } else if (Math.abs(sim.speed) > 0.15) {
                 const dirSign = sim.speed >= 0 ? 1 : -1;
-                const speedTurnScale = THREE.MathUtils.clamp(Math.abs(sim.speed) / 4.5, 0.35, 1.0);
+                const speedTurnScale = THREE.MathUtils.clamp(Math.abs(sim.speed) / 4.5, 0.45, 1.0);
                 sim.heading += steerInput * turnRate * speedTurnScale * dirSign * dt;
+              } else if (Math.abs(steerInput) > 0.15) {
+                // Allow gentle in-place steering aim on mobile when starting from standstill
+                sim.heading += steerInput * turnRate * 0.45 * dt;
               }
             }
 
@@ -1951,16 +1991,27 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
             _lookCurrent.set(sim.x, sim.y + 1.0, sim.z);
           }
         } else {
-          _lookGoal.set(sim.x, sim.y + 1.0, sim.z);
-          _camGoal.set(sim.x + 38, sim.y + 34, sim.z + 38);
+          const isoAzimuth = Math.PI / 4 + sim.isoYawOffset;
+          const isoDist = 53.74;
+          const speedLead = THREE.MathUtils.clamp(Math.abs(sim.speed) * 0.14, 0, 2.2);
+          const fwdSign = sim.speed >= -0.2 ? 1 : -1;
+          const leadX = -Math.sin(sim.heading) * speedLead * fwdSign;
+          const leadZ = -Math.cos(sim.heading) * speedLead * fwdSign;
+
+          _lookGoal.set(sim.x + leadX, sim.y + 1.0, sim.z + leadZ);
+          _camGoal.set(
+            _lookGoal.x + Math.sin(isoAzimuth) * isoDist,
+            sim.y + 34,
+            _lookGoal.z + Math.cos(isoAzimuth) * isoDist
+          );
           camera.zoom = THREE.MathUtils.damp(
             camera.zoom,
             sim.zoomFactor * presetZoom,
             5,
             dt
           );
-          _lookCurrent.lerp(_lookGoal, 1 - Math.exp(-5.5 * dt));
-          camera.position.lerp(_camGoal, 1 - Math.exp(-5.5 * dt));
+          _lookCurrent.lerp(_lookGoal, 1 - Math.exp(-6.5 * dt));
+          camera.position.lerp(_camGoal, 1 - Math.exp(-6.5 * dt));
           camera.lookAt(_lookCurrent);
           camera.updateProjectionMatrix();
         }
@@ -1973,7 +2024,8 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         );
 
         hudAccum += dt;
-        if (hudAccum >= 0.08) {
+        const hudInterval = city.libraryVendor.isBubbleVisible() ? 0.065 : 0.15;
+        if (hudAccum >= hudInterval) {
           hudAccum = 0;
           const loc = resolveLocationLabels(sim.x, sim.z);
           let distToErrand: number | null = null;
