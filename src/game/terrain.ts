@@ -38,9 +38,14 @@ export function getBaseTerrainHeight(x: number, z: number): number {
   const ortaFoothill = smoothstep(50, 68, x) * smoothstep(-20, -44, z) * (1 - smoothstep(-60, -82, z)) * 1.05;
 
   // 3. Soft organic rolling hilliness outside main flat boulevards ("engebeli doku")
+  // Keep western Efeler urban plain (Nevzat Biçer Parkı & Kipa AVM) flat out to x = -142
+  const westUrbanXBlend =
+    x < -40 && z > -18 && z < 76
+      ? smoothstep(142, 174, -x)
+      : smoothstep(86, 128, Math.abs(x));
   const flatCoreBlend =
     smoothstep(-18, -56, z) * 0.42 +
-    smoothstep(86, 128, Math.abs(x)) * 0.85 +
+    westUrbanXBlend * 0.85 +
     smoothstep(-96, -135, z) * 0.8;
   const rolling =
     (Math.sin(x * 0.052 + 0.35) * Math.cos(z * 0.048 - 0.2) +
@@ -173,6 +178,24 @@ export function getWalkableSurfaceHeightAt(x: number, z: number): number {
     y = Math.max(y, surfaceY + (Math.abs(x + 132) <= 4.0 ? 0.148 : 0.105));
   }
 
+  // Western Adnan Menderes Blv. (z = 12) & İstasyon Cd. (z = 48) Extensions + Körfez Cd. (x = -96)
+  if (x >= -141 && x <= -95) {
+    for (const wrz of [12, 48]) {
+      const dz = Math.abs(z - wrz);
+      if (dz <= 4.2 && x >= -140) {
+        y = Math.max(y, surfaceY + 0.13);
+      } else if (dz <= 5.5) {
+        y = Math.max(y, surfaceY + 0.09);
+      }
+    }
+  }
+  if (Math.abs(x + 96) <= 5.5 && z >= -26.5 && z <= 53.5) {
+    y = Math.max(
+      y,
+      surfaceY + (Math.abs(x + 96) <= 4.2 && z >= -25.5 && z <= 52.5 ? 0.148 : 0.105)
+    );
+  }
+
   // Atatürk Kent Meydanı Expanded Plaza, Pool Promenade & Open Event Square
   if (Math.abs(x) <= 13.4 && z >= -15.8 && z <= 28.4) {
     const meydanBase = getTerrainHeightAt(0, 12);
@@ -216,6 +239,10 @@ export function getWalkableSurfaceHeightAt(x: number, z: number): number {
     y = Math.max(y, b + (onWalk ? 0.27 : 0.22));
   } else if (Math.abs(x + 132) <= 11.2 && Math.abs(z + 40) <= 11.2) {
     y = Math.max(y, getTerrainHeightAt(-132, -40) + 0.42);
+  } else if (Math.abs(x + 118) <= 14.0 && Math.abs(z - 30) <= 12.0) {
+    y = Math.max(y, getTerrainHeightAt(-118, 30) + 0.18);
+  } else if (Math.abs(x + 74) <= 12.0 && Math.abs(z - 61) <= 8.0) {
+    y = Math.max(y, getTerrainHeightAt(-74, 61) + 0.22);
   }
 
   return y;

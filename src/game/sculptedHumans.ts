@@ -45,6 +45,7 @@ export type SculptedHatStyle =
   | 'sunhat'
   | 'headscarf'
   | 'fes';
+export type SculptedFacialHair = 'none' | 'mustache' | 'goatee' | 'full_beard';
 
 export interface SculptedHumanAppearance {
   skinHex: number;
@@ -52,8 +53,12 @@ export interface SculptedHumanAppearance {
   pantsHex: number;
   hairHex: number;
   scarfHex?: number;
+  hatHex?: number;
+  beltHex?: number;
   hairStyle: SculptedHairStyle;
   hatStyle: SculptedHatStyle;
+  facialHair?: SculptedFacialHair;
+  glasses?: boolean;
   apron?: boolean;
   sashHex?: number;
   goldTrim?: boolean;
@@ -100,24 +105,25 @@ function getCachedTorsoGeometry(
   scarfHex: number,
   apron: boolean,
   sashHex?: number,
-  goldTrim?: boolean
+  goldTrim?: boolean,
+  beltHex = 0x3b2c22
 ): THREE.BufferGeometry {
-  const key = `${coatHex}_${scarfHex}_${apron ? 1 : 0}_${sashHex ?? -1}_${goldTrim ? 1 : 0}`;
+  const key = `${coatHex}_${scarfHex}_${apron ? 1 : 0}_${sashHex ?? -1}_${goldTrim ? 1 : 0}_${beltHex}`;
   const cached = _torsoGeoCache.get(key);
   if (cached) return cached;
 
   const coatC = new THREE.Color(coatHex);
   const coatDark = coatC.clone().multiplyScalar(0.84);
   const torsoStations: LoftStation[] = [
-    { t: -0.26, rx: 0.04, rPlus: 0.04, rMinus: 0.04 },
-    { t: -0.18, rx: 1.02, rPlus: 0.7, rMinus: 0.74 },
-    { t: 0.42, rx: 0.98, rPlus: 0.66, rMinus: 0.7 },
-    { t: 1.12, rx: 0.86, rPlus: 0.58, rMinus: 0.58, scallopLobes: 4, scallopAmp: 0.02 },
-    { t: 2.05, rx: 1.02, rPlus: 0.72, rMinus: 0.64 },
-    { t: 2.86, rx: 1.12, rPlus: 0.68, rMinus: 0.64 },
-    { t: 3.22, rx: 0.84, rPlus: 0.52, rMinus: 0.52 },
-    { t: 3.36, rx: 0.42, rPlus: 0.36, rMinus: 0.36 },
-    { t: 3.4, rx: 0.03, rPlus: 0.03, rMinus: 0.03 },
+    { t: -0.28, rx: 0.04, rPlus: 0.04, rMinus: 0.04 },
+    { t: -0.16, rx: 0.96, rPlus: 0.66, rMinus: 0.7 },
+    { t: 0.42, rx: 0.9, rPlus: 0.62, rMinus: 0.65 },
+    { t: 1.12, rx: 0.82, rPlus: 0.55, rMinus: 0.55, scallopLobes: 4, scallopAmp: 0.015 },
+    { t: 2.08, rx: 1.0, rPlus: 0.69, rMinus: 0.62 },
+    { t: 2.86, rx: 1.12, rPlus: 0.65, rMinus: 0.6 },
+    { t: 3.22, rx: 0.8, rPlus: 0.48, rMinus: 0.48 },
+    { t: 3.38, rx: 0.38, rPlus: 0.34, rMinus: 0.34 },
+    { t: 3.44, rx: 0.03, rPlus: 0.03, rMinus: 0.03 },
   ];
 
   const torsoTmp = new THREE.Color();
@@ -131,24 +137,47 @@ function getCachedTorsoGeometry(
         if (sashHex !== undefined && pos.y >= -0.02 && pos.y <= 0.58) {
           return sashHex;
         }
-        if (pos.z > 0.38 && pos.y > 2.15 && Math.abs(pos.x) < (pos.y - 2.05) * 0.32) {
+        if (pos.z > 0.34 && pos.y > 2.1 && Math.abs(pos.x) < (pos.y - 2.02) * 0.34) {
           return scarfHex;
         }
         return torsoTmp.getHex();
       },
       { axis: 'y' }
     ),
-    transformGeo(rcyl(0.5, 0.62, 0.42, scarfHex, 18), {
-      pos: [0, 3.28, 0.04],
+    transformGeo(rcyl(0.46, 0.58, 0.36, scarfHex, 18), {
+      pos: [0, 3.26, 0.04],
     }),
   ];
+
+  // Layered shirt lapels / collar framing the neck
+  for (const sx of [-1, 1] as const) {
+    torsoParts.push(
+      transformGeo(rbox(0.24, 0.56, 0.16, 0.05, coatDark.getHex()), {
+        rot: [0.16, sx * -0.18, sx * -0.34],
+        pos: [sx * 0.32, 2.94, 0.52],
+      })
+    );
+  }
+
+  // Waist belt + warm brass buckle (when not wearing traditional Efeler sash)
+  if (sashHex === undefined && !apron) {
+    torsoParts.push(
+      transformGeo(rcyl(0.86, 0.9, 0.2, beltHex, 20), {
+        scale: [1.0, 1.0, 0.72],
+        pos: [0, 0.22, 0.0],
+      }),
+      transformGeo(rbox(0.26, 0.22, 0.12, 0.04, SPARROW_PALETTE.brassWarm), {
+        pos: [0, 0.22, 0.64],
+      })
+    );
+  }
 
   if (goldTrim) {
     // Traditional embroidered Cepken vest front trim for Efeler dancers
     for (const sx of [-1, 1] as const) {
       torsoParts.push(
         transformGeo(rbox(0.18, 1.85, 0.24, 0.05, SPARROW_PALETTE.brassWarm), {
-          pos: [sx * 0.36, 1.82, 0.62],
+          pos: [sx * 0.36, 1.82, 0.6],
           rot: [0, 0, sx * -0.06],
         })
       );
@@ -156,9 +185,9 @@ function getCachedTorsoGeometry(
   } else {
     for (let b = 0; b < 3; b++) {
       torsoParts.push(
-        transformGeo(rcyl(0.065, 0.065, 0.05, SPARROW_PALETTE.brassWarm, 10), {
+        transformGeo(rcyl(0.06, 0.06, 0.05, SPARROW_PALETTE.brassWarm, 10), {
           rot: [Math.PI * 0.5, 0, 0],
-          pos: [0, 0.78 + b * 0.62, 0.67],
+          pos: [0, 0.78 + b * 0.62, 0.65],
         })
       );
     }
@@ -173,7 +202,7 @@ function getCachedTorsoGeometry(
     apronBib.quadraticCurveTo(-0.92, -0.45, -0.78, 1.35);
     torsoParts.push(
       transformGeo(extrudeShape(apronBib, 0.14, 0.04, SPARROW_PALETTE.apronCream, 8), {
-        pos: [0, 1.25, 0.66],
+        pos: [0, 1.25, 0.64],
       })
     );
   }
@@ -188,45 +217,50 @@ function getCachedHeadGeometry(
   skinHex: number,
   hairHex: number,
   hairStyle: SculptedHairStyle,
-  hatStyle: SculptedHatStyle
+  hatStyle: SculptedHatStyle,
+  hatHex?: number,
+  facialHair: SculptedFacialHair = 'none',
+  glasses = false
 ): THREE.BufferGeometry {
-  const key = `${skinHex}_${hairHex}_${hairStyle}_${hatStyle}`;
+  const key = `${skinHex}_${hairHex}_${hairStyle}_${hatStyle}_${hatHex ?? -1}_${facialHair}_${glasses ? 1 : 0}`;
   const cached = _headGeoCache.get(key);
   if (cached) return cached;
 
   const headParts: THREE.BufferGeometry[] = [];
+  // Neck with natural taper
   headParts.push(
-    transformGeo(rcyl(0.27, 0.32, 0.48, skinHex, 14), {
+    transformGeo(rcyl(0.25, 0.31, 0.48, skinHex, 14), {
       pos: [0, 0.16, -0.02],
     })
   );
 
   const skinC = new THREE.Color(skinHex);
-  const cheekBlush = new THREE.Color(SPARROW_PALETTE.awningCoral).lerp(skinC, 0.58);
+  const cheekBlush = new THREE.Color(SPARROW_PALETTE.awningCoral).lerp(skinC, 0.62);
+  const jawShade = skinC.clone().multiplyScalar(0.91);
   const headTmp = new THREE.Color();
   const headStations: LoftStation[] = [
-    { t: 0.3, rx: 0.05, rPlus: 0.05, rMinus: 0.05, offsetCenter: 0.08 },
+    { t: 0.3, rx: 0.05, rPlus: 0.05, rMinus: 0.05, offsetCenter: 0.09 },
     {
       t: 0.4,
-      rx: 0.44,
-      rPlus: 0.56,
-      rMinus: 0.44,
-      offsetCenter: 0.05,
-      powerPlus: 0.86,
-      powerMinus: 0.86,
-    },
-    {
-      t: 0.68,
-      rx: 0.68,
-      rPlus: 0.76,
-      rMinus: 0.68,
-      offsetCenter: 0.02,
+      rx: 0.4,
+      rPlus: 0.55,
+      rMinus: 0.43,
+      offsetCenter: 0.06,
       powerPlus: 0.88,
       powerMinus: 0.88,
     },
-    { t: 1.02, rx: 0.76, rPlus: 0.8, rMinus: 0.8 },
-    { t: 1.38, rx: 0.74, rPlus: 0.78, rMinus: 0.84 },
-    { t: 1.68, rx: 0.58, rPlus: 0.66, rMinus: 0.66, offsetCenter: -0.03 },
+    {
+      t: 0.68,
+      rx: 0.64,
+      rPlus: 0.74,
+      rMinus: 0.66,
+      offsetCenter: 0.03,
+      powerPlus: 0.9,
+      powerMinus: 0.9,
+    },
+    { t: 1.02, rx: 0.74, rPlus: 0.78, rMinus: 0.78 },
+    { t: 1.38, rx: 0.72, rPlus: 0.76, rMinus: 0.82 },
+    { t: 1.68, rx: 0.56, rPlus: 0.64, rMinus: 0.64, offsetCenter: -0.03 },
     { t: 1.84, rx: 0.24, rPlus: 0.28, rMinus: 0.28, offsetCenter: -0.04 },
     { t: 1.88, rx: 0.03, rPlus: 0.03, rMinus: 0.03, offsetCenter: -0.04 },
   ];
@@ -236,34 +270,45 @@ function getCachedHeadGeometry(
       20,
       (pos) => {
         headTmp.copy(skinC);
-        if (pos.z > 0.48 && pos.y > 0.72 && pos.y < 1.06 && Math.abs(pos.x) > 0.26) {
-          headTmp.lerp(cheekBlush, 0.52);
+        if (pos.z > 0.48 && pos.y > 0.76 && pos.y < 1.04 && Math.abs(pos.x) > 0.27) {
+          headTmp.lerp(cheekBlush, 0.48);
         }
-        if (pos.y < 0.52) headTmp.multiplyScalar(0.92);
+        if (pos.y < 0.52) headTmp.lerp(jawShade, 0.65);
         return headTmp.getHex();
       },
       { axis: 'y' }
     )
   );
 
-  // Wedge nose
-  const noseShape = new THREE.Shape();
-  noseShape.moveTo(0, 0.2);
-  noseShape.lineTo(0.22, -0.1);
-  noseShape.quadraticCurveTo(0.06, -0.15, 0, -0.12);
-  noseShape.closePath();
+  // Soft, natural human nose bridge & rounded tip
   headParts.push(
-    transformGeo(extrudeShape(noseShape, 0.13, 0.035, skinHex, 5), {
-      rot: [0, -Math.PI * 0.5, 0],
-      pos: [0, 1.04, 0.76],
+    transformGeo(smoothSphere(0.11, skinHex, 10, 8, [0.85, 1.35, 0.95]), {
+      rot: [-0.24, 0, 0],
+      pos: [0, 1.02, 0.77],
+    }),
+    transformGeo(smoothSphere(0.085, skinHex, 10, 8, [1.1, 0.82, 0.95]), {
+      pos: [0, 0.91, 0.82],
     })
   );
 
-  // Ears, glossy plum-black eyes, and sculpted eyebrows
+  // Warm gentle human smile / lips
+  const lipColor = new THREE.Color(0xc46e63).lerp(skinC, 0.42).getHex();
+  const smileShape = new THREE.Shape();
+  smileShape.moveTo(-0.17, 0.025);
+  smileShape.quadraticCurveTo(0, -0.065, 0.17, 0.025);
+  smileShape.quadraticCurveTo(0, -0.018, -0.17, 0.025);
+  headParts.push(
+    transformGeo(extrudeShape(smileShape, 0.045, 0.012, lipColor, 7), {
+      rot: [0.14, 0, 0],
+      pos: [0, 0.7, 0.72],
+    })
+  );
+
+  // Ears, expressive layered human eyes (sclera + hazel/dark iris + pupil + catchlight + upper lid), and sculpted eyebrows
   const browShape = new THREE.Shape();
-  browShape.moveTo(-0.14, 0);
-  browShape.quadraticCurveTo(0, 0.055, 0.14, 0.01);
-  browShape.quadraticCurveTo(0, 0.015, -0.14, -0.025);
+  browShape.moveTo(-0.15, -0.01);
+  browShape.quadraticCurveTo(0, 0.055, 0.15, 0.01);
+  browShape.quadraticCurveTo(0, 0.012, -0.15, -0.03);
   browShape.closePath();
 
   const earShape = new THREE.Shape();
@@ -271,26 +316,108 @@ function getCachedHeadGeometry(
   earShape.bezierCurveTo(0.11, 0.14, 0.12, -0.12, 0, -0.14);
   earShape.bezierCurveTo(-0.06, -0.1, -0.06, 0.1, 0, 0.14);
 
+  const irisColor = new THREE.Color(hairHex).lerp(new THREE.Color(0x2d211b), 0.45).getHex();
+  const lidColor = skinC.clone().multiplyScalar(0.84).getHex();
+
   for (const sx of [-1, 1] as const) {
     headParts.push(
       transformGeo(extrudeShape(earShape, 0.05, 0.018, skinHex, 6), {
         rot: [0, sx * 0.28, 0],
-        pos: [sx * 0.74, 1.02, -0.02],
+        pos: [sx * 0.73, 1.0, -0.02],
       }),
-      transformGeo(rbox(0.13, 0.16, 0.09, 0.045, SPARROW_PALETTE.ironworkPlum), {
-        pos: [sx * 0.28, 1.12, 0.75],
+      // Sclera (warm ivory white of eye)
+      transformGeo(rbox(0.21, 0.155, 0.08, 0.045, 0xf7f2ea), {
+        rot: [0, sx * 0.16, 0],
+        pos: [sx * 0.27, 1.12, 0.72],
       }),
-      transformGeo(extrudeShape(browShape, 0.04, 0.012, hairHex, 5), {
+      // Upper eyelid rim
+      transformGeo(rbox(0.22, 0.042, 0.095, 0.018, lidColor), {
+        rot: [0, sx * 0.16, sx * -0.04],
+        pos: [sx * 0.27, 1.19, 0.73],
+      }),
+      // Iris
+      transformGeo(smoothSphere(0.068, irisColor, 10, 8, [0.95, 1.1, 0.55]), {
+        pos: [sx * 0.265, 1.115, 0.755],
+      }),
+      // Pupil
+      transformGeo(smoothSphere(0.04, 0x181518, 8, 6, [0.95, 1.08, 0.5]), {
+        pos: [sx * 0.265, 1.115, 0.772],
+      }),
+      // Catchlight highlight
+      transformGeo(smoothSphere(0.022, 0xffffff, 6, 6, [1, 1, 0.6]), {
+        pos: [sx * 0.265 + 0.025, 1.142, 0.786],
+      }),
+      // Sculpted eyebrow
+      transformGeo(extrudeShape(browShape, 0.042, 0.012, hairHex, 5), {
         scale: [sx, 1, 1],
-        rot: [0, sx * 0.18, sx * -0.06],
-        pos: [sx * 0.29, 1.28, 0.75],
+        rot: [0, sx * 0.18, sx * -0.05],
+        pos: [sx * 0.28, 1.29, 0.74],
       })
     );
   }
 
+  // Facial hair options for artisans, elders, and Efeler dancers
+  if (facialHair === 'mustache' || facialHair === 'goatee' || facialHair === 'full_beard') {
+    const stacheShape = new THREE.Shape();
+    stacheShape.moveTo(-0.27, -0.04);
+    stacheShape.quadraticCurveTo(-0.1, 0.075, 0, 0.045);
+    stacheShape.quadraticCurveTo(0.1, 0.075, 0.27, -0.04);
+    stacheShape.quadraticCurveTo(0.11, -0.015, 0, -0.02);
+    stacheShape.quadraticCurveTo(-0.11, -0.015, -0.27, -0.04);
+    headParts.push(
+      transformGeo(extrudeShape(stacheShape, 0.07, 0.018, hairHex, 7), {
+        rot: [-0.08, 0, 0],
+        pos: [0, 0.79, 0.76],
+      })
+    );
+  }
+  if (facialHair === 'goatee') {
+    headParts.push(
+      transformGeo(smoothSphere(0.19, hairHex, 10, 8, [0.95, 1.15, 0.7]), {
+        pos: [0, 0.51, 0.64],
+      })
+    );
+  } else if (facialHair === 'full_beard') {
+    const beardStations: LoftStation[] = [
+      { t: 0.26, rx: 0.06, rPlus: 0.06, rMinus: 0.04, offsetCenter: 0.08 },
+      { t: 0.42, rx: 0.44, rPlus: 0.62, rMinus: 0.22, offsetCenter: 0.1 },
+      { t: 0.68, rx: 0.66, rPlus: 0.78, rMinus: 0.28, offsetCenter: 0.06 },
+      { t: 0.88, rx: 0.68, rPlus: 0.22, rMinus: 0.18, offsetCenter: 0.08 },
+      { t: 0.94, rx: 0.04, rPlus: 0.04, rMinus: 0.04 },
+    ];
+    headParts.push(loftOrganicHull(beardStations, 16, hairHex, { axis: 'y' }));
+  }
+
+  // Optional eyeglasses
+  if (glasses) {
+    const frameHex = 0x3b2c22;
+    for (const sx of [-1, 1] as const) {
+      headParts.push(
+        transformGeo(rbox(0.28, 0.22, 0.04, 0.05, frameHex), {
+          rot: [0, sx * 0.14, 0],
+          pos: [sx * 0.27, 1.12, 0.82],
+        }),
+        transformGeo(rbox(0.21, 0.15, 0.05, 0.03, 0xd8ecf2), {
+          rot: [0, sx * 0.14, 0],
+          pos: [sx * 0.27, 1.12, 0.825],
+        }),
+        transformGeo(rbox(0.03, 0.035, 0.68, 0.01, frameHex), {
+          pos: [sx * 0.66, 1.14, 0.42],
+        })
+      );
+    }
+    headParts.push(
+      transformGeo(rbox(0.14, 0.035, 0.04, 0.01, frameHex), {
+        pos: [0, 1.14, 0.84],
+      })
+    );
+  }
+
+  const resolvedHatHex = hatHex ?? SPARROW_PALETTE.wallCreamTrim;
+
   if (hatStyle === 'headscarf') {
     // Flowing sculpted headscarf framing face & neck
-    const scarfCol = SPARROW_PALETTE.wallCreamTrim;
+    const scarfCol = hatHex ?? SPARROW_PALETTE.wallCreamTrim;
     const shawlStations: LoftStation[] = [
       { t: 0.18, rx: 0.78, rPlus: 0.42, rMinus: 0.92, offsetCenter: -0.18 },
       { t: 0.72, rx: 0.84, rPlus: 0.34, rMinus: 0.96, offsetCenter: -0.14 },
@@ -374,20 +501,22 @@ function getCachedHeadGeometry(
     }
   }
 
-  // Hats
+  // Hats (respecting per-NPC hatHex when provided)
   if (hatStyle === 'sunhat') {
+    const strawCol = hatHex ?? SPARROW_PALETTE.croissantButter;
     headParts.push(
-      transformGeo(rcyl(1.48, 1.56, 0.11, SPARROW_PALETTE.croissantButter, 24), {
+      transformGeo(rcyl(1.48, 1.56, 0.11, strawCol, 24), {
         pos: [0, 1.68, 0],
       }),
-      transformGeo(rcyl(0.74, 0.84, 0.52, SPARROW_PALETTE.croissantButter, 20), {
+      transformGeo(rcyl(0.74, 0.84, 0.52, strawCol, 20), {
         pos: [0, 1.96, 0],
       }),
       transformGeo(rcyl(0.8, 0.83, 0.13, SPARROW_PALETTE.awningCoral, 20), { pos: [0, 1.78, 0] })
     );
   } else if (hatStyle === 'chef_toque') {
+    const chefCol = hatHex ?? SPARROW_PALETTE.porcelainWhite;
     headParts.push(
-      transformGeo(rcyl(0.78, 0.75, 0.56, SPARROW_PALETTE.porcelainWhite, 20), {
+      transformGeo(rcyl(0.78, 0.75, 0.56, chefCol, 20), {
         pos: [0, 1.88, 0],
       }),
       loftOrganicHull(
@@ -398,11 +527,12 @@ function getCachedHeadGeometry(
           { t: 2.82, rx: 0.04, rPlus: 0.04, rMinus: 0.04 },
         ],
         20,
-        SPARROW_PALETTE.porcelainWhite,
+        chefCol,
         { axis: 'y' }
       )
     );
   } else if (hatStyle === 'beret') {
+    const beretCol = hatHex ?? SPARROW_PALETTE.coatRose;
     headParts.push(
       loftOrganicHull(
         [
@@ -412,16 +542,17 @@ function getCachedHeadGeometry(
           { t: 2.08, rx: 0.05, rPlus: 0.05, rMinus: 0.05, xCenter: 0.18 },
         ],
         18,
-        SPARROW_PALETTE.coatRose,
+        beretCol,
         { axis: 'y' }
       )
     );
   } else if (hatStyle === 'fedora') {
+    const fedCol = hatHex ?? SPARROW_PALETTE.coatMustard;
     headParts.push(
-      transformGeo(rcyl(1.18, 1.24, 0.1, SPARROW_PALETTE.coatMustard, 22), {
+      transformGeo(rcyl(1.18, 1.24, 0.1, fedCol, 22), {
         pos: [0, 1.7, 0],
       }),
-      transformGeo(rcyl(0.68, 0.8, 0.56, SPARROW_PALETTE.coatMustard, 20), {
+      transformGeo(rcyl(0.68, 0.8, 0.56, fedCol, 20), {
         pos: [0, 1.98, 0],
       }),
       transformGeo(rcyl(0.76, 0.79, 0.12, SPARROW_PALETTE.ironworkPlum, 20), {
@@ -429,6 +560,8 @@ function getCachedHeadGeometry(
       })
     );
   } else if (hatStyle === 'newsboy') {
+    const capCol = hatHex ?? SPARROW_PALETTE.coatSlate;
+    const capBrimCol = new THREE.Color(capCol).multiplyScalar(0.76).getHex();
     headParts.push(
       loftOrganicHull(
         [
@@ -446,18 +579,19 @@ function getCachedHeadGeometry(
           { t: 2.02, rx: 0.05, rPlus: 0.05, rMinus: 0.05 },
         ],
         18,
-        SPARROW_PALETTE.coatSlate,
+        capCol,
         { axis: 'y' }
       ),
-      transformGeo(rbox(0.96, 0.08, 0.46, 0.035, SPARROW_PALETTE.cobbleDark), {
+      transformGeo(rbox(0.96, 0.08, 0.46, 0.035, capBrimCol), {
         rot: [0.16, 0, 0],
         pos: [0, 1.64, 0.76],
       })
     );
   } else if (hatStyle === 'fes') {
     // Traditional crimson Efe Fez with dark tassel
+    const fesCol = hatHex ?? 0x9e2b2b;
     headParts.push(
-      transformGeo(rcyl(0.64, 0.78, 0.78, 0x9e2b2b, 18), {
+      transformGeo(rcyl(0.64, 0.78, 0.78, fesCol, 18), {
         pos: [0, 1.96, -0.02],
       }),
       transformGeo(rcyl(0.06, 0.09, 0.55, SPARROW_PALETTE.ironworkPlum, 8), {
@@ -466,6 +600,7 @@ function getCachedHeadGeometry(
       })
     );
   }
+  void resolvedHatHex;
 
   const merged = mergeParts(headParts);
   merged.userData.isSharedHumanGeo = true;
@@ -640,7 +775,13 @@ export interface SculptedHumanRig {
   applyAppearance: (app: SculptedHumanAppearance) => void;
   updateWalk: (speed: number, dt: number, elapsed: number, holdingTreat?: boolean) => void;
   updateZeybek: (dt: number, elapsed: number, danceTime: number, phaseOffset?: number) => void;
-  updateWave: (near: boolean, dt: number, elapsed: number, seed?: number) => void;
+  updateWave: (
+    near: boolean,
+    dt: number,
+    elapsed: number,
+    seed?: number,
+    lookYaw?: number
+  ) => void;
   updateSit: (dt: number, elapsed: number, teaSipAmount?: number) => void;
 }
 
@@ -693,7 +834,8 @@ export function createSculptedHumanRig(
       scarfHex,
       Boolean(initial.apron),
       initial.sashHex,
-      initial.goldTrim
+      initial.goldTrim,
+      initial.beltHex
     ),
     mat
   );
@@ -706,7 +848,15 @@ export function createSculptedHumanRig(
   torsoPivot.add(headPivot);
 
   const headMesh = new THREE.Mesh(
-    getCachedHeadGeometry(initial.skinHex, initial.hairHex, initial.hairStyle, initial.hatStyle),
+    getCachedHeadGeometry(
+      initial.skinHex,
+      initial.hairHex,
+      initial.hairStyle,
+      initial.hatStyle,
+      initial.hatHex,
+      initial.facialHair,
+      initial.glasses
+    ),
     mat
   );
   headMesh.castShadow = true;
@@ -719,7 +869,6 @@ export function createSculptedHumanRig(
     shoulder.position.set(side * 1.18, 3.04, 0.02);
 
     const upperMesh = new THREE.Mesh(getCachedUpperArmGeometry(side, sleeveHex), mat);
-    upperMesh.castShadow = true;
     shoulder.add(upperMesh);
 
     const elbow = new THREE.Group();
@@ -731,7 +880,6 @@ export function createSculptedHumanRig(
       getCachedForeArmGeometry(side, sleeveHex, initial.skinHex),
       mat
     );
-    foreMesh.castShadow = true;
     elbow.add(foreMesh);
 
     torsoPivot.add(shoulder);
@@ -753,7 +901,6 @@ export function createSculptedHumanRig(
     hip.position.set(side * 0.46, baseHipY, 0);
 
     const thighMesh = new THREE.Mesh(getCachedThighGeometry(initial.pantsHex), mat);
-    thighMesh.castShadow = true;
     hip.add(thighMesh);
 
     const knee = new THREE.Group();
@@ -761,7 +908,6 @@ export function createSculptedHumanRig(
     hip.add(knee);
 
     const shinMesh = new THREE.Mesh(getCachedShinGeometry(initial.pantsHex), mat);
-    shinMesh.castShadow = true;
     knee.add(shinMesh);
 
     const ankle = new THREE.Group();
@@ -769,7 +915,6 @@ export function createSculptedHumanRig(
     knee.add(ankle);
 
     const shoeMesh = new THREE.Mesh(getCachedShoeGeometry(), mat);
-    shoeMesh.castShadow = true;
     ankle.add(shoeMesh);
 
     scaleGroup.add(hip);
@@ -787,13 +932,17 @@ export function createSculptedHumanRig(
       sHex,
       Boolean(app.apron),
       app.sashHex,
-      app.goldTrim
+      app.goldTrim,
+      app.beltHex
     );
     headMesh.geometry = getCachedHeadGeometry(
       app.skinHex,
       app.hairHex,
       app.hairStyle,
-      app.hatStyle
+      app.hatStyle,
+      app.hatHex,
+      app.facialHair,
+      app.glasses
     );
     armL.upperMesh.geometry = getCachedUpperArmGeometry(-1, slHex);
     armR.upperMesh.geometry = getCachedUpperArmGeometry(1, slHex);
@@ -995,44 +1144,93 @@ export function createSculptedHumanRig(
     scaleGroup.position.y = THREE.MathUtils.damp(scaleGroup.position.y, plantedY, 16, dt);
   };
 
-  const updateWave = (near: boolean, dt: number, elapsed: number, seed = 0) => {
+  let greetWaveClock = 0;
+  let wasNear = false;
+
+  const updateWave = (
+    near: boolean,
+    dt: number,
+    elapsed: number,
+    seed = 0,
+    lookYaw?: number
+  ) => {
+    if (near && !wasNear) {
+      greetWaveClock = 2.6;
+    }
+    wasNear = near;
+    if (greetWaveClock > 0) {
+      greetWaveClock = Math.max(0, greetWaveClock - dt);
+    }
+
+    const activeWave = near && greetWaveClock > 0;
+    const targetTorsoYaw =
+      near && lookYaw !== undefined ? THREE.MathUtils.clamp(lookYaw * 0.45, -0.55, 0.55) : 0;
+    const idleLookYaw = Math.sin(elapsed * 0.65 + seed) * 0.16;
+    const targetHeadYaw =
+      near && lookYaw !== undefined
+        ? THREE.MathUtils.clamp(lookYaw - targetTorsoYaw, -0.78, 0.78)
+        : idleLookYaw;
+
     scaleGroup.rotation.y = THREE.MathUtils.damp(scaleGroup.rotation.y, baseYaw, 8, dt);
     scaleGroup.rotation.x = THREE.MathUtils.damp(scaleGroup.rotation.x, 0, 8, dt);
     scaleGroup.rotation.z = THREE.MathUtils.damp(scaleGroup.rotation.z, 0, 8, dt);
     scaleGroup.position.y = THREE.MathUtils.damp(scaleGroup.position.y, 0, 10, dt);
 
-    torsoPivot.position.y = baseHipY + Math.sin(elapsed * 2.0 + seed) * 0.03;
-    torsoPivot.rotation.x = THREE.MathUtils.damp(torsoPivot.rotation.x, 0, 8, dt);
-    torsoPivot.rotation.y = THREE.MathUtils.damp(torsoPivot.rotation.y, 0, 8, dt);
-    torsoPivot.rotation.z = THREE.MathUtils.damp(torsoPivot.rotation.z, 0, 8, dt);
+    torsoPivot.position.y = baseHipY + Math.sin(elapsed * 2.0 + seed) * 0.032;
+    torsoPivot.rotation.x = THREE.MathUtils.damp(torsoPivot.rotation.x, near ? 0.03 : 0, 6, dt);
+    torsoPivot.rotation.y = THREE.MathUtils.damp(torsoPivot.rotation.y, targetTorsoYaw, 6, dt);
+    torsoPivot.rotation.z = THREE.MathUtils.damp(
+      torsoPivot.rotation.z,
+      Math.sin(elapsed * 0.9 + seed) * 0.018,
+      6,
+      dt
+    );
     headPivot.rotation.x = THREE.MathUtils.damp(
       headPivot.rotation.x,
-      near ? Math.sin(elapsed * 2.4 + seed) * 0.04 : 0,
+      near ? Math.sin(elapsed * 2.1 + seed) * 0.035 : Math.sin(elapsed * 1.1 + seed) * 0.025,
+      6,
+      dt
+    );
+    headPivot.rotation.y = THREE.MathUtils.damp(headPivot.rotation.y, targetHeadYaw, 6, dt);
+
+    const waveTarget = activeWave
+      ? 2.18 + Math.sin(elapsed * 6.8 + seed) * 0.34
+      : near
+        ? 0.2 + Math.sin(elapsed * 1.8 + seed) * 0.05
+        : 0.08 + Math.sin(elapsed * 1.3 + seed) * 0.04;
+    armR.shoulder.rotation.z = THREE.MathUtils.damp(armR.shoulder.rotation.z, waveTarget, 8, dt);
+    armR.shoulder.rotation.x = THREE.MathUtils.damp(
+      armR.shoulder.rotation.x,
+      activeWave ? -0.22 : near ? -0.14 : Math.sin(elapsed * 1.1 + seed) * 0.03,
       8,
       dt
     );
-
-    const waveTarget = near
-      ? 2.25 + Math.sin(elapsed * 7.2 + seed) * 0.36
-      : 0.08 + Math.sin(elapsed * 1.4 + seed) * 0.05;
-    armR.shoulder.rotation.z = THREE.MathUtils.damp(armR.shoulder.rotation.z, waveTarget, 8, dt);
-    armR.shoulder.rotation.x = THREE.MathUtils.damp(armR.shoulder.rotation.x, near ? -0.22 : 0, 8, dt);
     armR.elbow.rotation.z = THREE.MathUtils.damp(
       armR.elbow.rotation.z,
-      near ? -0.35 + Math.sin(elapsed * 7.2 + seed) * 0.2 : -0.08,
+      activeWave ? -0.32 + Math.sin(elapsed * 6.8 + seed) * 0.18 : -0.06,
       8,
       dt
     );
-    armR.elbow.rotation.x = THREE.MathUtils.damp(armR.elbow.rotation.x, -0.14, 8, dt);
-    armL.shoulder.rotation.z = THREE.MathUtils.damp(armL.shoulder.rotation.z, -0.08, 8, dt);
-    armL.shoulder.rotation.x = THREE.MathUtils.damp(armL.shoulder.rotation.x, 0, 8, dt);
+    armR.elbow.rotation.x = THREE.MathUtils.damp(
+      armR.elbow.rotation.x,
+      near ? -0.36 : -0.16,
+      8,
+      dt
+    );
+    armL.shoulder.rotation.z = THREE.MathUtils.damp(armL.shoulder.rotation.z, -0.09, 8, dt);
+    armL.shoulder.rotation.x = THREE.MathUtils.damp(
+      armL.shoulder.rotation.x,
+      Math.sin(elapsed * 1.1 + seed + 1.4) * 0.03,
+      8,
+      dt
+    );
     armL.elbow.rotation.z = THREE.MathUtils.damp(armL.elbow.rotation.z, 0, 8, dt);
-    armL.elbow.rotation.x = THREE.MathUtils.damp(armL.elbow.rotation.x, -0.14, 8, dt);
+    armL.elbow.rotation.x = THREE.MathUtils.damp(armL.elbow.rotation.x, -0.18, 8, dt);
 
-    legL.hip.rotation.x = THREE.MathUtils.damp(legL.hip.rotation.x, 0, 10, dt);
-    legR.hip.rotation.x = THREE.MathUtils.damp(legR.hip.rotation.x, 0, 10, dt);
-    legL.hip.rotation.z = THREE.MathUtils.damp(legL.hip.rotation.z, 0, 10, dt);
-    legR.hip.rotation.z = THREE.MathUtils.damp(legR.hip.rotation.z, 0, 10, dt);
+    legL.hip.rotation.x = THREE.MathUtils.damp(legL.hip.rotation.x, -0.02, 10, dt);
+    legR.hip.rotation.x = THREE.MathUtils.damp(legR.hip.rotation.x, 0.02, 10, dt);
+    legL.hip.rotation.z = THREE.MathUtils.damp(legL.hip.rotation.z, -0.02, 10, dt);
+    legR.hip.rotation.z = THREE.MathUtils.damp(legR.hip.rotation.z, 0.02, 10, dt);
     legL.knee.rotation.x = THREE.MathUtils.damp(legL.knee.rotation.x, 0.04, 10, dt);
     legR.knee.rotation.x = THREE.MathUtils.damp(legR.knee.rotation.x, 0.04, 10, dt);
     legL.ankle.rotation.x = THREE.MathUtils.damp(legL.ankle.rotation.x, 0, 10, dt);
@@ -1102,53 +1300,99 @@ export function createSculptedHumanRig(
 }
 
 /**
- * Lightweight 2-part sculpted gouache geometries for high-density InstancedMesh town pedestrians.
+ * Articulated multi-part sculpted gouache geometries for high-density InstancedMesh town pedestrians.
+ * Matching the player's sculpted avatar proportions with separate torso, swinging arms, striding legs,
+ * warm skin-toned hands, and 4 distinct human head/hair variants.
  */
+export interface ArticulatedPedestrianGeos {
+  torsoGeo: THREE.BufferGeometry;
+  legGeo: THREE.BufferGeometry;
+  armGeo: THREE.BufferGeometry;
+  handGeo: THREE.BufferGeometry;
+  headGeos: [THREE.BufferGeometry, THREE.BufferGeometry, THREE.BufferGeometry, THREE.BufferGeometry];
+}
+
+export function createArticulatedPedestrianGeos(): ArticulatedPedestrianGeos {
+  const s = SCULPTED_HUMAN_SCALE;
+
+  // Neutral bright base torso so instanceColor cleanly tints jackets/shirts while preserving collar/belt contrast
+  const torsoRaw = getCachedTorsoGeometry(0xf5f2eb, 0xe8e2d5, false, undefined, false, 0x5c5249)
+    .clone();
+  torsoRaw.userData = {};
+  const torsoGeo = transformGeo(torsoRaw, {
+    scale: [s, s, s],
+  });
+
+  // Hip-pivoted leg (thigh + calf + shoe) with sole resting cleanly at y = -4.95 * s (~ -0.752m)
+  const legParts = [
+    getCachedThighGeometry(0xf0eee9).clone(),
+    transformGeo(getCachedShinGeometry(0xf0eee9).clone(), { pos: [0, -2.32, 0] }),
+    transformGeo(getCachedShoeGeometry().clone(), { pos: [0, -4.52, 0] }),
+  ];
+  legParts.forEach((g) => {
+    g.userData = {};
+  });
+  const legGeo = transformGeo(mergeParts(legParts), {
+    scale: [s, s, s],
+  });
+
+  // Shoulder-pivoted sleeve (upper arm + bent forearm + cream cuff), leaving skin hands separate
+  const sleeveRaw = mergeParts([
+    transformGeo(rcyl(0.28, 0.28, 0.34, 0xf5f2eb, 12), { pos: [0, -0.06, 0] }),
+    transformGeo(rcyl(0.27, 0.22, 1.24, 0xf5f2eb, 12), { pos: [0, -0.64, 0] }),
+    transformGeo(rcyl(0.22, 0.19, 1.06, 0xf5f2eb, 12), { rot: [-0.24, 0, 0], pos: [0, -1.72, 0.13] }),
+    transformGeo(rcyl(0.2, 0.2, 0.12, 0xe8e2d5, 10), { rot: [-0.24, 0, 0], pos: [0, -2.22, 0.25] }),
+  ]);
+  const armGeo = transformGeo(sleeveRaw, {
+    scale: [s, s, s],
+  });
+
+  // Separate skin-tinted hand sphere/palm (instanceColor sets varied skin tones)
+  const handGeo = transformGeo(rbox(0.23, 0.32, 0.28, 0.09, 0xffffff), {
+    scale: [s, s, s],
+  });
+
+  // 4 distinct sculpted human head variants matching the player's face detail
+  const buildHeadVariant = (
+    skinHex: number,
+    hairHex: number,
+    hairStyle: SculptedHairStyle,
+    hatStyle: SculptedHatStyle,
+    hatHex?: number,
+    facialHair: SculptedFacialHair = 'none'
+  ) => {
+    const cloned = getCachedHeadGeometry(
+      skinHex,
+      hairHex,
+      hairStyle,
+      hatStyle,
+      hatHex,
+      facialHair,
+      false
+    ).clone();
+    cloned.userData = {};
+    return transformGeo(cloned, { scale: [s, s, s] });
+  };
+
+  const headGeos: [
+    THREE.BufferGeometry,
+    THREE.BufferGeometry,
+    THREE.BufferGeometry,
+    THREE.BufferGeometry,
+  ] = [
+    buildHeadVariant(0xebc29f, 0x3b281e, 'short', 'none', undefined, 'none'),
+    buildHeadVariant(0xf2ccb0, 0x5b3724, 'waves', 'none', undefined, 'none'),
+    buildHeadVariant(0xdfb088, 0x281d18, 'bun', 'none', undefined, 'none'),
+    buildHeadVariant(0xd7a379, 0x5c524b, 'short', 'newsboy', 0x485464, 'mustache'),
+  ];
+
+  return { torsoGeo, legGeo, armGeo, handGeo, headGeos };
+}
+
 export function createSculptedPedestrianGeos(): {
   bodyGeo: THREE.BufferGeometry;
   headGeo: THREE.BufferGeometry;
 } {
-  // Coat + legs + scarf silhouette (neutral white/silver vertex color so instance color tints the coat)
-  const coatParts: THREE.BufferGeometry[] = [
-    loftOrganicHull(
-      [
-        { t: 0.16, rx: 0.15, rPlus: 0.12, rMinus: 0.12 },
-        { t: 0.44, rx: 0.17, rPlus: 0.13, rMinus: 0.13 },
-        { t: 0.68, rx: 0.16, rPlus: 0.12, rMinus: 0.12 },
-        { t: 0.86, rx: 0.18, rPlus: 0.13, rMinus: 0.12 },
-        { t: 0.94, rx: 0.12, rPlus: 0.1, rMinus: 0.1 },
-        { t: 0.96, rx: 0.02, rPlus: 0.02, rMinus: 0.02 },
-      ],
-      14,
-      0xf6f2ea,
-      { axis: 'y', bottomAO: 0.18, topLift: 0.06 }
-    ),
-    // Shoes
-    transformGeo(smoothSphere(0.055, 0x5c534c, 8, 6, [1.0, 0.7, 1.45]), {
-      pos: [-0.065, 0.04, 0.02],
-    }),
-    transformGeo(smoothSphere(0.055, 0x5c534c, 8, 6, [1.0, 0.7, 1.45]), {
-      pos: [0.065, 0.04, 0.02],
-    }),
-    // Soft arms
-    transformGeo(rcyl(0.042, 0.036, 0.34, 0xf2ede4, 10), {
-      pos: [-0.19, 0.68, 0],
-      rot: [0, 0, -0.14],
-    }),
-    transformGeo(rcyl(0.042, 0.036, 0.34, 0xf2ede4, 10), {
-      pos: [0.19, 0.68, 0],
-      rot: [0, 0, 0.14],
-    }),
-  ];
-  const bodyGeo = mergeParts(coatParts);
-
-  // Sculpted head + hair cap + eyes (clone so shared cache entry stays unscaled/undisposed)
-  const clonedHead = getCachedHeadGeometry(0xedd0b4, 0x3b2a22, 'short', 'none').clone();
-  clonedHead.userData = {};
-  const headGeo = transformGeo(clonedHead, {
-    scale: [0.16, 0.16, 0.16],
-    pos: [0, 0.94, 0],
-  });
-
-  return { bodyGeo, headGeo };
+  const art = createArticulatedPedestrianGeos();
+  return { bodyGeo: art.torsoGeo, headGeo: art.headGeos[0] };
 }

@@ -221,6 +221,34 @@ export const LANDMARKS: LandmarkDef[] = [
     rewardCoins: 50,
     doorPosition: [-132, -28.5],
   },
+  {
+    id: 'nevzatbicerpark',
+    name: 'Nevzat Biçer Parkı',
+    era: 'Kent Parkı & Amfi · Cumhuriyet Mah.',
+    district: 'Nevzat Biçer Parkı & Cumhuriyet',
+    position: [-118, 0, 30],
+    interactionRadius: 20,
+    summary:
+      'Eski meyankökü fabrikası sahasından dönüştürülen Cumhuriyet Mahallesi’ndeki Nevzat Biçer Parkı; süs havuzu, taş amfi tiyatrosu, yürüyüş parkurları, spor sahası, park kafesi ve çimlerde akustik gitar çalıp şarkı söyleyen gençleriyle Efeler’in en canlı yeşil buluşma noktasıdır.',
+    architectureNote:
+      'Geniş çim adalar arasına örülmüş traverten yürüyüş yolları, kademeli süs havuzu, yarım daire taş amfi oturma basamakları, pergola kafesi, basketbol sahası ve akşam fenerleriyle gerçekçi bir kent parkı düzeni sunar.',
+    rewardCoins: 40,
+    doorPosition: [-103.5, 30],
+  },
+  {
+    id: 'kipaavm',
+    name: 'Aydın Kipa AVM',
+    era: 'Modern Alışveriş & Hipermarket · İstasyon Blv.',
+    district: 'İstasyon & Gar Çevresi',
+    position: [-74, 0, 61],
+    interactionRadius: 17,
+    summary:
+      'Cumhuriyet Mahallesi İstasyon Bulvarı üzerinde Tarihi Aydın Tren Garı’nın hemen batısında konumlanan Aydın Kipa AVM; geniş hipermarket holü, cam giriş atriyumu, açık otoparkı ve kafeleriyle günlük kent yaşamının duraklarından biridir.',
+    architectureNote:
+      'İstasyon Caddesi’ne bakan geniş açık otopark avlusu, ikonik mavi-kırmızı cephe kuşaklı yatay ticari kütle, cam giydirmeli ana giriş saçağı ve yan kafe terasıyla gerçek İstasyon Bulvarı dokusunu yansıtır.',
+    rewardCoins: 35,
+    doorPosition: [-74, 51],
+  },
 ];
 
 export const COZY_ERRANDS: ErrandDef[] = [
@@ -287,6 +315,24 @@ export const COZY_ERRANDS: ErrandDef[] = [
       'Tralleis kazı alanından hazırlanan seramik envanter defterini batı yoluyla Magnesia Artemis Tapınağı önündeki kazı ekibine ulaştırın.',
     rewardCoins: 45,
   },
+  {
+    id: 'errand-nevzatbicer',
+    title: 'Park Akustik Akşamı Çayı',
+    fromLandmarkId: 'kentmeydani',
+    toLandmarkId: 'nevzatbicerpark',
+    description:
+      'Kent Meydanı’ndan alınan taze demlenmiş termos çay ve kurabiyeleri Nevzat Biçer Parkı’nda gitar çalan gençlere götürün.',
+    rewardCoins: 35,
+  },
+  {
+    id: 'errand-kipa',
+    title: 'İstasyon Market Alışveriş Listesi',
+    fromLandmarkId: 'nevzatbicerpark',
+    toLandmarkId: 'kipaavm',
+    description:
+      'Nevzat Biçer Parkı kafesinin taze meyve ve içecek siparişini İstasyon Caddesi üzerindeki Kipa AVM’den teslim alın.',
+    rewardCoins: 35,
+  },
 ];
 
 export const DISTRICT_ZONES: DistrictZone[] = [
@@ -297,7 +343,7 @@ export const DISTRICT_ZONES: DistrictZone[] = [
     minX: -175,
     maxX: -96,
     minZ: -75,
-    maxZ: 25,
+    maxZ: 8,
   },
   {
     id: 'kalfakoy-west',
@@ -354,10 +400,19 @@ export const DISTRICT_ZONES: DistrictZone[] = [
     maxZ: -2,
   },
   {
+    id: 'nevzat-bicer-park',
+    name: 'Nevzat Biçer Parkı & Cumhuriyet',
+    subtitle: 'Körfez & İstasyon Cd.',
+    minX: -158,
+    maxX: -94,
+    minZ: 8,
+    maxZ: 68,
+  },
+  {
     id: 'tekstil-west',
     name: 'Tekstil Park & Batı Efeler',
     subtitle: 'Tekstil Park Bulvarı',
-    minX: -120,
+    minX: -94,
     maxX: -54,
     minZ: -2,
     maxZ: 42,
@@ -444,6 +499,7 @@ export const RADIO_STATIONS: RadioStationDef[] = [
       'Efeler Merkez & Büyükşehir',
       'Tekstil Park & Batı Efeler',
       'Forum Aydın & Doğu Bulvarı',
+      'Nevzat Biçer Parkı & Cumhuriyet',
     ],
   },
   {
@@ -1312,6 +1368,46 @@ export const EFELER_GEZGINI_BADGES: GezginBadgeDef[] = [
     description: 'Kazı envanter defterini batı yolu üzerinden Magnesia Artemis Tapınağı’na ulaştırdınız.',
     icon: '📜',
     accentColor: '#C99A5B',
+  },
+  {
+    id: 'badge-landmark-nevzatbicerpark',
+    category: 'landmark',
+    targetId: 'nevzatbicerpark',
+    title: 'Efeler Gezgini: Parkın Akustik Dostu',
+    subtitle: 'Nevzat Biçer Parkı',
+    description: 'Amfi tiyatrosu, süs havuzu ve gitar çalan gençleriyle Nevzat Biçer Parkı’nı keşfettiniz.',
+    icon: '🎸',
+    accentColor: '#4E8752',
+  },
+  {
+    id: 'badge-landmark-kipaavm',
+    category: 'landmark',
+    targetId: 'kipaavm',
+    title: 'Efeler Gezgini: İstasyon Bulvarı Müdavimi',
+    subtitle: 'Aydın Kipa AVM',
+    description: 'Cumhuriyet Mahallesi İstasyon Caddesi’ndeki Kipa AVM meydanını ziyaret ettiniz.',
+    icon: '🛍️',
+    accentColor: '#15549A',
+  },
+  {
+    id: 'badge-errand-nevzatbicer',
+    category: 'errand',
+    targetId: 'errand-nevzatbicer',
+    title: 'Efeler Gezgini: Park Akustiği Ortağı',
+    subtitle: 'Görev · Kent Meydanı → Nevzat Biçer Parkı',
+    description: 'Nevzat Biçer Parkı’nda gitar çalan gençlere sıcak çay ve kurabiyeleri ulaştırdınız.',
+    icon: '🫖',
+    accentColor: '#4E8752',
+  },
+  {
+    id: 'badge-errand-kipa',
+    category: 'errand',
+    targetId: 'errand-kipa',
+    title: 'Efeler Gezgini: İstasyon Alışverişçisi',
+    subtitle: 'Görev · Nevzat Biçer Parkı → Kipa AVM',
+    description: 'Park kafesinin market siparişini İstasyon Bulvarı Kipa AVM’den teslim aldınız.',
+    icon: '🛒',
+    accentColor: '#15549A',
   },
 ];
 

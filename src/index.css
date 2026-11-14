@@ -55,57 +55,58 @@
 /* Smooth CSS sky color & atmospheric lighting transition system for EfelerCanvas */
 @property --efeler-sky-zenith {
   syntax: '<color>';
-  inherits: true;
+  inherits: false;
   initial-value: #787fa3;
 }
 
 @property --efeler-sky-mid {
   syntax: '<color>';
-  inherits: true;
+  inherits: false;
   initial-value: #d6a684;
 }
 
 @property --efeler-sky-horizon {
   syntax: '<color>';
-  inherits: true;
+  inherits: false;
   initial-value: #e8cc9f;
 }
 
 @property --efeler-sun-halo {
   syntax: '<color>';
-  inherits: true;
-  initial-value: rgba(255, 206, 130, 0.48);
+  inherits: false;
+  initial-value: rgba(255, 206, 130, 0.42);
 }
 
 @property --efeler-ambient-tint {
   syntax: '<color>';
-  inherits: true;
+  inherits: false;
   initial-value: rgba(255, 196, 118, 0.14);
 }
 
 @property --efeler-vignette-color {
   syntax: '<color>';
-  inherits: true;
+  inherits: false;
   initial-value: rgba(120, 72, 34, 0.16);
 }
 
 @property --efeler-sun-x {
   syntax: '<percentage>';
-  inherits: true;
+  inherits: false;
   initial-value: 18%;
 }
 
 @property --efeler-sun-y {
   syntax: '<percentage>';
-  inherits: true;
+  inherits: false;
   initial-value: 26%;
 }
 
-.efeler-atmosphere-root {
+.efeler-sky-backdrop,
+.efeler-lighting-overlay {
   --efeler-sky-zenith: #787fa3;
   --efeler-sky-mid: #d6a684;
   --efeler-sky-horizon: #e8cc9f;
-  --efeler-sun-halo: rgba(255, 206, 130, 0.48);
+  --efeler-sun-halo: rgba(255, 206, 130, 0.42);
   --efeler-ambient-tint: rgba(255, 196, 118, 0.14);
   --efeler-vignette-color: rgba(120, 72, 34, 0.16);
   --efeler-sun-x: 18%;
@@ -119,108 +120,90 @@
     --efeler-ambient-tint 2.4s cubic-bezier(0.4, 0, 0.2, 1),
     --efeler-vignette-color 2.4s cubic-bezier(0.4, 0, 0.2, 1),
     --efeler-sun-x 2.4s cubic-bezier(0.4, 0, 0.2, 1),
-    --efeler-sun-y 2.4s cubic-bezier(0.4, 0, 0.2, 1);
+    --efeler-sun-y 2.4s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 2.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.efeler-cycle-morning {
+.efeler-cycle-morning .efeler-sky-backdrop,
+.efeler-cycle-morning .efeler-lighting-overlay {
   --efeler-sky-zenith: #96bcd8;
   --efeler-sky-mid: #d4e0dc;
   --efeler-sky-horizon: #e8dfce;
-  --efeler-sun-halo: rgba(255, 232, 185, 0.44);
+  --efeler-sun-halo: rgba(255, 232, 185, 0.28);
   --efeler-ambient-tint: rgba(255, 234, 198, 0.09);
   --efeler-vignette-color: rgba(96, 78, 56, 0.1);
   --efeler-sun-x: 78%;
   --efeler-sun-y: 22%;
 }
 
-.efeler-cycle-noon {
+.efeler-cycle-noon .efeler-sky-backdrop,
+.efeler-cycle-noon .efeler-lighting-overlay {
   --efeler-sky-zenith: #7ab3d9;
   --efeler-sky-mid: #bbd9e9;
   --efeler-sky-horizon: #dce8ec;
-  --efeler-sun-halo: rgba(255, 248, 224, 0.34);
+  --efeler-sun-halo: rgba(255, 248, 224, 0.18);
   --efeler-ambient-tint: rgba(226, 242, 250, 0.05);
   --efeler-vignette-color: rgba(45, 72, 92, 0.06);
   --efeler-sun-x: 58%;
   --efeler-sun-y: 12%;
 }
 
-.efeler-cycle-golden {
+.efeler-cycle-golden .efeler-sky-backdrop,
+.efeler-cycle-golden .efeler-lighting-overlay {
   --efeler-sky-zenith: #787fa3;
   --efeler-sky-mid: #d6a684;
   --efeler-sky-horizon: #e8cc9f;
-  --efeler-sun-halo: rgba(255, 198, 118, 0.56);
+  --efeler-sun-halo: rgba(255, 198, 118, 0.46);
   --efeler-ambient-tint: rgba(255, 186, 98, 0.14);
   --efeler-vignette-color: rgba(110, 66, 28, 0.16);
   --efeler-sun-x: 18%;
   --efeler-sun-y: 26%;
 }
 
-.efeler-cycle-evening {
+.efeler-cycle-evening .efeler-sky-backdrop,
+.efeler-cycle-evening .efeler-lighting-overlay {
   --efeler-sky-zenith: #0d1324;
   --efeler-sky-mid: #1a223a;
   --efeler-sky-horizon: #262a3c;
-  --efeler-sun-halo: rgba(148, 178, 228, 0.24);
+  --efeler-sun-halo: rgba(148, 178, 228, 0.12);
   --efeler-ambient-tint: rgba(28, 42, 78, 0.2);
   --efeler-vignette-color: rgba(8, 12, 24, 0.42);
   --efeler-sun-x: 24%;
   --efeler-sun-y: 16%;
 }
 
-.efeler-weather-rain {
+.efeler-weather-rain .efeler-sky-backdrop,
+.efeler-weather-rain .efeler-lighting-overlay {
+  --efeler-sun-halo: rgba(180, 198, 214, 0.12);
   --efeler-ambient-tint: rgba(102, 124, 146, 0.18);
 }
 
-.efeler-weather-storm {
+.efeler-weather-storm .efeler-sky-backdrop,
+.efeler-weather-storm .efeler-lighting-overlay {
+  --efeler-sun-halo: rgba(120, 136, 158, 0.06);
   --efeler-ambient-tint: rgba(46, 58, 78, 0.26);
   --efeler-vignette-color: rgba(16, 22, 34, 0.48);
 }
 
-.efeler-weather-snow {
+.efeler-weather-snow .efeler-sky-backdrop,
+.efeler-weather-snow .efeler-lighting-overlay {
+  --efeler-sun-halo: rgba(236, 242, 250, 0.18);
   --efeler-ambient-tint: rgba(224, 236, 248, 0.15);
 }
 
 .efeler-sky-backdrop {
-  background: linear-gradient(
-    180deg,
-    var(--efeler-sky-zenith) 0%,
-    var(--efeler-sky-mid) 44%,
-    var(--efeler-sky-horizon) 100%
-  );
-  transition: background 2.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.efeler-sky-sun-halo {
-  background: radial-gradient(
-    circle at var(--efeler-sun-x) var(--efeler-sun-y),
-    var(--efeler-sun-halo) 0%,
-    transparent 58%
-  );
-  opacity: 0.78;
-  transition:
-    opacity 2.4s cubic-bezier(0.4, 0, 0.2, 1),
-    background 2.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.efeler-cycle-morning .efeler-sky-sun-halo {
-  opacity: 0.56;
-}
-.efeler-cycle-noon .efeler-sky-sun-halo {
-  opacity: 0.38;
-}
-.efeler-cycle-golden .efeler-sky-sun-halo {
-  opacity: 0.84;
-}
-.efeler-cycle-evening .efeler-sky-sun-halo {
-  opacity: 0.34;
-}
-.efeler-weather-rain .efeler-sky-sun-halo {
-  opacity: 0.2;
-}
-.efeler-weather-storm .efeler-sky-sun-halo {
-  opacity: 0.1;
-}
-.efeler-weather-snow .efeler-sky-sun-halo {
-  opacity: 0.32;
+  background:
+    radial-gradient(
+      circle at var(--efeler-sun-x) var(--efeler-sun-y),
+      var(--efeler-sun-halo) 0%,
+      transparent 58%
+    ),
+    linear-gradient(
+      180deg,
+      var(--efeler-sky-zenith) 0%,
+      var(--efeler-sky-mid) 44%,
+      var(--efeler-sky-horizon) 100%
+    );
 }
 
 .efeler-sky-stars {
@@ -265,9 +248,6 @@
       var(--efeler-vignette-color) 100%
     );
   opacity: 0.9;
-  transition:
-    opacity 2.4s cubic-bezier(0.4, 0, 0.2, 1),
-    background 2.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .efeler-cycle-noon .efeler-lighting-overlay {

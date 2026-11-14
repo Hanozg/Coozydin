@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { ColliderBox, LandmarkDef } from '../types/game';
 import { CityMaterialLibrary } from './materials';
+import { mergeStaticGroupMeshes } from './meshMerge';
 import { createGableRoofGeometry, createHipRoofGeometry } from './roofGeometry';
 import { getTerrainHeightAt, getWalkableSurfaceHeightAt } from './terrain';
 
@@ -2496,6 +2497,665 @@ function buildMagnesia(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandma
   return { def, group, ringMesh, colliders };
 }
 
+function createParkSignTexture(title: string, subtitle: string): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+
+  const grad = ctx.createLinearGradient(0, 0, 0, 128);
+  grad.addColorStop(0, '#274E35');
+  grad.addColorStop(1, '#1A3825');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 512, 128);
+
+  ctx.strokeStyle = '#E5B95C';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(6, 6, 500, 116);
+
+  ctx.fillStyle = '#FFF9EC';
+  ctx.font = 'bold 36px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(title, 256, 50, 470);
+
+  ctx.fillStyle = '#E5C67A';
+  ctx.font = '600 20px sans-serif';
+  ctx.fillText(subtitle, 256, 92, 460);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function createParkLawnTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d')!;
+
+  ctx.fillStyle = '#6B934C';
+  ctx.fillRect(0, 0, 512, 512);
+
+  // Subtle realistic manicured mowing stripes
+  for (let i = 0; i < 16; i++) {
+    ctx.fillStyle = i % 2 === 0 ? 'rgba(130, 174, 86, 0.24)' : 'rgba(72, 108, 48, 0.18)';
+    ctx.fillRect(i * 32, 0, 32, 512);
+  }
+  // Organic clover & sunlit grass speckles
+  for (let i = 0; i < 650; i++) {
+    const x = (i * 73) % 512;
+    const y = (i * 139) % 512;
+    ctx.fillStyle = i % 3 === 0 ? 'rgba(165, 198, 102, 0.22)' : 'rgba(62, 94, 42, 0.2)';
+    ctx.beginPath();
+    ctx.arc(x, y, 2 + (i % 3), 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(2, 2);
+  return tex;
+}
+
+function createMiniCourtTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+
+  ctx.fillStyle = '#3E6B5C';
+  ctx.fillRect(0, 0, 256, 256);
+  ctx.strokeStyle = '#F5EFE2';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(14, 14, 228, 228);
+
+  // Paint key & 3-point arc
+  ctx.fillStyle = '#B8543B';
+  ctx.fillRect(92, 14, 72, 74);
+  ctx.strokeRect(92, 14, 72, 74);
+  ctx.beginPath();
+  ctx.arc(128, 88, 36, 0, Math.PI, false);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(128, 34, 86, 0.15, Math.PI - 0.15, false);
+  ctx.stroke();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/**
+ * 14. Nevzat Biçer Parkı (Cumhuriyet Mahallesi — Amfi Tiyatro, Süs Havuzu, Park Kafe & Çim Alanlar)
+ */
+function buildNevzatBicerPark(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandmark {
+  const group = new THREE.Group();
+  const [lx, , lz] = def.position;
+  group.position.set(lx, 0, lz);
+
+  const colliders: ColliderBox[] = [];
+
+  // Lush manicured park lawn pad (28m x 24m)
+  const lawnMat = new THREE.MeshStandardMaterial({
+    map: createParkLawnTexture(),
+    roughness: 0.9,
+  });
+  const parkLawn = new THREE.Mesh(new THREE.BoxGeometry(27.6, 0.16, 23.6), lawnMat);
+  parkLawn.position.y = 0.08;
+  parkLawn.receiveShadow = true;
+  group.add(parkLawn);
+
+  // Low travertine perimeter border curbs with wide open pedestrian entrances (E, N, S)
+  const borderWallSegs: [number, number, number, number][] = [
+    [-13.8, -6.2, 0.45, 11.2],
+    [-13.8, 6.2, 0.45, 11.2],
+    [13.8, -7.2, 0.45, 9.2],
+    [13.8, 7.2, 0.45, 9.2],
+    [-7.6, -11.8, 12.0, 0.45],
+    [7.6, -11.8, 12.0, 0.45],
+    [-7.6, 11.8, 12.0, 0.45],
+    [7.6, 11.8, 12.0, 0.45],
+  ];
+  borderWallSegs.forEach(([bx, bz, bw, bd]) => {
+    const curb = new THREE.Mesh(new THREE.BoxGeometry(bw, 0.34, bd), mats.travertine);
+    curb.position.set(bx, 0.17, bz);
+    curb.receiveShadow = true;
+    group.add(curb);
+  });
+
+  // Stone-paved main promenade paths (East-West, North-South, & circular pool plaza)
+  const pathEW = new THREE.Mesh(new THREE.BoxGeometry(27.4, 0.19, 2.8), mats.plaza);
+  pathEW.position.set(0, 0.095, 0.4);
+  pathEW.receiveShadow = true;
+  const pathNS = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.19, 23.4), mats.plaza);
+  pathNS.position.set(0.6, 0.095, 0);
+  pathNS.receiveShadow = true;
+  const centerPlaza = new THREE.Mesh(new THREE.CylinderGeometry(5.1, 5.2, 0.2, 28), mats.plaza);
+  centerPlaza.position.set(0.6, 0.1, -2.6);
+  centerPlaza.receiveShadow = true;
+  group.add(pathEW, pathNS, centerPlaza);
+
+  // Monumental East Entrance Archway ("NEVZAT BİÇER PARKI")
+  [-2.1, 2.1].forEach((pz) => {
+    const col = new THREE.Mesh(new THREE.BoxGeometry(0.65, 3.6, 0.65), mats.travertine);
+    col.position.set(13.6, 1.8, 0.4 + pz);
+    col.castShadow = true;
+    group.add(col);
+  });
+  const gateBeam = new THREE.Mesh(new THREE.BoxGeometry(0.75, 1.05, 5.2), mats.darkTimber);
+  gateBeam.position.set(13.6, 3.9, 0.4);
+  gateBeam.castShadow = true;
+  group.add(gateBeam);
+
+  const signTex = createParkSignTexture('NEVZAT BİÇER PARKI', 'EFELER · CUMHURİYET MAHALLESİ');
+  const signMat = new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.42 });
+  const signFront = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 0.9), signMat);
+  signFront.rotation.y = Math.PI / 2;
+  signFront.position.set(13.99, 3.9, 0.4);
+  const signBack = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 0.9), signMat);
+  signBack.rotation.y = -Math.PI / 2;
+  signBack.position.set(13.21, 3.9, 0.4);
+  group.add(signFront, signBack);
+
+  // 1. Central Ornamental Cascading Reflection Pool ("Süs Havuzu")
+  const poolX = 0.6;
+  const poolZ = -3.4;
+  const poolOuter = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.6, 0.42, 16), mats.travertine);
+  poolOuter.position.set(poolX, 0.25, poolZ);
+  poolOuter.castShadow = true;
+  poolOuter.receiveShadow = true;
+  const poolWater = new THREE.Mesh(new THREE.CylinderGeometry(3.05, 3.05, 0.14, 16), mats.water);
+  poolWater.position.set(poolX, 0.42, poolZ);
+  const fountainPedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.62, 1.15, 12), mats.travertine);
+  fountainPedestal.position.set(poolX, 0.82, poolZ);
+  fountainPedestal.castShadow = true;
+  const fountainBowl = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 0.45, 0.28, 14), mats.creamPlaster);
+  fountainBowl.position.set(poolX, 1.38, poolZ);
+  fountainBowl.castShadow = true;
+  const jetSprayMat = new THREE.MeshStandardMaterial({
+    color: 0xdff6ff,
+    emissive: 0x7acde6,
+    emissiveIntensity: 0.35,
+    transparent: true,
+    opacity: 0.85,
+  });
+  const jetSpray = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.95, 10), jetSprayMat);
+  jetSpray.position.set(poolX, 1.9, poolZ);
+  group.add(poolOuter, poolWater, fountainPedestal, fountainBowl, jetSpray);
+  addBoxCollider(colliders, lx + poolX, lz + poolZ, 6.8, 6.8, 1.6);
+
+  // 2. Semi-Circular Stone Amphitheater ("Amfi Tiyatro") — North-West Quadrant
+  const amfiX = -7.8;
+  const amfiZ = -5.6;
+  const stageDeck = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.5, 0.32, 18), mats.darkTimber);
+  stageDeck.position.set(amfiX + 1.2, 0.22, amfiZ + 1.2);
+  stageDeck.receiveShadow = true;
+  group.add(stageDeck);
+
+  for (let tier = 0; tier < 3; tier++) {
+    const rOut = 5.4 - tier * 1.05;
+    const step = new THREE.Mesh(
+      new THREE.CylinderGeometry(rOut, rOut + 0.15, 0.36 + tier * 0.26, 16, 1, false, Math.PI * 0.72, Math.PI * 1.06),
+      tier % 2 === 0 ? mats.travertine : mats.creamPlaster
+    );
+    step.position.set(amfiX + 1.2, 0.24 + tier * 0.16, amfiZ + 1.2);
+    step.castShadow = true;
+    step.receiveShadow = true;
+    group.add(step);
+  }
+  addBoxCollider(colliders, lx + amfiX - 1.2, lz + amfiZ - 1.2, 5.2, 5.2, 1.4);
+
+  // 3. Nevzat Biçer Park Kafe & Sosyal Tesis ("Park Kafe") — South-West Quadrant
+  const cafeX = -7.6;
+  const cafeZ = 6.2;
+  const cafeDeck = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.28, 7.6), mats.plaza);
+  cafeDeck.position.set(cafeX, 0.16, cafeZ);
+  cafeDeck.receiveShadow = true;
+  group.add(cafeDeck);
+
+  const cafeBody = new THREE.Mesh(new THREE.BoxGeometry(6.8, 3.6, 4.8), mats.creamPlaster);
+  cafeBody.position.set(cafeX - 0.8, 2.08, cafeZ + 0.6);
+  cafeBody.castShadow = true;
+  cafeBody.receiveShadow = true;
+  group.add(cafeBody);
+
+  const cafeRoof = new THREE.Mesh(
+    createHipRoofGeometry(7.5, 5.5, 1.45),
+    mats.terracottaRoof
+  );
+  cafeRoof.position.set(cafeX - 0.8, 3.88, cafeZ + 0.6);
+  cafeRoof.castShadow = true;
+  group.add(cafeRoof);
+
+  // Wide glass cafe windows + entrance door facing east path
+  const cafeWinF = new THREE.Mesh(new THREE.BoxGeometry(4.4, 1.85, 0.14), mats.windowLit);
+  cafeWinF.position.set(cafeX - 0.8, 1.8, cafeZ - 1.82);
+  const cafeWinE = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.9, 2.6), mats.windowLit);
+  cafeWinE.position.set(cafeX + 2.62, 1.8, cafeZ + 0.6);
+  group.add(cafeWinF, cafeWinE);
+
+  // Timber Pergola Porch & Outdoor Cafe Umbrellas
+  [-2.2, 2.2].forEach((px) => {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 2.6, 8), mats.darkTimber);
+    post.position.set(cafeX + px, 1.5, cafeZ - 2.6);
+    post.castShadow = true;
+    group.add(post);
+  });
+  const pergolaTop = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.16, 2.2), mats.darkTimber);
+  pergolaTop.position.set(cafeX, 2.82, cafeZ - 2.0);
+  pergolaTop.castShadow = true;
+  group.add(pergolaTop);
+
+  const cafeUmbrellaMat = new THREE.MeshStandardMaterial({ color: 0xc8643c, roughness: 0.72 });
+  [cafeX + 3.4, cafeX + 3.4].forEach((ux, i) => {
+    const uz = cafeZ - 1.4 + i * 3.0;
+    const tbl = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.48, 0.07, 10), mats.creamPlaster);
+    tbl.position.set(ux, 0.88, uz);
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.62, 8), mats.wroughtIron);
+    leg.position.set(ux, 0.56, uz);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.1, 6), mats.wroughtIron);
+    pole.position.set(ux, 1.35, uz);
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(0.95, 0.45, 8), cafeUmbrellaMat);
+    cap.position.set(ux, 2.42, uz);
+    cap.castShadow = true;
+    group.add(tbl, leg, pole, cap);
+  });
+  addBoxCollider(colliders, lx + cafeX - 0.8, lz + cafeZ + 0.6, 7.0, 5.0, 5.5);
+
+  // 4. Mini Basketball & Outdoor Fitness Court — North-East Quadrant
+  const courtX = 7.6;
+  const courtZ = -5.8;
+  const courtMat = new THREE.MeshStandardMaterial({
+    map: createMiniCourtTexture(),
+    roughness: 0.84,
+  });
+  const courtPad = new THREE.Mesh(new THREE.BoxGeometry(7.2, 0.2, 6.8), courtMat);
+  courtPad.position.set(courtX, 0.1, courtZ);
+  courtPad.receiveShadow = true;
+  group.add(courtPad);
+
+  // Basketball Hoop Post & Backboard
+  const hoopPole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 3.1, 8), mats.wroughtIron);
+  hoopPole.position.set(courtX, 1.65, courtZ - 3.1);
+  hoopPole.castShadow = true;
+  const board = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.9, 0.08), mats.whitePlaster);
+  board.position.set(courtX, 2.95, courtZ - 2.8);
+  const rim = new THREE.Mesh(
+    new THREE.TorusGeometry(0.24, 0.035, 6, 12),
+    new THREE.MeshStandardMaterial({ color: 0xd95f32, roughness: 0.4 })
+  );
+  rim.rotation.x = Math.PI / 2;
+  rim.position.set(courtX, 2.75, courtZ - 2.48);
+  group.add(hoopPole, board, rim);
+
+  // Two bright yellow/green park fitness machines
+  const fitYellow = new THREE.MeshStandardMaterial({ color: 0xe6af3c, roughness: 0.45 });
+  const fitGreen = new THREE.MeshStandardMaterial({ color: 0x3b7a57, roughness: 0.5 });
+  [courtX - 2.4, courtX + 2.4].forEach((fx) => {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 1.45, 8), fitGreen);
+    post.position.set(fx, 0.85, courtZ + 2.4);
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.08, 0.12), fitYellow);
+    bar.position.set(fx, 1.45, courtZ + 2.4);
+    group.add(post, bar);
+  });
+  addBoxCollider(colliders, lx + courtX, lz + courtZ - 3.1, 0.6, 0.6, 3.4);
+
+  // 5. Children's Playground — South-East Quadrant
+  const playX = 8.2;
+  const playZ = 6.4;
+  const playPadMat = new THREE.MeshStandardMaterial({ color: 0xb97c52, roughness: 0.92 });
+  const playPad = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.2, 6.2), playPadMat);
+  playPad.position.set(playX, 0.1, playZ);
+  playPad.receiveShadow = true;
+  group.add(playPad);
+
+  // Slide tower & colorful slide chute
+  const slideMat = new THREE.MeshStandardMaterial({ color: 0xd94f44, roughness: 0.45 });
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.9, 1.1), fitYellow);
+  tower.position.set(playX - 1.4, 1.05, playZ - 1.0);
+  tower.castShadow = true;
+  const chute = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.12, 2.1), slideMat);
+  chute.position.set(playX - 1.4, 0.95, playZ + 0.35);
+  chute.rotation.x = 0.58;
+  chute.castShadow = true;
+  // Swing frame
+  [-0.95, 0.95].forEach((sx) => {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 2.2, 6), fitGreen);
+    leg.position.set(playX + 1.4 + sx, 1.15, playZ + 0.6);
+    group.add(leg);
+  });
+  const topBar = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.2, 6), fitYellow);
+  topBar.rotation.z = Math.PI / 2;
+  topBar.position.set(playX + 1.4, 2.22, playZ + 0.6);
+  group.add(tower, chute, topBar);
+  addBoxCollider(colliders, lx + playX - 1.4, lz + playZ - 0.6, 1.5, 2.4, 2.2);
+
+  // 6. Wooden Slatted Park Benches, Flowerbeds, Lamps & Curated Park Trees
+  const benchCoords: [number, number, number][] = [
+    [-2.8, -0.9, 0],
+    [3.6, -0.9, 0],
+    [4.4, -3.4, -Math.PI / 2],
+    [-3.2, 4.2, Math.PI / 2],
+    [5.0, 2.2, Math.PI],
+  ];
+  benchCoords.forEach(([bx, bz, rotY]) => {
+    const b = new THREE.Group();
+    b.position.set(bx, 0.18, bz);
+    b.rotation.y = rotY;
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.09, 0.48), mats.darkTimber);
+    seat.position.y = 0.42;
+    const back = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.42, 0.08), mats.darkTimber);
+    back.position.set(0, 0.68, -0.2);
+    back.rotation.x = -0.15;
+    [-0.58, 0.58].forEach((lxOff) => {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.42, 0.42), mats.wroughtIron);
+      leg.position.set(lxOff, 0.21, 0);
+      b.add(leg);
+    });
+    b.add(seat, back);
+    group.add(b);
+  });
+
+  // Stone Flowerbeds flanking East Entrance & Pool
+  const flowerMat = new THREE.MeshStandardMaterial({ color: 0xe05d4d, roughness: 0.8 });
+  const leafBushMat = new THREE.MeshStandardMaterial({ color: 0x4e7c3e, roughness: 0.85 });
+  [
+    [11.4, -2.2],
+    [11.4, 3.0],
+    [-2.4, -7.8],
+    [3.4, -7.8],
+  ].forEach(([fx, fz]) => {
+    const planter = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.34, 1.15), mats.travertine);
+    planter.position.set(fx, 0.25, fz);
+    const soil = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.2, 0.9), leafBushMat);
+    soil.position.set(fx, 0.4, fz);
+    for (let bi = -1; bi <= 1; bi++) {
+      const bloom = new THREE.Mesh(new THREE.DodecahedronGeometry(0.24, 0), flowerMat);
+      bloom.position.set(fx + bi * 0.52, 0.58, fz);
+      group.add(bloom);
+    }
+    group.add(planter, soil);
+  });
+
+  // Classic Warm Park Lanterns
+  [
+    [11.6, -1.3],
+    [11.6, 2.1],
+    [3.8, -0.6],
+    [-3.2, -0.6],
+    [2.6, 5.2],
+    [-2.6, 5.2],
+  ].forEach(([px, pz]) => {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.085, 3.1, 8), mats.wroughtIron);
+    post.position.set(px, 1.65, pz);
+    const globe = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), mats.lampBulb);
+    globe.position.set(px, 3.3, pz);
+    group.add(post, globe);
+  });
+
+  // Realistic Sculpted Mediterranean Plane, Olive & Pine Trees around Park Perimeter
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x694f3a, roughness: 0.92 });
+  const planeLeafMat = new THREE.MeshStandardMaterial({ color: 0x568245, roughness: 0.86 });
+  const oliveLeafMat = new THREE.MeshStandardMaterial({ color: 0x6f8d58, roughness: 0.88 });
+  const pineLeafMat = new THREE.MeshStandardMaterial({ color: 0x3b6941, roughness: 0.86 });
+
+  const treeSpecs: { x: number; z: number; kind: 'plane' | 'olive' | 'pine'; s: number }[] = [
+    { x: -12.0, z: -10.0, kind: 'pine', s: 1.1 },
+    { x: -12.0, z: 0.4, kind: 'plane', s: 1.05 },
+    { x: -12.0, z: 10.0, kind: 'pine', s: 1.0 },
+    { x: -3.2, z: -10.0, kind: 'olive', s: 0.95 },
+    { x: 3.6, z: -10.0, kind: 'plane', s: 1.05 },
+    { x: 11.8, z: -10.0, kind: 'pine', s: 1.1 },
+    { x: 12.0, z: 9.8, kind: 'plane', s: 1.0 },
+    { x: 3.8, z: 9.8, kind: 'olive', s: 0.92 },
+    { x: -3.4, z: 9.8, kind: 'olive', s: 0.9 },
+  ];
+
+  treeSpecs.forEach(({ x, z, kind, s }) => {
+    const t = new THREE.Group();
+    t.position.set(x, 0.16, z);
+    t.scale.setScalar(s);
+
+    if (kind === 'pine') {
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.22, 2.2, 8), trunkMat);
+      trunk.position.y = 1.1;
+      trunk.castShadow = true;
+      t.add(trunk);
+      [0, 1, 2].forEach((tier) => {
+        const cone = new THREE.Mesh(
+          new THREE.ConeGeometry(1.25 - tier * 0.28, 1.55 - tier * 0.2, 7),
+          pineLeafMat
+        );
+        cone.position.y = 2.1 + tier * 0.92;
+        cone.castShadow = true;
+        t.add(cone);
+      });
+    } else {
+      const leafMat = kind === 'olive' ? oliveLeafMat : planeLeafMat;
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.26, 2.1, 8), trunkMat);
+      trunk.position.y = 1.05;
+      trunk.castShadow = true;
+      t.add(trunk);
+      [
+        [0, 2.75, 0, 1.25],
+        [-0.65, 2.35, 0.42, 0.85],
+        [0.62, 2.45, -0.35, 0.88],
+      ].forEach(([cx, cy, cz, r]) => {
+        const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), leafMat);
+        puff.scale.set(1.12, 0.84, 1.08);
+        puff.position.set(cx, cy, cz);
+        puff.castShadow = true;
+        t.add(puff);
+      });
+    }
+    group.add(t);
+  });
+
+  const ringMesh = makeDiscoveryRing(lx + 15.2, lz);
+  return { def, group, ringMesh, colliders };
+}
+
+function createKipaParkingTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+
+  ctx.fillStyle = '#40464E';
+  ctx.fillRect(0, 0, 512, 256);
+
+  // Crisp asphalt parking bays
+  ctx.strokeStyle = '#ECEFF2';
+  ctx.lineWidth = 4;
+  for (let x = 28; x <= 484; x += 56) {
+    if (x > 210 && x < 295) continue; // central pedestrian crosswalk lane
+    ctx.beginPath();
+    ctx.moveTo(x, 22);
+    ctx.lineTo(x, 128);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.moveTo(28, 22);
+  ctx.lineTo(196, 22);
+  ctx.moveTo(316, 22);
+  ctx.lineTo(484, 22);
+  ctx.stroke();
+
+  // Blue accessible bay & pedestrian zebra crossing
+  ctx.fillStyle = '#1D5CA3';
+  ctx.fillRect(142, 26, 50, 96);
+
+  ctx.fillStyle = '#F5F7FA';
+  for (let y = 30; y <= 220; y += 26) {
+    ctx.fillRect(226, y, 60, 14);
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function createKipaSignTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+
+  ctx.fillStyle = '#15549A';
+  ctx.fillRect(0, 0, 512, 128);
+  ctx.fillStyle = '#C92A35';
+  ctx.fillRect(0, 102, 512, 26);
+
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = '900 54px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('KİPA AVM', 256, 48);
+
+  ctx.fillStyle = '#FFE8B8';
+  ctx.font = 'bold 20px sans-serif';
+  ctx.fillText('AYDIN İSTASYON BULVARI · HİPERMARKET', 256, 86);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/**
+ * 15. Aydın Kipa AVM (Cumhuriyet Mah. İstasyon Bulvarı)
+ */
+function buildKipaAvm(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandmark {
+  const group = new THREE.Group();
+  const [lx, , lz] = def.position;
+  group.position.set(lx, 0, lz);
+
+  const colliders: ColliderBox[] = [];
+
+  // 1. Concrete Plaza & Front Open Parking Forecourt facing North (-Z toward İstasyon Caddesi)
+  const plinth = new THREE.Mesh(new THREE.BoxGeometry(24.2, 0.22, 16.2), mats.plaza);
+  plinth.position.y = 0.11;
+  plinth.receiveShadow = true;
+  group.add(plinth);
+
+  const parkingMat = new THREE.MeshStandardMaterial({
+    map: createKipaParkingTexture(),
+    roughness: 0.86,
+  });
+  const parkingLot = new THREE.Mesh(new THREE.PlaneGeometry(22.8, 6.2), parkingMat);
+  parkingLot.rotation.x = -Math.PI / 2;
+  parkingLot.position.set(0, 0.23, -4.7);
+  parkingLot.receiveShadow = true;
+  group.add(parkingLot);
+
+  // Parked cars in front bays + shopping cart shelter + EV charging totem
+  const parkedCarColors = [0xd9e1e8, 0x3b6e8c, 0xb84038];
+  [-7.8, -5.2, 5.8].forEach((cx, i) => {
+    const car = new THREE.Group();
+    car.position.set(cx, 0.24, -5.6);
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(1.55, 0.56, 2.8),
+      new THREE.MeshStandardMaterial({ color: parkedCarColors[i], roughness: 0.35, metalness: 0.25 })
+    );
+    body.position.y = 0.38;
+    body.castShadow = true;
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.44, 1.45), mats.glassAtrium);
+    cabin.position.set(0, 0.84, 0.1);
+    car.add(body, cabin);
+    group.add(car);
+  });
+
+  // Cart return shelter + EV charger
+  const cartShelter = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.35, 2.2), mats.glassAtrium);
+  cartShelter.position.set(8.8, 0.9, -4.8);
+  const evCharger = new THREE.Mesh(
+    new THREE.BoxGeometry(0.45, 1.65, 0.35),
+    new THREE.MeshStandardMaterial({ color: 0x2e8b57, roughness: 0.4 })
+  );
+  evCharger.position.set(-9.8, 1.05, -3.2);
+  group.add(cartShelter, evCharger);
+
+  // 2. Main Wide Horizontal Hypermarket & Mall Volume
+  const kipaBlueMat = new THREE.MeshStandardMaterial({ color: 0x15549a, roughness: 0.45 });
+  const kipaRedMat = new THREE.MeshStandardMaterial({ color: 0xc92a35, roughness: 0.45 });
+  const claddingMat = new THREE.MeshStandardMaterial({ color: 0xe6e4de, roughness: 0.68 });
+
+  const mainHall = new THREE.Mesh(new THREE.BoxGeometry(22.2, 5.8, 8.6), claddingMat);
+  mainHall.position.set(0, 3.12, 2.8);
+  mainHall.castShadow = true;
+  mainHall.receiveShadow = true;
+  group.add(mainHall);
+
+  // Signature Blue & Red Kipa Fascia Bands along Upper Roofline
+  const upperBlueBand = new THREE.Mesh(new THREE.BoxGeometry(22.45, 1.15, 8.85), kipaBlueMat);
+  upperBlueBand.position.set(0, 5.55, 2.8);
+  const lowerRedStripe = new THREE.Mesh(new THREE.BoxGeometry(22.5, 0.28, 8.9), kipaRedMat);
+  lowerRedStripe.position.set(0, 4.85, 2.8);
+  group.add(upperBlueBand, lowerRedStripe);
+
+  // Shopfront Reflective Curtain Glass Bays along North Facade
+  [-7.2, -4.0, 4.0, 7.2].forEach((wx) => {
+    const shopWin = new THREE.Mesh(new THREE.BoxGeometry(2.5, 2.6, 0.16), mats.windowLit);
+    shopWin.position.set(wx, 1.75, -1.52);
+    group.add(shopWin);
+  });
+
+  // 3. Projecting Glass Entrance Atrium + Cantilevered Canopy + "KİPA AVM" Billboard
+  const atriumBox = new THREE.Mesh(new THREE.BoxGeometry(6.6, 4.6, 1.6), mats.glassAtrium);
+  atriumBox.position.set(0, 2.52, -1.9);
+  atriumBox.castShadow = true;
+  const entranceDoor = new THREE.Mesh(new THREE.BoxGeometry(2.8, 2.4, 0.2), mats.windowLit);
+  entranceDoor.position.set(0, 1.42, -2.72);
+  const canopy = new THREE.Mesh(new THREE.BoxGeometry(8.2, 0.26, 2.6), kipaBlueMat);
+  canopy.position.set(0, 3.75, -2.6);
+  canopy.castShadow = true;
+  group.add(atriumBox, entranceDoor, canopy);
+
+  const kipaSignTex = createKipaSignTexture();
+  const kipaSignMat = new THREE.MeshStandardMaterial({ map: kipaSignTex, roughness: 0.36 });
+  const signBoard = new THREE.Mesh(new THREE.BoxGeometry(8.4, 1.65, 0.28), kipaBlueMat);
+  signBoard.position.set(0, 6.2, -1.55);
+  signBoard.castShadow = true;
+  const signFace = new THREE.Mesh(new THREE.PlaneGeometry(8.1, 1.5), kipaSignMat);
+  signFace.rotation.y = Math.PI;
+  signFace.position.set(0, 6.2, -1.7);
+  const signFaceBack = new THREE.Mesh(new THREE.PlaneGeometry(8.1, 1.5), kipaSignMat);
+  signFaceBack.position.set(0, 6.2, -1.4);
+  group.add(signBoard, signFace, signFaceBack);
+
+  // Rooftop Glass Skylight Atrium & HVAC Units (realistic aerial silhouette)
+  const skylight = new THREE.Mesh(new THREE.BoxGeometry(12.0, 0.65, 2.2), mats.glassAtrium);
+  skylight.position.set(0, 6.3, 2.8);
+  group.add(skylight);
+  [-6.8, 6.8].forEach((hx) => {
+    const hvac = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.75, 1.6), mats.creamPlaster);
+    hvac.position.set(hx, 6.45, 4.4);
+    group.add(hvac);
+  });
+
+  // Outdoor Cafe Tables beside East Entrance Promenade
+  const umbrellaMat = new THREE.MeshStandardMaterial({ color: 0xc92a35, roughness: 0.7 });
+  [9.2, 10.6].forEach((ux, i) => {
+    const uz = -0.2 + i * 1.8;
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.0, 6), mats.wroughtIron);
+    pole.position.set(ux, 1.2, uz);
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(0.85, 0.42, 8), umbrellaMat);
+    cap.position.set(ux, 2.25, uz);
+    cap.castShadow = true;
+    group.add(pole, cap);
+  });
+
+  const ringMesh = makeDiscoveryRing(lx, lz - 9.8);
+  addBoxCollider(colliders, lx, lz + 2.6, 22.4, 9.2, 6.6);
+  [-7.8, -5.2, 5.8].forEach((cx) => {
+    addBoxCollider(colliders, lx + cx, lz - 5.6, 1.7, 3.0, 1.5);
+  });
+
+  return { def, group, ringMesh, colliders };
+}
+
 export function buildAllLandmarks(
   defs: LandmarkDef[],
   mats: CityMaterialLibrary
@@ -2542,12 +3202,19 @@ export function buildAllLandmarks(
       case 'magnesia':
         built = buildMagnesia(def, mats);
         break;
+      case 'nevzatbicerpark':
+        built = buildNevzatBicerPark(def, mats);
+        break;
+      case 'kipaavm':
+        built = buildKipaAvm(def, mats);
+        break;
       default:
         built = buildKentMeydani(def, mats);
         break;
     }
     const [lx, , lz] = def.position;
     built.group.position.y = getTerrainHeightAt(lx, lz);
+    mergeStaticGroupMeshes(built.group);
     return built;
   });
 }

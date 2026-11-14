@@ -149,7 +149,7 @@ function createBroadleafCrownGeometry(): THREE.BufferGeometry {
   ];
 
   const parts: THREE.BufferGeometry[] = clusters.map(([x, y, z, sx, sy, sz]) => {
-    const g = new THREE.IcosahedronGeometry(1, 2);
+    const g = new THREE.IcosahedronGeometry(1, 1);
     g.scale(sx, sy, sz);
     g.translate(x, y, z);
     return g;
@@ -496,7 +496,7 @@ export function createSeasonalFoliageSystem(
   group.add(shrubInst);
 
   // --- 5. Floating Seasonal Petals (Spring) & Falling Leaves (Autumn) ---
-  const driftCount = 96;
+  const driftCount = 64;
   const driftGeo = new THREE.PlaneGeometry(0.24, 0.16);
   const driftMat = new THREE.MeshBasicMaterial({
     color: 0xffffff,
@@ -604,7 +604,7 @@ export function createSeasonalFoliageSystem(
       }
 
       swayAccum += dt;
-      const shouldUpdateMatrices = swayAccum >= 0.036 || colorsDirty;
+      const shouldUpdateMatrices = swayAccum >= 0.05 || colorsDirty;
       if (shouldUpdateMatrices) {
         swayAccum = 0;
 
@@ -701,6 +701,7 @@ export function createSeasonalFoliageSystem(
       if (particleWeight > 0.12 && state.frostFactor < 0.6) {
         driftMesh.visible = true;
         driftMat.opacity = 0.84 * particleWeight * (1 - state.frostFactor * 0.8);
+        const baseGroundY = getTerrainHeightAt(state.lookX, state.lookZ);
         for (let i = 0; i < driftCount; i++) {
           const p = driftParticles[i];
           p.y -= (0.8 + p.speed * 0.65) * dt;
@@ -712,8 +713,7 @@ export function createSeasonalFoliageSystem(
           }
           const wx = state.lookX + p.ox;
           const wz = state.lookZ + p.oz;
-          const groundY = getTerrainHeightAt(wx, wz);
-          dummy.position.set(wx, groundY + p.y, wz);
+          dummy.position.set(wx, baseGroundY + p.y, wz);
           dummy.rotation.set(
             elapsed * 1.8 + p.phase,
             elapsed * 1.3 + p.phase,

@@ -35,8 +35,8 @@ export interface CityMaterialLibrary {
   limestonePlinth: THREE.MeshStandardMaterial;
   brass: THREE.MeshStandardMaterial;
   wroughtIron: THREE.MeshStandardMaterial;
-  water: THREE.MeshPhysicalMaterial;
-  glassAtrium: THREE.MeshPhysicalMaterial;
+  water: THREE.MeshStandardMaterial;
+  glassAtrium: THREE.MeshStandardMaterial;
   windowLit: THREE.MeshStandardMaterial;
   lampBulb: THREE.MeshStandardMaterial;
   railSteel: THREE.MeshStandardMaterial;
@@ -260,25 +260,22 @@ export function createCityMaterials(
     metalness: 0.62,
   });
 
-  const water = new THREE.MeshPhysicalMaterial({
-    color: 0x579ea8,
-    roughness: 0.09,
-    metalness: 0.06,
-    transmission: isSoftwareGl ? 0 : 0.62,
+  const water = new THREE.MeshStandardMaterial({
+    color: 0x4d98a5,
+    roughness: 0.08,
+    metalness: 0.18,
+    envMapIntensity: 1.35,
     transparent: true,
-    opacity: isSoftwareGl ? 0.84 : 0.92,
-    ior: 1.33,
-    thickness: 0.65,
+    opacity: isSoftwareGl ? 0.84 : 0.86,
   });
 
-  const glassAtrium = new THREE.MeshPhysicalMaterial({
-    color: 0xc2e2ec,
+  const glassAtrium = new THREE.MeshStandardMaterial({
+    color: 0xb8dce8,
     roughness: 0.1,
-    metalness: 0.1,
-    transmission: isSoftwareGl ? 0 : 0.65,
+    metalness: 0.22,
+    envMapIntensity: 1.35,
     transparent: true,
-    opacity: isSoftwareGl ? 0.58 : 0.84,
-    ior: 1.48,
+    opacity: isSoftwareGl ? 0.58 : 0.72,
   });
 
   const windowLit = new THREE.MeshStandardMaterial({

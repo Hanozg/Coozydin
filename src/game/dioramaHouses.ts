@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { HouseExteriorConfig } from '../types/game';
 import { CityMaterialLibrary } from './materials';
+import { mergeStaticGroupMeshes } from './meshMerge';
 import {
   createDioramaRoofSlabsGeometry,
   createGableBargeboardGeometry,
@@ -75,7 +76,6 @@ function addMullionedWindow(
     [-1, 1].forEach((side) => {
       const shutter = new THREE.Mesh(new THREE.BoxGeometry(shW, shH, 0.06), shutterMat);
       shutter.position.set(side * (winW / 2 + shW / 2 + 0.1), 0, 0.035);
-      shutter.castShadow = true;
       wg.add(shutter);
 
       const topBar = new THREE.Mesh(new THREE.BoxGeometry(shW * 0.88, 0.045, 0.075), sillMat);
@@ -283,7 +283,6 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
     mats.whitePlaster
   );
   bargeboard.position.y = h + 0.2;
-  bargeboard.castShadow = true;
   house.add(bargeboard);
 
   // 4. Sculptural Chimney + Stone Cap
@@ -385,7 +384,6 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
     colBase.position.set(cx, 0.62, d / 2 + porchD - 0.2);
     const col = new THREE.Mesh(new THREE.BoxGeometry(0.18, porchH - 0.22, 0.18), mats.whitePlaster);
     col.position.set(cx, 0.52 + porchH / 2, d / 2 + porchD - 0.2);
-    col.castShadow = true;
     house.add(colBase, col);
   });
 
@@ -634,7 +632,6 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
             mats.whitePlaster
           );
           picket.position.set(px, 0.45, fenceZ);
-          picket.castShadow = true;
           house.add(picket);
         }
       } else {
@@ -649,6 +646,7 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
       }
     });
   }
+  mergeStaticGroupMeshes(house);
   return {
     group: house,
     chimneyTopLocal: [chX, chY + 0.85, chZ],
@@ -1375,12 +1373,12 @@ export function buildCustomPlayerHouse(opts: CustomPlayerHouseOptions): BuiltCus
         const px = THREE.MathUtils.lerp(startX, endX, p / 5);
         const picket = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.52, 0.07), trimMat);
         picket.position.set(px, 0.45, fenceZ);
-        picket.castShadow = true;
         house.add(picket);
       }
     });
   }
 
+  mergeStaticGroupMeshes(house);
   return {
     group: house,
     chimneyTopLocal,

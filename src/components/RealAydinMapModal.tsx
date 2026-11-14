@@ -41,7 +41,7 @@ const PRESET_QUERIES = [
   {
     id: 'parks',
     label: 'Parklar & Yaşam',
-    query: 'Aydın Tekstil Park Forum Aydın',
+    query: 'Aydın Nevzat Biçer Parkı Kipa AVM Tekstil Park Forum Aydın',
   },
   {
     id: 'station',
@@ -126,6 +126,8 @@ function matchGameLandmark(placeName: string): LandmarkDef | null {
     { keywords: ['orta mahalle', 'ortamahalle'], landmarkId: 'ortamahalle' },
     { keywords: ['adnan menderes', 'adü', 'üniversite', 'kampüs', 'aytepe'], landmarkId: 'universite' },
     { keywords: ['magnesia', 'artemis', 'germencik'], landmarkId: 'magnesia' },
+    { keywords: ['nevzat biçer', 'nevzat bicer', 'biçer parkı'], landmarkId: 'nevzatbicerpark' },
+    { keywords: ['kipa', 'kipa avm', 'aydın kipa'], landmarkId: 'kipaavm' },
   ];
 
   for (const rule of rules) {

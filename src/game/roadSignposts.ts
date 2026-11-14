@@ -117,10 +117,22 @@ const CORNER_SIGNPOSTS: CornerSignpostDef[] = [
     z: 6.6,
     junctionTitle: 'MENDERES × YAĞCILAR CD.',
     blades: [
-      { label: 'TEKSTİL PARK · CİHANOĞLU', dir: 'W', category: 'city' },
+      { label: 'NEVZAT BİÇER · TEKSTİL PARK', dir: 'W', category: 'city' },
       { label: 'KENT MEYDANI · SEVGİ YOLU', dir: 'E', category: 'city' },
       { label: 'GAZİ BLV. · MAGNESİA YOLU', dir: 'N', category: 'historic' },
-      { label: 'İSTASYON CD. · TREN GARI', dir: 'S', category: 'city' },
+      { label: 'KİPA AVM · İSTASYON CD.', dir: 'S', category: 'city' },
+    ],
+  },
+  {
+    id: 'menderes_korfez',
+    x: -90.4,
+    z: 6.6,
+    junctionTitle: 'MENDERES × KÖRFEZ CD.',
+    blades: [
+      { label: 'NEVZAT BİÇER PARKI · AMFİ', dist: '14m', dir: 'W', category: 'city' },
+      { label: 'KİPA AVM · İSTASYON BLV.', dir: 'S', category: 'city' },
+      { label: 'TEKSTİL PARK · KENT MEYDANI', dir: 'E', category: 'city' },
+      { label: 'MAGNESİA ANTİK YOLU', dir: 'N', category: 'historic' },
     ],
   },
   {
@@ -236,7 +248,18 @@ const CORNER_SIGNPOSTS: CornerSignpostDef[] = [
     blades: [
       { label: 'TARİHİ AYDIN TREN GARI', dir: 'E', category: 'city' },
       { label: 'SEVGİ YOLU · KENT MEYDANI', dir: 'N', category: 'city' },
-      { label: 'TEKSTİL PARK · BATI', dir: 'W', category: 'city' },
+      { label: 'KİPA AVM · NEVZAT BİÇER', dir: 'W', category: 'city' },
+    ],
+  },
+  {
+    id: 'istasyon_korfez',
+    x: -90.4,
+    z: 42.6,
+    junctionTitle: 'İSTASYON CD. × KÖRFEZ',
+    blades: [
+      { label: 'AYDIN KİPA AVM', dist: '16m', dir: 'E', category: 'city' },
+      { label: 'NEVZAT BİÇER PARKI', dist: '18m', dir: 'N', category: 'city' },
+      { label: 'TARİHİ AYDIN TREN GARI', dir: 'E', category: 'city' },
     ],
   },
 ];
@@ -255,12 +278,12 @@ const GANTRY_SIGNS: GantrySignDef[] = [
       { arrow: '←', label: 'SEVGİ YOLU · RAMAZAN PAŞA', category: 'historic' },
       { arrow: '→', label: 'TARİHİ AYDIN TREN GARI', category: 'city' },
     ],
-    // Back faces +X (drivers heading West toward Tekstil Park)
+    // Back faces +X (drivers heading West toward Tekstil Park & Nevzat Biçer)
     backTitle: 'ADNAN MENDERES BLV. · BATI YÖNÜ',
     backRows: [
-      { arrow: '↑', label: 'TEKSTİL PARK · CİHANOĞLU', dist: '40m', category: 'city' },
-      { arrow: '→', label: 'SICAK YUVAM · GAZİ BLV.', category: 'home' },
-      { arrow: '←', label: 'İSTASYON CD. · TREN GARI', category: 'city' },
+      { arrow: '↑', label: 'NEVZAT BİÇER · TEKSTİL PARK', dist: '40m', category: 'city' },
+      { arrow: '→', label: 'SICAK YUVAM · MAGNESİA', category: 'home' },
+      { arrow: '←', label: 'KİPA AVM · İSTASYON BLV.', category: 'city' },
     ],
   },
   {

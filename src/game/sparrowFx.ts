@@ -92,6 +92,9 @@ export class SparrowFX {
   private readonly cloudMeshes: THREE.InstancedMesh[] = [];
   private readonly cloudMat: THREE.MeshStandardMaterial;
   private readonly clouds: DriftingCloud[] = [];
+  private cloudAccum = 0.04;
+  private lastCloudKey = '';
+  private cloudColorSettle = 2.5;
 
   private readonly pickupGeo: THREE.BufferGeometry;
   private readonly pickupMat: THREE.MeshStandardMaterial;
@@ -449,28 +452,42 @@ export class SparrowFX {
     if (trailDirty) this.wingTrailInst.instanceMatrix.needsUpdate = true;
 
     // Drifting clouds tinted cleanly by golden hour, night, and storm weather
-    _cloudTarget
-      .copy(_cloudWarm)
-      .lerp(_cloudGolden, goldenWarmth * 0.65)
-      .lerp(_cloudNight, nightMix * 0.72)
-      .lerp(_cloudStorm, stormMix * 0.68);
-    this.cloudMat.color.lerp(_cloudTarget, Math.min(1, dt * 2.0));
-
-    for (let i = 0; i < this.clouds.length; i++) {
-      const c = this.clouds[i];
-      c.orbitAngle += c.angularSpeed * dt;
-      const x = Math.cos(c.orbitAngle) * c.orbitRadius;
-      const z = Math.sin(c.orbitAngle) * c.orbitRadius - 12;
-      const y = c.baseY + Math.sin(elapsed * 0.32 + c.phase) * 1.1;
-      _dummy.position.set(x, y, z);
-      _dummy.rotation.set(0, -c.orbitAngle + Math.PI * 0.5, 0);
-      _dummy.scale.set(1.2, 1.0, 1.2);
-      _dummy.updateMatrix();
-      c.inst.setMatrixAt(c.instanceIdx, _dummy.matrix);
+    const cloudKey = `${Math.round(goldenWarmth * 25)}|${Math.round(nightMix * 25)}|${Math.round(stormMix * 25)}`;
+    if (cloudKey !== this.lastCloudKey) {
+      this.lastCloudKey = cloudKey;
+      this.cloudColorSettle = 2.5;
+    } else if (this.cloudColorSettle > 0) {
+      this.cloudColorSettle = Math.max(0, this.cloudColorSettle - dt);
     }
-    this.cloudMeshes.forEach((cm) => {
-      cm.instanceMatrix.needsUpdate = true;
-    });
+    if (this.cloudColorSettle > 0) {
+      _cloudTarget
+        .copy(_cloudWarm)
+        .lerp(_cloudGolden, goldenWarmth * 0.65)
+        .lerp(_cloudNight, nightMix * 0.72)
+        .lerp(_cloudStorm, stormMix * 0.68);
+      this.cloudMat.color.lerp(_cloudTarget, Math.min(1, dt * 2.0));
+    }
+
+    this.cloudAccum += dt;
+    if (this.cloudAccum >= 0.04) {
+      const stepDt = this.cloudAccum;
+      this.cloudAccum = 0;
+      for (let i = 0; i < this.clouds.length; i++) {
+        const c = this.clouds[i];
+        c.orbitAngle += c.angularSpeed * stepDt;
+        const x = Math.cos(c.orbitAngle) * c.orbitRadius;
+        const z = Math.sin(c.orbitAngle) * c.orbitRadius - 12;
+        const y = c.baseY + Math.sin(elapsed * 0.32 + c.phase) * 1.1;
+        _dummy.position.set(x, y, z);
+        _dummy.rotation.set(0, -c.orbitAngle + Math.PI * 0.5, 0);
+        _dummy.scale.set(1.2, 1.0, 1.2);
+        _dummy.updateMatrix();
+        c.inst.setMatrixAt(c.instanceIdx, _dummy.matrix);
+      }
+      for (let i = 0; i < this.cloudMeshes.length; i++) {
+        this.cloudMeshes[i].instanceMatrix.needsUpdate = true;
+      }
+    }
 
     // Floating sesame & fig crumb pickups
     for (let i = 0; i < this.pickups.length; i++) {

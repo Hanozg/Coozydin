@@ -36,7 +36,7 @@ export type ExplorationMode = 'vehicle' | 'walk' | 'sparrow';
 
 export type HeldTreatType = 'none' | 'coffee' | 'simit' | 'kumpir' | 'keskek' | 'icecream';
 
-export type StreetInteractionType = 'musicians' | 'lokma' | 'vendor';
+export type StreetInteractionType = 'musicians' | 'lokma' | 'vendor' | 'guitar_band';
 
 export type PetType = 'cat' | 'dog' | 'both';
 
@@ -182,6 +182,11 @@ export interface BuildingNpcDef {
   pantsColor: string;
   hatStyle: 'cap' | 'headscarf' | 'chef' | 'none';
   hatColor: string;
+  skinColor?: string;
+  hairColor?: string;
+  hairStyle?: 'short' | 'bob' | 'waves' | 'bun';
+  facialHair?: 'none' | 'mustache' | 'goatee' | 'full_beard';
+  glasses?: boolean;
   propType: 'icecream_cart' | 'simit_tray' | 'coffee_tray' | 'keskek_pot' | 'notebook' | 'none';
   greeting: string;
   walkChatLines?: string[];

@@ -13,9 +13,11 @@ import { buildAllLandmarks, BuiltLandmark } from './landmarks';
 import {
   createBeyCamiiLokmaStand,
   createLibraryAndVendor,
+  createParkGuitarYouthGroup,
   createStreetMusiciansZeybek,
   LibraryVendorRig,
   LokmaStandRig,
+  ParkGuitarYouthRig,
   StreetMusiciansRig,
 } from './interactions3d';
 import {
@@ -66,6 +68,7 @@ export interface BuiltCity {
   musicians: StreetMusiciansRig;
   libraryVendor: LibraryVendorRig;
   lokmaStand: LokmaStandRig;
+  parkGuitarBand: ParkGuitarYouthRig;
   buildingNpcs: BuildingNpcSystem;
   foliage: SeasonalFoliageSystem;
   homeRingMesh: THREE.Mesh;
@@ -281,7 +284,7 @@ export function buildEfelerCity(
   };
 
   // 1. Sculpted 3D Horizon Terrain (Flat Efeler Plain -> Northern Foothills -> ADÜ Aytepe Hill + Tabakhane Channel)
-  const terrainGeo = new THREE.PlaneGeometry(520, 520, 104, 104);
+  const terrainGeo = new THREE.PlaneGeometry(520, 520, 76, 76);
   terrainGeo.rotateX(-Math.PI / 2);
   const tPos = terrainGeo.attributes.position as THREE.BufferAttribute;
   const tColors = new Float32Array(tPos.count * 3);
@@ -323,7 +326,7 @@ export function buildEfelerCity(
     [138, 36, 46, 76, mats.wheatField],
     [138, -34, 44, 52, mats.lavenderField],
     [138, -84, 46, 44, mats.wheatField],
-    [-128, 20, 46, 56, mats.wheatField],
+    [-168, 20, 32, 56, mats.wheatField],
     [-132, -74, 48, 30, mats.lavenderField],
     [-58, -124, 64, 24, mats.wheatField],
     [76, -124, 62, 24, mats.lavenderField],
@@ -357,8 +360,8 @@ export function buildEfelerCity(
     [146, 65, 36, 5.5, 34],
     [-182, 62, 34, 5.0, 34],
   ];
+  const hillGeo = new THREE.SphereGeometry(1, 14, 9, 0, Math.PI * 2, 0, Math.PI * 0.5);
   hillConfigs.forEach(([hx, hz, rx, ry, rz]) => {
-    const hillGeo = new THREE.SphereGeometry(1, 22, 14, 0, Math.PI * 2, 0, Math.PI * 0.5);
     const hill = new THREE.Mesh(hillGeo, hillMat);
     hill.position.set(hx, getBaseTerrainHeight(hx, hz) - 1.2, hz);
     hill.scale.set(rx, ry, rz);
@@ -760,6 +763,69 @@ export function buildEfelerCity(
     group.add(dash);
   }
 
+  // 5c. Western Cumhuriyet Mah. Extensions: Adnan Menderes Blv. (z = 12), İstasyon Cd. (z = 48) & Körfez Cd. (x = -96)
+  [12, 48].forEach((wrz) => {
+    const extCurb = new THREE.Mesh(
+      createTerrainConformingRibbon(-141, wrz, -95, wrz, roadW + 2.6, 28, 4, 0.09, true),
+      mats.sidewalk
+    );
+    extCurb.receiveShadow = true;
+    const extAsphalt = new THREE.Mesh(
+      createTerrainConformingRibbon(-140, wrz, -95, wrz, roadW, 28, 4, 0.13, true),
+      mats.asphalt
+    );
+    extAsphalt.receiveShadow = true;
+    group.add(extCurb, extAsphalt);
+
+    for (let dx = -136; dx <= -100; dx += 6.5) {
+      const dy = getSurfaceHeightAt(dx, wrz) + 0.165;
+      const slopes = getSurfaceSlopeAngles(dx, wrz, -Math.PI / 2);
+      const dash = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 0.22), mats.roadStripe);
+      dash.rotation.order = 'YXZ';
+      dash.rotation.set(-Math.PI / 2 + slopes.roll, 0, -slopes.pitch);
+      dash.position.set(dx, dy, wrz);
+      group.add(dash);
+    }
+  });
+
+  const korfezCurb = new THREE.Mesh(
+    createTerrainConformingRibbon(-96, -26.5, -96, 53.5, roadW + 2.6, 48, 4, 0.105, true),
+    mats.sidewalk
+  );
+  korfezCurb.receiveShadow = true;
+  const korfezAsphalt = new THREE.Mesh(
+    createTerrainConformingRibbon(-96, -25.5, -96, 52.5, roadW, 48, 4, 0.148, true),
+    mats.asphalt
+  );
+  korfezAsphalt.receiveShadow = true;
+  group.add(korfezCurb, korfezAsphalt);
+
+  for (let dz = -17; dz <= 44; dz += 6.5) {
+    if (Math.abs(dz - 12) < 4.5) continue;
+    const dy = getSurfaceHeightAt(-96, dz) + 0.175;
+    const slopes = getSurfaceSlopeAngles(-96, dz, 0);
+    const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 3.0), mats.roadStripe);
+    dash.rotation.order = 'YXZ';
+    dash.rotation.set(-Math.PI / 2 + slopes.pitch, 0, slopes.roll);
+    dash.position.set(-96, dy, dz);
+    group.add(dash);
+  }
+
+  [-22, 12, 48].forEach((rz) => {
+    const slopes = getSurfaceSlopeAngles(-96, rz, 0);
+    for (let s = -2.6; s <= 2.6; s += 1.3) {
+      const stripeEW = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 2.0), mats.roadStripe);
+      stripeEW.rotation.set(-Math.PI / 2 + slopes.pitch, 0, slopes.roll);
+      stripeEW.position.set(-96 + s, getSurfaceHeightAt(-96 + s, rz + 5.1) + 0.182, rz + 5.1);
+      group.add(stripeEW);
+
+      const stripeNS = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 0.55), mats.roadStripe);
+      stripeNS.rotation.set(-Math.PI / 2 + slopes.pitch, 0, slopes.roll);
+      stripeNS.position.set(-96 + 5.1, getSurfaceHeightAt(-96 + 5.1, rz + s) + 0.182, rz + s);
+      group.add(stripeNS);
+    }
+  });
+
   ROAD_X_COORDS.forEach((rx) => {
     const isSevgiYolu = rx === -18;
     const curb = new THREE.Mesh(
@@ -847,6 +913,9 @@ export function buildEfelerCity(
   const lokmaStand = createBeyCamiiLokmaStand(mats, colliders);
   group.add(lokmaStand.group);
 
+  const parkGuitarBand = createParkGuitarYouthGroup(mats, colliders);
+  group.add(parkGuitarBand.group);
+
   const buildingNpcs = createBuildingNpcSystem(mats, colliders);
   group.add(buildingNpcs.group);
 
@@ -913,6 +982,7 @@ export function buildEfelerCity(
     musicians.clickTarget,
     libraryVendor.clickTarget,
     lokmaStand.clickTarget,
+    parkGuitarBand.clickTarget,
     ...buildingNpcs.clickTargets,
   ];
 
@@ -1026,7 +1096,6 @@ export function buildEfelerCity(
     [-34, 64, 7.2, 5.8],
     [-44, 64, 6.4, 5.4],
     [28, 64, 6.6, 5.6],
-    [-70, 58, 6.4, 5.4],
     [70, 58, 6.4, 5.4],
   ];
 
@@ -1078,17 +1147,23 @@ export function buildEfelerCity(
     }
     if (avoidMeydan && Math.abs(x) < 14.0 && z > -16.6 && z < 28.6) return false;
     if (Math.abs(x + 132) < 12.2 && Math.abs(z + 40) < 12.2) return false;
+    if (Math.abs(x + 118) < 15.5 && Math.abs(z - 30) < 13.5) return false;
+    if (Math.abs(x + 74) < 14.5 && Math.abs(z - 61) < 9.5) return false;
+    if (Math.abs(x + 96) < 4.5 + clearance && z > -27 && z < 54) return false;
+    if (x < -94 && (Math.abs(z - 12) < 4.5 + clearance || Math.abs(z - 48) < 4.5 + clearance)) {
+      return false;
+    }
     if (overlapsAny(x, z, clearance * 2, clearance * 2, colliders, 0.7)) return false;
     return true;
   };
 
   // 10a. Washingtonia Palm Trees aligned symmetrically along Boulevard Sidewalks
   const rawPalms: [number, number][] = [];
-  const meydanRowX = [-82, -72, -63, -45, -36, -27, 27, 36, 44, 65, 74, 84];
+  const meydanRowX = [-128, -116, -104, -82, -72, -63, -45, -36, -27, 27, 36, 44, 65, 74, 84];
   meydanRowX.forEach((px) => {
     rawPalms.push([px, 6.0], [px, 18.0]);
   });
-  [-80, -68, -45, -31, 31, 43, 68, 80].forEach((px) => {
+  [-128, -114, -104, -80, -68, -45, -31, 31, 43, 68, 80].forEach((px) => {
     rawPalms.push([px, 42.0]);
   });
   [27, 36, 65, 74, 84].forEach((px) => {
@@ -1293,7 +1368,9 @@ export function buildEfelerCity(
     [76, getTerrainHeightAt(76, -40) + 3.4, -40 + 4.8], // Orta Mahalle asma çardağı
     [-54, getTerrainHeightAt(-54, 48) + 9.2, 49.5], // Tarihi Tren Garı çatısı
     [82, getTerrainHeightAt(82, -80) + 10.1, -74.2], // ADÜ Kütüphane kubbesi
-    [-132, getTerrainHeightAt(-132, -45.7) + 8.9, -45.7] // Magnesia Artemis Tapınağı alınlığı
+    [-132, getTerrainHeightAt(-132, -45.7) + 8.9, -45.7], // Magnesia Artemis Tapınağı alınlığı
+    [-104.4, getTerrainHeightAt(-118, 30) + 4.4, 30.4], // Nevzat Biçer Parkı Giriş Takı
+    [-74, getTerrainHeightAt(-74, 61) + 7.2, 63.8] // Aydın Kipa AVM çatısı
   );
   const magY = getTerrainHeightAt(-132, -40);
   perches.addStaticSegment(
@@ -1395,6 +1472,7 @@ export function buildEfelerCity(
     musicians,
     libraryVendor,
     lokmaStand,
+    parkGuitarBand,
     buildingNpcs,
     foliage,
     homeRingMesh,
@@ -1420,134 +1498,155 @@ export function buildEfelerCity(
         hz - builtHome.chimneyTopLocal[0],
       ];
     },
-    update: (dt: number, elapsed: number) => {
-      steamTrain.update(dt, elapsed);
-      ambientTraffic.update(dt, elapsed);
-      waterWheelPivot.rotation.x -= dt * 1.15;
-      boatGroup.position.y = boatBaseY + Math.sin(elapsed * 1.5) * 0.04;
-      boatGroup.rotation.z = Math.sin(elapsed * 1.1) * 0.03;
+    update: (() => {
+      let cityFxAccum = 0.032;
+      return (dt: number, elapsed: number) => {
+        steamTrain.update(dt, elapsed);
+        ambientTraffic.update(dt, elapsed);
+        waterWheelPivot.rotation.x -= dt * 1.15;
+        boatGroup.position.y = boatBaseY + Math.sin(elapsed * 1.5) * 0.04;
+        boatGroup.rotation.z = Math.sin(elapsed * 1.1) * 0.03;
 
-      for (let i = 0; i < smokeCount; i++) {
-        const origin = chimneyOrigins[Math.floor(i / 2)];
-        const phase = (elapsed * 0.45 + i * 0.37) % 1;
-        smokeDummy.position.set(
-          origin[0] + Math.sin(elapsed * 1.2 + i) * 0.25 + phase * 0.8,
-          origin[1] + phase * 2.8,
-          origin[2] + phase * 0.35
+        cityFxAccum += dt;
+        if (cityFxAccum >= 0.032) {
+          cityFxAccum = 0;
+          for (let i = 0; i < smokeCount; i++) {
+            const origin = chimneyOrigins[Math.floor(i / 2)];
+            const phase = (elapsed * 0.45 + i * 0.37) % 1;
+            smokeDummy.position.set(
+              origin[0] + Math.sin(elapsed * 1.2 + i) * 0.25 + phase * 0.8,
+              origin[1] + phase * 2.8,
+              origin[2] + phase * 0.35
+            );
+            const s = (0.55 + phase * 1.15) * (1 - phase * 0.45);
+            smokeDummy.scale.setScalar(Math.max(0.05, s));
+            smokeDummy.updateMatrix();
+            smokeMesh.setMatrixAt(i, smokeDummy.matrix);
+          }
+          smokeMesh.instanceMatrix.needsUpdate = true;
+
+          for (let i = 0; i < birdCount; i++) {
+            const c = birdCenters[i % birdCenters.length];
+            const ang = elapsed * 0.35 + i * 1.7;
+            const rad = 7.5 + (i % 3) * 3.2;
+            birdDummy.position.set(
+              c[0] + Math.cos(ang) * rad,
+              c[1] + Math.sin(elapsed * 2.2 + i) * 0.55,
+              c[2] + Math.sin(ang) * rad
+            );
+            birdDummy.rotation.set(0, -ang, Math.sin(elapsed * 7 + i) * 0.28);
+            birdDummy.scale.setScalar(1);
+            birdDummy.updateMatrix();
+            birdInst.setMatrixAt(i, birdDummy.matrix);
+          }
+          birdInst.instanceMatrix.needsUpdate = true;
+        }
+      };
+    })(),
+    updateAtmosphere: (() => {
+      let lastAtmosKey = '';
+      let atmosSettleTimer = 4.0;
+      return (dt: number, elapsed: number, state: SeasonalAtmosphereState) => {
+        foliage.update(dt, elapsed, state);
+
+        const atmosKey = `${state.season}|${Math.round(state.frostFactor * 40)}|${Math.round(state.wetFactor * 40)}`;
+        if (atmosKey !== lastAtmosKey) {
+          lastAtmosKey = atmosKey;
+          atmosSettleTimer = 3.5;
+        } else {
+          atmosSettleTimer = Math.max(0, atmosSettleTimer - dt);
+        }
+
+        if (atmosSettleTimer <= 0) return;
+
+        const lerpRate = Math.min(1, dt * 1.4);
+        const snowTintT = THREE.MathUtils.clamp(
+          Math.max(state.season === 'winter' ? 0.65 : 0, state.frostFactor),
+          0,
+          1
         );
-        const s = (0.55 + phase * 1.15) * (1 - phase * 0.45);
-        smokeDummy.scale.setScalar(Math.max(0.05, s));
-        smokeDummy.updateMatrix();
-        smokeMesh.setMatrixAt(i, smokeDummy.matrix);
-      }
-      smokeMesh.instanceMatrix.needsUpdate = true;
 
-      for (let i = 0; i < birdCount; i++) {
-        const c = birdCenters[i % birdCenters.length];
-        const ang = elapsed * 0.35 + i * 1.7;
-        const rad = 7.5 + (i % 3) * 3.2;
-        birdDummy.position.set(
-          c[0] + Math.cos(ang) * rad,
-          c[1] + Math.sin(elapsed * 2.2 + i) * 0.55,
-          c[2] + Math.sin(ang) * rad
+        // Grass, Urban Turf & Horizon Hills shift gradually across seasons + snow
+        _targetColor
+          .copy(state.season === 'spring' ? _springGrassTint : state.season === 'autumn' ? _autumnGrassTint : _whiteTint)
+          .lerp(_snowSurfaceTint, snowTintT * 0.85);
+        terrainMat.color.lerp(_targetColor, lerpRate);
+
+        _targetColor
+          .copy(state.season === 'spring' ? _turfSpring : state.season === 'autumn' ? _turfAutumn : _turfSummer)
+          .lerp(_turfWinter, snowTintT * 0.86);
+        blockTurfMat.color.lerp(_targetColor, lerpRate);
+
+        _targetColor
+          .copy(state.season === 'spring' ? _yardSpring : state.season === 'autumn' ? _yardAutumn : _yardSummer)
+          .lerp(_turfWinter, snowTintT * 0.88);
+        yardLawnMat.color.lerp(_targetColor, lerpRate);
+
+        _targetColor
+          .copy(state.season === 'autumn' ? _hillAutumn : _hillBase)
+          .lerp(_hillWinter, snowTintT * 0.84);
+        hillMat.color.lerp(_targetColor, lerpRate);
+
+        // Townhouse Window Flower Boxes respond to season
+        _targetColor.copy(
+          state.season === 'spring'
+            ? _blossomSpring
+            : state.season === 'autumn'
+              ? _blossomAutumn
+              : state.season === 'winter'
+                ? _blossomWinter
+                : _blossomSummer
         );
-        birdDummy.rotation.set(0, -ang, Math.sin(elapsed * 7 + i) * 0.28);
-        birdDummy.scale.setScalar(1);
-        birdDummy.updateMatrix();
-        birdInst.setMatrixAt(i, birdDummy.matrix);
-      }
-      birdInst.instanceMatrix.needsUpdate = true;
-    },
-    updateAtmosphere: (dt: number, elapsed: number, state: SeasonalAtmosphereState) => {
-      foliage.update(dt, elapsed, state);
+        if (state.frostFactor > 0.1) _targetColor.lerp(_blossomWinter, state.frostFactor * 0.7);
+        blossomMat.color.lerp(_targetColor, lerpRate);
 
-      const lerpRate = Math.min(1, dt * 1.4);
-      const snowTintT = THREE.MathUtils.clamp(
-        Math.max(state.season === 'winter' ? 0.65 : 0, state.frostFactor),
-        0,
-        1
-      );
+        // Diorama Roofs catch winter frost/snow & rain wet sheen
+        _targetColor.copy(_whiteTint).lerp(_terracottaSnowTint, snowTintT * 0.68);
+        mats.terracottaRoof.color.lerp(_targetColor, lerpRate);
+        _targetColor.copy(_whiteTint).lerp(_slateSnowTint, snowTintT * 0.65);
+        mats.slateRoof.color.lerp(_targetColor, lerpRate);
+        _targetColor.copy(_whiteTint).lerp(_blueSnowTint, snowTintT * 0.65);
+        mats.aegeanBlueRoof.color.lerp(_targetColor, lerpRate);
 
-      // Grass, Urban Turf & Horizon Hills shift gradually across seasons + snow
-      _targetColor
-        .copy(state.season === 'spring' ? _springGrassTint : state.season === 'autumn' ? _autumnGrassTint : _whiteTint)
-        .lerp(_snowSurfaceTint, snowTintT * 0.85);
-      terrainMat.color.lerp(_targetColor, lerpRate);
-
-      _targetColor
-        .copy(state.season === 'spring' ? _turfSpring : state.season === 'autumn' ? _turfAutumn : _turfSummer)
-        .lerp(_turfWinter, snowTintT * 0.86);
-      blockTurfMat.color.lerp(_targetColor, lerpRate);
-
-      _targetColor
-        .copy(state.season === 'spring' ? _yardSpring : state.season === 'autumn' ? _yardAutumn : _yardSummer)
-        .lerp(_turfWinter, snowTintT * 0.88);
-      yardLawnMat.color.lerp(_targetColor, lerpRate);
-
-      _targetColor
-        .copy(state.season === 'autumn' ? _hillAutumn : _hillBase)
-        .lerp(_hillWinter, snowTintT * 0.84);
-      hillMat.color.lerp(_targetColor, lerpRate);
-
-      // Townhouse Window Flower Boxes respond to season
-      _targetColor.copy(
-        state.season === 'spring'
-          ? _blossomSpring
-          : state.season === 'autumn'
-            ? _blossomAutumn
-            : state.season === 'winter'
-              ? _blossomWinter
-              : _blossomSummer
-      );
-      if (state.frostFactor > 0.1) _targetColor.lerp(_blossomWinter, state.frostFactor * 0.7);
-      blossomMat.color.lerp(_targetColor, lerpRate);
-
-      // Diorama Roofs catch winter frost/snow & rain wet sheen
-      _targetColor.copy(_whiteTint).lerp(_terracottaSnowTint, snowTintT * 0.68);
-      mats.terracottaRoof.color.lerp(_targetColor, lerpRate);
-      _targetColor.copy(_whiteTint).lerp(_slateSnowTint, snowTintT * 0.65);
-      mats.slateRoof.color.lerp(_targetColor, lerpRate);
-      _targetColor.copy(_whiteTint).lerp(_blueSnowTint, snowTintT * 0.65);
-      mats.aegeanBlueRoof.color.lerp(_targetColor, lerpRate);
-
-      const wetGlossDrop = state.wetFactor * 0.34;
-      mats.terracottaRoof.roughness = THREE.MathUtils.damp(
-        mats.terracottaRoof.roughness,
-        0.74 - wetGlossDrop,
-        2.5,
-        dt
-      );
-      mats.slateRoof.roughness = THREE.MathUtils.damp(
-        mats.slateRoof.roughness,
-        0.66 - wetGlossDrop,
-        2.5,
-        dt
-      );
-      mats.aegeanBlueRoof.roughness = THREE.MathUtils.damp(
-        mats.aegeanBlueRoof.roughness,
-        0.62 - wetGlossDrop,
-        2.5,
-        dt
-      );
-      mats.asphalt.roughness = THREE.MathUtils.damp(
-        mats.asphalt.roughness,
-        0.88 - state.wetFactor * 0.42,
-        2.5,
-        dt
-      );
-      mats.cobble.roughness = THREE.MathUtils.damp(
-        mats.cobble.roughness,
-        0.84 - state.wetFactor * 0.36,
-        2.5,
-        dt
-      );
-      mats.sidewalk.roughness = THREE.MathUtils.damp(
-        mats.sidewalk.roughness,
-        0.84 - state.wetFactor * 0.32,
-        2.5,
-        dt
-      );
-    },
+        const wetGlossDrop = state.wetFactor * 0.34;
+        mats.terracottaRoof.roughness = THREE.MathUtils.damp(
+          mats.terracottaRoof.roughness,
+          0.74 - wetGlossDrop,
+          2.5,
+          dt
+        );
+        mats.slateRoof.roughness = THREE.MathUtils.damp(
+          mats.slateRoof.roughness,
+          0.66 - wetGlossDrop,
+          2.5,
+          dt
+        );
+        mats.aegeanBlueRoof.roughness = THREE.MathUtils.damp(
+          mats.aegeanBlueRoof.roughness,
+          0.62 - wetGlossDrop,
+          2.5,
+          dt
+        );
+        mats.asphalt.roughness = THREE.MathUtils.damp(
+          mats.asphalt.roughness,
+          0.88 - state.wetFactor * 0.42,
+          2.5,
+          dt
+        );
+        mats.cobble.roughness = THREE.MathUtils.damp(
+          mats.cobble.roughness,
+          0.84 - state.wetFactor * 0.36,
+          2.5,
+          dt
+        );
+        mats.sidewalk.roughness = THREE.MathUtils.damp(
+          mats.sidewalk.roughness,
+          0.84 - state.wetFactor * 0.32,
+          2.5,
+          dt
+        );
+      };
+    })(),
     dispose: () => {
       group.traverse((obj) => {
         if ((obj as THREE.Mesh).isMesh) {

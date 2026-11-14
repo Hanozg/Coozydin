@@ -38,11 +38,12 @@ function avatarConfigToAppearance(cfg: AvatarConfig): SculptedHumanAppearance {
 
 function npcDefToAppearance(def: BuildingNpcDef): SculptedHumanAppearance {
   const hairStyle =
-    def.hatStyle === 'headscarf'
+    def.hairStyle ??
+    (def.hatStyle === 'headscarf'
       ? 'bun'
       : def.id.includes('zeynep') || def.id.includes('elif') || def.id.includes('ayse')
         ? 'waves'
-        : 'short';
+        : 'short');
   const hatStyle =
     def.hatStyle === 'cap'
       ? 'newsboy'
@@ -57,13 +58,16 @@ function npcDefToAppearance(def: BuildingNpcDef): SculptedHumanAppearance {
     def.propType === 'keskek_pot' ||
     def.propType === 'coffee_tray';
   return {
-    skinHex: 0xe3b690,
+    skinHex: hexToNum(def.skinColor ?? '#E8BC98'),
     shirtHex: hexToNum(def.shirtColor),
     pantsHex: hexToNum(def.pantsColor),
-    hairHex: hexToNum(def.hatColor),
+    hairHex: hexToNum(def.hairColor ?? '#3B281E'),
     scarfHex: SPARROW_PALETTE.wallCreamTrim,
+    hatHex: hexToNum(def.hatColor),
     hairStyle,
     hatStyle,
+    facialHair: def.facialHair ?? 'none',
+    glasses: Boolean(def.glasses),
     apron,
   };
 }
@@ -404,18 +408,40 @@ export function createBuildingNpcSystem(
     });
   });
 
+  let frameCounter = 0;
+
   return {
     group,
     clickTargets,
     npcs,
     update: (dt: number, elapsed: number, playerX: number, playerZ: number) => {
-      for (const npc of npcs) {
-        const dist = Math.hypot(playerX - npc.def.position[0], playerZ - npc.def.position[1]);
-        const near = dist < 7.5;
-        npc.rig.updateWave(near, dt, elapsed, npc.def.position[0]);
-        npc.ringMesh.scale.setScalar(
-          near ? 1.18 + Math.sin(elapsed * 4.5) * 0.1 : 1.0 + Math.sin(elapsed * 2.2) * 0.05
-        );
+      frameCounter += 1;
+      for (let idx = 0; idx < npcs.length; idx++) {
+        const npc = npcs[idx];
+        const dx = playerX - npc.def.position[0];
+        const dz = playerZ - npc.def.position[1];
+        const distSq = dx * dx + dz * dz;
+        const near = distSq < 60.84; // 7.8^2
+
+        if (distSq <= 3600) {
+          let lookYaw: number | undefined;
+          if (distSq < 81 && distSq > 0.04) {
+            const worldAngleToPlayer = Math.atan2(dx, dz);
+            let rel = worldAngleToPlayer - npc.def.facingRad;
+            while (rel > Math.PI) rel -= Math.PI * 2;
+            while (rel < -Math.PI) rel += Math.PI * 2;
+            lookYaw = rel;
+          }
+          npc.rig.updateWave(near, dt, elapsed, npc.def.position[0], lookYaw);
+        } else if ((frameCounter + idx) % 8 === 0) {
+          npc.rig.updateWave(false, Math.min(0.1, dt * 8), elapsed, npc.def.position[0], undefined);
+        }
+
+        if (distSq <= 5625) {
+          npc.ringMesh.scale.setScalar(
+            near ? 1.18 + Math.sin(elapsed * 4.5) * 0.1 : 1.0 + Math.sin(elapsed * 2.2) * 0.05
+          );
+        }
       }
     },
   };

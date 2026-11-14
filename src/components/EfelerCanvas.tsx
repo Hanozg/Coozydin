@@ -181,6 +181,12 @@ function resolveLocationLabels(x: number, z: number): { district: string; street
     bestStreet = 'Magnesia Antik Yolu';
   } else if (Math.abs(x + 132) < 15 && Math.abs(z + 40) < 15) {
     bestStreet = 'Magnesia Artemis Tapınağı';
+  } else if (Math.abs(x + 118) < 16 && Math.abs(z - 30) < 14) {
+    bestStreet = 'Nevzat Biçer Parkı';
+  } else if (Math.abs(x + 74) < 15 && Math.abs(z - 61) < 10) {
+    bestStreet = 'Kipa AVM · İstasyon Blv.';
+  } else if (Math.abs(x + 96) < 7.5 && z > -26 && z < 54) {
+    bestStreet = 'Cumhuriyet & Körfez Cd.';
   }
 
   return { district, street: bestStreet };
@@ -379,10 +385,11 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       triggerMusicians: () => void;
       triggerLokma: () => void;
       triggerVendor: () => void;
+      triggerGuitarBand: () => void;
     } | null>(null);
 
     const performDiscover = () => {
-      // Priority 1: Specific street interaction (Zeybek musicians, Bey Camii Lokma, Vendor)
+      // Priority 1: Specific street interaction (Zeybek musicians, Bey Camii Lokma, Vendor, Park Guitar Band)
       const streetInt = simRef.current.nearbyStreetInteraction;
       if (streetInt && streetTriggersRef.current) {
         if (streetInt.type === 'musicians') {
@@ -395,6 +402,10 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         }
         if (streetInt.type === 'vendor') {
           streetTriggersRef.current.triggerVendor();
+          return;
+        }
+        if (streetInt.type === 'guitar_band') {
+          streetTriggersRef.current.triggerGuitarBand();
           return;
         }
       }
@@ -543,7 +554,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.18;
-      const maxDpr = isSoftwareGl ? 1 : isTouchDevice ? 1.35 : 2;
+      const maxDpr = isSoftwareGl ? 1 : isTouchDevice ? 1.2 : 1.5;
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
       renderer.shadowMap.enabled = !isSoftwareGl;
       renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -624,19 +635,20 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       );
       sunLight.position.set(...initialMood.sunPosition);
       sunLight.castShadow = !isSoftwareGl;
-      const shadowRes = isTouchDevice ? 1024 : 1536;
+      const shadowRes = isTouchDevice ? 768 : 1024;
       sunLight.shadow.mapSize.width = shadowRes;
       sunLight.shadow.mapSize.height = shadowRes;
       sunLight.shadow.camera.near = 5;
       sunLight.shadow.camera.far = 210;
-      const d = isTouchDevice ? 34 : 42;
+      const d = isTouchDevice ? 28 : 34;
       sunLight.shadow.camera.left = -d;
       sunLight.shadow.camera.right = d;
       sunLight.shadow.camera.top = d;
       sunLight.shadow.camera.bottom = -d;
       sunLight.shadow.bias = -0.0004;
       sunLight.shadow.normalBias = 0.02;
-      sunLight.shadow.radius = isTouchDevice ? 1.4 : 2.0;
+      sunLight.shadow.radius = isTouchDevice ? 1.0 : 1.3;
+      const shadowTexel = (2 * d) / shadowRes;
       scene.add(sunLight);
       scene.add(sunLight.target);
 
@@ -680,6 +692,11 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           city.libraryVendor.triggerBubble();
           audioEngine.playVendorCallout();
           callbacksRef.current.onStreetEvent('vendor');
+        },
+        triggerGuitarBand: () => {
+          city.parkGuitarBand.triggerJam();
+          audioEngine.playParkGuitarJam(12.0);
+          callbacksRef.current.onStreetEvent('guitar_band');
         },
       };
 
@@ -884,6 +901,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
             if (type === 'musicians') streetTriggersRef.current.triggerMusicians();
             else if (type === 'lokma') streetTriggersRef.current.triggerLokma();
             else if (type === 'vendor') streetTriggersRef.current.triggerVendor();
+            else if (type === 'guitar_band') streetTriggersRef.current.triggerGuitarBand();
           }
         }
       };
@@ -1254,11 +1272,12 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           lookX: _lookCurrent.x,
           lookZ: _lookCurrent.z,
         });
-        city.pedestrians.update(dt, elapsed);
+        city.pedestrians.update(dt, elapsed, _lookCurrent.x, _lookCurrent.z);
         city.trafficLights.update(elapsed);
-        city.musicians.update(dt, elapsed);
+        city.musicians.update(dt, elapsed, simRef.current.x, simRef.current.z);
         city.libraryVendor.update(dt, elapsed);
-        city.lokmaStand.update(dt, elapsed);
+        city.lokmaStand.update(dt, elapsed, simRef.current.x, simRef.current.z);
+        city.parkGuitarBand.update(dt, elapsed, simRef.current.x, simRef.current.z);
         city.buildingNpcs.update(dt, elapsed, simRef.current.x, simRef.current.z);
 
         const bubbleNow = city.libraryVendor.isBubbleVisible();
@@ -1705,31 +1724,47 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
             p.vz = (Math.random() - 0.5) * 0.6;
           }
         }
+        let anyParticleActive = false;
         for (let i = 0; i < particleCount; i++) {
-          const p = particles[i];
-          if (!p.active) {
-            pDummy.position.set(0, -10, 0);
-            pDummy.scale.setScalar(0.01);
-          } else {
-            p.life += dt;
-            if (p.life >= p.maxLife) {
-              p.active = false;
+          if (particles[i].active) {
+            anyParticleActive = true;
+            break;
+          }
+        }
+        if (!anyParticleActive) {
+          if (particleMesh.visible) {
+            particleMesh.visible = false;
+          }
+        } else {
+          if (!particleMesh.visible) {
+            particleMesh.visible = true;
+          }
+          for (let i = 0; i < particleCount; i++) {
+            const p = particles[i];
+            if (!p.active) {
               pDummy.position.set(0, -10, 0);
               pDummy.scale.setScalar(0.01);
             } else {
-              p.x += p.vx * dt;
-              p.y += p.vy * dt;
-              p.z += p.vz * dt;
-              const t = p.life / p.maxLife;
-              const s = (1 - t) * 0.85;
-              pDummy.position.set(p.x, p.y, p.z);
-              pDummy.scale.setScalar(Math.max(0.01, s));
+              p.life += dt;
+              if (p.life >= p.maxLife) {
+                p.active = false;
+                pDummy.position.set(0, -10, 0);
+                pDummy.scale.setScalar(0.01);
+              } else {
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.z += p.vz * dt;
+                const t = p.life / p.maxLife;
+                const s = (1 - t) * 0.85;
+                pDummy.position.set(p.x, p.y, p.z);
+                pDummy.scale.setScalar(Math.max(0.01, s));
+              }
             }
+            pDummy.updateMatrix();
+            particleMesh.setMatrixAt(i, pDummy.matrix);
           }
-          pDummy.updateMatrix();
-          particleMesh.setMatrixAt(i, pDummy.matrix);
+          particleMesh.instanceMatrix.needsUpdate = true;
         }
-        particleMesh.instanceMatrix.needsUpdate = true;
 
         let closestLm: LandmarkDef | null = null;
         let closestDist = Infinity;
@@ -1754,23 +1789,34 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
               ? activeErrandRef.current.toLandmarkId === blm.def.id
               : activeErrandRef.current.fromLandmarkId === blm.def.id);
 
-          const scalePulse = isErrandTarget
-            ? 1.15 + Math.sin(elapsed * 3.5) * 0.14
-            : 1.0 + Math.sin(elapsed * 2.2) * 0.06;
-          blm.ringMesh.scale.setScalar(scalePulse);
-          const ringMat = blm.ringMesh.material as THREE.MeshStandardMaterial;
-          if (isErrandTarget) {
-            ringMat.color.setHex(0x61b88a);
-            ringMat.emissive.setHex(0x4ba877);
-            ringMat.emissiveIntensity = 1.0;
-          } else if (isDiscovered) {
-            ringMat.color.setHex(0x9ab091);
-            ringMat.emissive.setHex(0x6b8462);
-            ringMat.emissiveIntensity = 0.25;
-          } else {
-            ringMat.color.setHex(0xe3a84f);
-            ringMat.emissive.setHex(0xe3a84f);
-            ringMat.emissiveIntensity = 0.72;
+          if (effDist <= 75) {
+            const scalePulse = isErrandTarget
+              ? 1.15 + Math.sin(elapsed * 3.5) * 0.14
+              : 1.0 + Math.sin(elapsed * 2.2) * 0.06;
+            blm.ringMesh.scale.setScalar(scalePulse);
+          }
+
+          const visualState = isErrandTarget
+            ? 'errand'
+            : isDiscovered
+              ? 'discovered'
+              : 'undiscovered';
+          if (blm.ringMesh.userData.lastVisualState !== visualState) {
+            blm.ringMesh.userData.lastVisualState = visualState;
+            const ringMat = blm.ringMesh.material as THREE.MeshStandardMaterial;
+            if (visualState === 'errand') {
+              ringMat.color.setHex(0x61b88a);
+              ringMat.emissive.setHex(0x4ba877);
+              ringMat.emissiveIntensity = 1.0;
+            } else if (visualState === 'discovered') {
+              ringMat.color.setHex(0x9ab091);
+              ringMat.emissive.setHex(0x6b8462);
+              ringMat.emissiveIntensity = 0.25;
+            } else {
+              ringMat.color.setHex(0xe3a84f);
+              ringMat.emissive.setHex(0xe3a84f);
+              ringMat.emissiveIntensity = 0.72;
+            }
           }
         }
         sim.nearbyLandmark = closestLm;
@@ -1800,6 +1846,10 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           sim.x - city.libraryVendor.vendorPos[0],
           sim.z - city.libraryVendor.vendorPos[1]
         );
+        const dGuitarBand = Math.hypot(
+          sim.x - city.parkGuitarBand.center[0],
+          sim.z - city.parkGuitarBand.center[1]
+        );
 
         if (dMusicians < 8.5) {
           streetInt = {
@@ -1817,6 +1867,13 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           streetInt = {
             type: 'vendor',
             label: 'Kütüphane Önü Mendil & Lif Satıcısıyla Konuş (Tıkla veya E)',
+          };
+        } else if (dGuitarBand < 8.5) {
+          streetInt = {
+            type: 'guitar_band',
+            label: city.parkGuitarBand.isPlaying()
+              ? 'Gençler Parkta Akustik Gitar Çalıyor!'
+              : 'Nevzat Biçer Parkı Gençleri — Akustik Gitar Dinle (Tıkla veya E)',
           };
         }
         sim.nearbyStreetInteraction = streetInt;
@@ -2016,15 +2073,17 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           camera.updateProjectionMatrix();
         }
 
-        sunLight.target.position.copy(_lookCurrent);
+        const snapSunX = Math.round(_lookCurrent.x / shadowTexel) * shadowTexel;
+        const snapSunZ = Math.round(_lookCurrent.z / shadowTexel) * shadowTexel;
+        sunLight.target.position.set(snapSunX, _lookCurrent.y, snapSunZ);
         sunLight.position.set(
-          _lookCurrent.x + sampledSolar.sunPos[0],
+          snapSunX + sampledSolar.sunPos[0],
           _lookCurrent.y + sampledSolar.sunPos[1],
-          _lookCurrent.z + sampledSolar.sunPos[2]
+          snapSunZ + sampledSolar.sunPos[2]
         );
 
         hudAccum += dt;
-        const hudInterval = city.libraryVendor.isBubbleVisible() ? 0.065 : 0.15;
+        const hudInterval = city.libraryVendor.isBubbleVisible() ? 0.085 : 0.18;
         if (hudAccum >= hudInterval) {
           hudAccum = 0;
           const loc = resolveLocationLabels(sim.x, sim.z);
@@ -2047,8 +2106,8 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
             _projVec.copy(city.libraryVendor.headWorldPos).project(activeCam);
             if (_projVec.z < 1 && Math.abs(_projVec.x) <= 1.05 && Math.abs(_projVec.y) <= 1.05) {
               vendorBubble = {
-                x: ((_projVec.x + 1) / 2) * container.clientWidth,
-                y: (-(_projVec.y - 1) / 2) * container.clientHeight,
+                x: Math.round(((_projVec.x + 1) / 2) * container.clientWidth),
+                y: Math.round((-((_projVec.y - 1) / 2)) * container.clientHeight),
                 visible: true,
                 text: 'Mendil yara bandı ıslak mendil lif ister misiniz ? buyrunnn',
               };
@@ -2140,8 +2199,9 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         data-weather={weather}
       >
         <div aria-hidden="true" className="absolute inset-0 pointer-events-none efeler-sky-backdrop" />
-        <div aria-hidden="true" className="absolute inset-0 pointer-events-none efeler-sky-stars" />
-        <div aria-hidden="true" className="absolute inset-0 pointer-events-none efeler-sky-sun-halo" />
+        {(timeOfDay === 'evening' || timeOfDay === 'golden') && (
+          <div aria-hidden="true" className="absolute inset-0 pointer-events-none efeler-sky-stars" />
+        )}
         <div ref={mountRef} className="relative w-full h-full efeler-canvas-stage" />
         <div aria-hidden="true" className="absolute inset-0 pointer-events-none efeler-lighting-overlay" />
         {contextLost && (

@@ -294,11 +294,13 @@ class CozyAudioEngine {
   private musicTimer: number | null = null;
   private thunderTimer: number | null = null;
   private zeybekTimers: number[] = [];
+  private guitarJamTimers: number[] = [];
   private step = 0;
   private isMuted = false;
   private musicEnabled = true;
   private sfxEnabled = true;
   private zeybekPlaying = false;
+  private guitarJamPlaying = false;
   private initialized = false;
   private audioUnlocked = false;
   private globalUnlockBound = false;
@@ -737,6 +739,7 @@ class CozyAudioEngine {
         this.musicEnabled &&
         !this.isMuted &&
         !this.zeybekPlaying &&
+        !this.guitarJamPlaying &&
         preset.musicActive
       ) {
         this.playMusicBeat(this.step, preset);
@@ -1167,6 +1170,110 @@ class CozyAudioEngine {
       this.zeybekPlaying = false;
     }, durationSec * 1000);
     this.zeybekTimers.push(endId);
+  }
+
+  public playParkGuitarJam(durationSec = 12.0) {
+    this.init();
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+
+    this.guitarJamTimers.forEach((t) => clearTimeout(t));
+    this.guitarJamTimers = [];
+    this.guitarJamPlaying = true;
+
+    const pluckAcousticString = (freq: number, startTime: number, dur: number, peak: number) => {
+      if (!this.ctx || !this.sfxGain) return;
+      const oscA = this.ctx.createOscillator();
+      oscA.type = 'triangle';
+      oscA.frequency.setValueAtTime(freq, startTime);
+
+      const oscB = this.ctx.createOscillator();
+      oscB.type = 'sine';
+      oscB.frequency.setValueAtTime(freq * 2, startTime);
+      const harmG = this.ctx.createGain();
+      harmG.gain.value = 0.22;
+
+      const bodyFilter = this.ctx.createBiquadFilter();
+      bodyFilter.type = 'lowpass';
+      bodyFilter.frequency.setValueAtTime(2400, startTime);
+      bodyFilter.frequency.exponentialRampToValueAtTime(420, startTime + Math.min(dur, 0.9));
+
+      const env = this.ctx.createGain();
+      env.gain.setValueAtTime(0.0001, startTime);
+      env.gain.linearRampToValueAtTime(peak, startTime + 0.012);
+      env.gain.exponentialRampToValueAtTime(0.0001, startTime + dur);
+
+      oscA.connect(bodyFilter);
+      oscB.connect(harmG);
+      harmG.connect(bodyFilter);
+      bodyFilter.connect(env);
+      env.connect(this.sfxGain);
+      if (this.reverbNode) env.connect(this.reverbNode);
+
+      oscA.start(startTime);
+      oscB.start(startTime);
+      oscA.stop(startTime + dur + 0.05);
+      oscB.stop(startTime + dur + 0.05);
+    };
+
+    const triggerCajonTap = (startTime: number, bass: boolean) => {
+      if (!this.ctx || !this.sfxGain) return;
+      const osc = this.ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(bass ? 95 : 185, startTime);
+      osc.frequency.exponentialRampToValueAtTime(bass ? 48 : 95, startTime + 0.09);
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.0001, startTime);
+      g.gain.linearRampToValueAtTime(bass ? 0.085 : 0.045, startTime + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.14);
+      osc.connect(g);
+      g.connect(this.sfxGain);
+      osc.start(startTime);
+      osc.stop(startTime + 0.16);
+    };
+
+    // Warm Aegean park acoustic progression: Em9 -> Cmaj7 -> G6 -> Dsus4
+    const guitarChords = [
+      [164.81, 246.94, 293.66, 369.99, 493.88], // Em9
+      [130.81, 196.0, 246.94, 329.63, 392.0], // Cmaj7
+      [196.0, 246.94, 293.66, 329.63, 392.0], // G6
+      [146.83, 220.0, 293.66, 369.99, 440.0], // Dadd4
+    ];
+    const fingerLead = [659.25, 587.33, 493.88, 587.33, 659.25, 739.99, 587.33, 493.88];
+
+    const scheduleBar = (barIdx: number, delayMs: number) => {
+      const id = window.setTimeout(() => {
+        if (!this.ctx || !this.sfxGain || this.isMuted) return;
+        const now = this.ctx.currentTime;
+        const chord = guitarChords[barIdx % guitarChords.length];
+
+        // Down-strum on beat 1 & light up-strum on beat 2.5
+        chord.forEach((f, si) => {
+          pluckAcousticString(f, now + si * 0.026, 1.45, 0.048);
+        });
+        chord.slice(1).forEach((f, si) => {
+          pluckAcousticString(f, now + 0.72 + (3 - si) * 0.022, 0.85, 0.032);
+        });
+        // Expressive fingerpicked acoustic melody notes
+        pluckAcousticString(fingerLead[(barIdx * 2) % fingerLead.length], now + 0.36, 0.9, 0.055);
+        pluckAcousticString(fingerLead[(barIdx * 2 + 1) % fingerLead.length], now + 1.08, 1.05, 0.058);
+
+        // Soft cajon pocket (bass-slap-bass-slap)
+        triggerCajonTap(now + 0.01, true);
+        triggerCajonTap(now + 0.38, false);
+        triggerCajonTap(now + 0.72, true);
+        triggerCajonTap(now + 1.1, false);
+      }, delayMs);
+      this.guitarJamTimers.push(id);
+    };
+
+    for (let b = 0; b < 8; b++) {
+      scheduleBar(b, b * 1450);
+    }
+
+    const endId = window.setTimeout(() => {
+      this.guitarJamPlaying = false;
+    }, durationSec * 1000);
+    this.guitarJamTimers.push(endId);
   }
 
   public playLokmaGain() {
@@ -1764,6 +1871,9 @@ class CozyAudioEngine {
     this.zeybekTimers.forEach((t) => clearTimeout(t));
     this.zeybekTimers = [];
     this.zeybekPlaying = false;
+    this.guitarJamTimers.forEach((t) => clearTimeout(t));
+    this.guitarJamTimers = [];
+    this.guitarJamPlaying = false;
     if (this.ctx) {
       void this.ctx.close();
       this.ctx = null;

@@ -396,7 +396,37 @@ export default function App() {
       z: snapshot.playerPos[1],
       heading: snapshot.headingRad,
     };
-    setHud(snapshot);
+    setHud((prev) => {
+      if (
+        prev.speedKmh === snapshot.speedKmh &&
+        prev.currentDistrict === snapshot.currentDistrict &&
+        prev.currentStreet === snapshot.currentStreet &&
+        prev.nearbyLandmark?.id === snapshot.nearbyLandmark?.id &&
+        prev.nearbyNpc?.id === snapshot.nearbyNpc?.id &&
+        prev.nearAncientSignpost === snapshot.nearAncientSignpost &&
+        prev.nearPlayerHome === snapshot.nearPlayerHome &&
+        prev.nearbyStreetInteraction?.type === snapshot.nearbyStreetInteraction?.type &&
+        prev.nearbyStreetInteraction?.label === snapshot.nearbyStreetInteraction?.label &&
+        prev.distanceToActiveErrand === snapshot.distanceToActiveErrand &&
+        prev.companionName === snapshot.companionName &&
+        prev.heldTreat === snapshot.heldTreat &&
+        prev.solarClock === snapshot.solarClock &&
+        prev.sparrowState === snapshot.sparrowState &&
+        Math.round((prev.sparrowStamina ?? 1) * 100) ===
+          Math.round((snapshot.sparrowStamina ?? 1) * 100) &&
+        prev.isDancingZeybek === snapshot.isDancingZeybek &&
+        Math.round(prev.playerPos[0] * 2) === Math.round(snapshot.playerPos[0] * 2) &&
+        Math.round(prev.playerPos[1] * 2) === Math.round(snapshot.playerPos[1] * 2) &&
+        Math.round(prev.headingRad * 10) === Math.round(snapshot.headingRad * 10) &&
+        prev.vendorBubble?.visible === snapshot.vendorBubble?.visible &&
+        prev.vendorBubble?.x === snapshot.vendorBubble?.x &&
+        prev.vendorBubble?.y === snapshot.vendorBubble?.y &&
+        prev.vendorBubble?.text === snapshot.vendorBubble?.text
+      ) {
+        return prev;
+      }
+      return snapshot;
+    });
   }, []);
 
   const showDiscoveryToast = useCallback((lm: LandmarkDef) => {
@@ -512,6 +542,10 @@ export default function App() {
         showErrandToast('Bey Camii önünden taze hayır lokması aldınız! +1 Lokma Puanı');
       } else if (type === 'vendor') {
         showErrandToast('“Mendil yara bandı ıslak mendil lif ister misiniz ? buyrunnn”');
+      } else if (type === 'guitar_band') {
+        showErrandToast(
+          'Nevzat Biçer Parkı’nda gençler akustik gitar çalıp eşlik ediyor — keyifli dinletiler!'
+        );
       }
     },
     [showErrandToast]
@@ -640,6 +674,14 @@ export default function App() {
       tx = lx;
       tz = lz + 15.0;
       heading = 0;
+    } else if (lm.id === 'nevzatbicerpark') {
+      tx = lx + 16.5;
+      tz = lz;
+      heading = Math.PI / 2;
+    } else if (lm.id === 'kipaavm') {
+      tx = lx;
+      tz = lz - 11.5;
+      heading = Math.PI;
     }
     canvasRef.current?.teleportTo(tx, tz, heading);
     setJournalOpen(false);

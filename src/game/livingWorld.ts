@@ -2,7 +2,12 @@ import * as THREE from 'three';
 import { ANCIENT_SIGNPOST_POSITIONS, LANDMARKS } from '../data/efelerData';
 import { ColliderBox, SeasonType } from '../types/game';
 import { CityMaterialLibrary } from './materials';
-import { createSculptedPedestrianGeos } from './sculptedHumans';
+import {
+  createArticulatedPedestrianGeos,
+  createSculptedHumanRig,
+  SCULPTED_HUMAN_SCALE,
+  SculptedHumanRig,
+} from './sculptedHumans';
 import { getWalkableSlopeAngles, getWalkableSurfaceHeightAt } from './terrain';
 
 /**
@@ -78,7 +83,7 @@ export function createLivingFigTree(mats: CityMaterialLibrary): LivingFigTree {
       color: leafColors[i % leafColors.length],
       roughness: 0.82,
     });
-    const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 2), leafMat);
+    const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), leafMat);
     puff.scale.set(1.18, 0.76, 1.18);
     puff.position.set(cx, cy, cz);
     puff.castShadow = true;
@@ -114,6 +119,8 @@ export function createLivingFigTree(mats: CityMaterialLibrary): LivingFigTree {
   const springPalette = [0x82b859, 0xf2afc4, 0x94c966, 0xf7c9d8, 0x76ad4f];
   const autumnPalette = [0xde802b, 0xebaa3a, 0xc75422, 0xe89731, 0xd46b28];
   const winterPalette = [0xcadbe6, 0xd8e6ef, 0xbccfd9, 0xe2eef5, 0xc4d6e0];
+  let figColorSettleTimer = 4.0;
+  let lastFigStateKey = '';
 
   return {
     group,
@@ -127,41 +134,52 @@ export function createLivingFigTree(mats: CityMaterialLibrary): LivingFigTree {
     ) => {
       // Smoothly grow from sapling (0.42) up to monumental fig tree (1.42) as coins reach 200+
       const targetScale = 0.42 + THREE.MathUtils.clamp(coins / 200, 0, 1) * 1.0;
-      currentScale = THREE.MathUtils.damp(currentScale, targetScale, 3.2, dt);
+      if (Math.abs(currentScale - targetScale) > 0.002) {
+        currentScale = THREE.MathUtils.damp(currentScale, targetScale, 3.2, dt);
+        treeScaleGroup.scale.setScalar(currentScale);
+      }
       const sway = Math.sin(elapsed * (1.1 + windStrength * 0.35)) * (0.012 * windStrength);
-      treeScaleGroup.scale.setScalar(currentScale);
       treeScaleGroup.rotation.z = sway;
 
-      // Update seasonal canopy color & winter sparseness
-      const canopyScaleTarget = season === 'winter' ? 0.38 : season === 'autumn' ? 0.94 : 1.0;
-      leafMeshes.forEach((mesh, idx) => {
-        const ls = THREE.MathUtils.damp(mesh.scale.x, 1.18 * canopyScaleTarget, 2.2, dt);
-        mesh.scale.set(ls, ls * 0.64, ls);
-        const targetHex =
-          season === 'spring'
-            ? springPalette[idx % springPalette.length]
-            : season === 'autumn'
-              ? autumnPalette[idx % autumnPalette.length]
-              : season === 'winter'
-                ? winterPalette[idx % winterPalette.length]
-                : leafColors[idx % leafColors.length];
-        _figTargetColor.setHex(targetHex);
-        if (frostFactor > 0.01) {
-          _figTargetColor.lerp(_figFrost, frostFactor * 0.52);
-        }
-        leafMats[idx].color.lerp(_figTargetColor, Math.min(1, dt * 1.6));
-      });
-      _figBaseColor.copy(_figBarkBase).lerp(_figBarkWinter, Math.max(season === 'winter' ? 0.5 : 0, frostFactor * 0.6));
-      barkMat.color.lerp(_figBaseColor, Math.min(1, dt * 2.0));
+      const stateKey = `${season}_${Math.round(frostFactor * 40)}_${Math.round(coins / 10)}`;
+      if (stateKey !== lastFigStateKey) {
+        lastFigStateKey = stateKey;
+        figColorSettleTimer = 4.5;
+      }
 
-      // Reveal figs gradually starting from 30 coins (hidden in winter)
-      const unlockedFigs =
-        season === 'winter' ? 0 : Math.floor(THREE.MathUtils.clamp((coins - 20) / 10, 0, 16));
-      figMeshes.forEach((fm, idx) => {
-        const target = idx < unlockedFigs ? 1 : 0.001;
-        const s = THREE.MathUtils.damp(fm.scale.x, target, 4, dt);
-        fm.scale.setScalar(s);
-      });
+      if (figColorSettleTimer > 0) {
+        figColorSettleTimer = Math.max(0, figColorSettleTimer - dt);
+        const canopyScaleTarget = season === 'winter' ? 0.38 : season === 'autumn' ? 0.94 : 1.0;
+        leafMeshes.forEach((mesh, idx) => {
+          const ls = THREE.MathUtils.damp(mesh.scale.x, 1.18 * canopyScaleTarget, 2.2, dt);
+          mesh.scale.set(ls, ls * 0.64, ls);
+          const targetHex =
+            season === 'spring'
+              ? springPalette[idx % springPalette.length]
+              : season === 'autumn'
+                ? autumnPalette[idx % autumnPalette.length]
+                : season === 'winter'
+                  ? winterPalette[idx % winterPalette.length]
+                  : leafColors[idx % leafColors.length];
+          _figTargetColor.setHex(targetHex);
+          if (frostFactor > 0.01) {
+            _figTargetColor.lerp(_figFrost, frostFactor * 0.52);
+          }
+          leafMats[idx].color.lerp(_figTargetColor, Math.min(1, dt * 1.6));
+        });
+        _figBaseColor
+          .copy(_figBarkBase)
+          .lerp(_figBarkWinter, Math.max(season === 'winter' ? 0.5 : 0, frostFactor * 0.6));
+        barkMat.color.lerp(_figBaseColor, Math.min(1, dt * 2.0));
+
+        const unlockedFigs =
+          season === 'winter' ? 0 : Math.floor(THREE.MathUtils.clamp((coins - 20) / 10, 0, 16));
+        figMeshes.forEach((fm, idx) => {
+          const target = idx < unlockedFigs ? 1 : 0.001;
+          const s = THREE.MathUtils.damp(fm.scale.x, target, 4, dt);
+          fm.scale.setScalar(s);
+        });
+      }
     },
   };
 }
@@ -187,37 +205,61 @@ interface WalkerAgent {
 
 export interface PedestrianSystem {
   group: THREE.Group;
-  update: (dt: number, elapsed: number) => void;
+  update: (dt: number, elapsed: number, focusX?: number, focusZ?: number) => void;
 }
 
 const CLOTHING_PALETTE = [
-  0xc95242, 0x4e688c, 0xc7953e, 0x587d63, 0xad535d, 0x424a59, 0x826ba6, 0x543622,
+  0xc95242, 0x4e688c, 0xc7953e, 0x587d63, 0xad535d, 0x424a59, 0x826ba6, 0x6b4b38, 0x3b6e8c,
+  0xd68c45, 0x4e7a6d, 0x7d4c5c,
 ];
+
+const PANTS_PALETTE = [0x2e3b46, 0x3c322a, 0x424a59, 0x465242, 0x353238, 0x574b40];
+const HEAD_SKIN_PALETTE = [0xebc29f, 0xf2ccb0, 0xdfb088, 0xd7a379];
 
 export function createPedestrianSystem(): PedestrianSystem {
   const group = new THREE.Group();
   const count = 64;
 
-  const { bodyGeo, headGeo } = createSculptedPedestrianGeos();
-  const bodyMat = new THREE.MeshStandardMaterial({
+  const { torsoGeo, legGeo, armGeo, handGeo, headGeos } = createArticulatedPedestrianGeos();
+  const sharedMat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     vertexColors: true,
     roughness: 0.82,
     metalness: 0.02,
   });
-  const bodyInst = new THREE.InstancedMesh(bodyGeo, bodyMat, count);
-  bodyInst.castShadow = false;
-  bodyInst.frustumCulled = false;
 
-  const headMat = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    vertexColors: true,
-    roughness: 0.8,
-    metalness: 0.02,
+  const torsoInst = new THREE.InstancedMesh(torsoGeo, sharedMat, count);
+  torsoInst.castShadow = false;
+  torsoInst.frustumCulled = false;
+
+  const legLInst = new THREE.InstancedMesh(legGeo, sharedMat, count);
+  legLInst.castShadow = false;
+  legLInst.frustumCulled = false;
+
+  const legRInst = new THREE.InstancedMesh(legGeo, sharedMat, count);
+  legRInst.castShadow = false;
+  legRInst.frustumCulled = false;
+
+  const armLInst = new THREE.InstancedMesh(armGeo, sharedMat, count);
+  armLInst.castShadow = false;
+  armLInst.frustumCulled = false;
+
+  const armRInst = new THREE.InstancedMesh(armGeo, sharedMat, count);
+  armRInst.castShadow = false;
+  armRInst.frustumCulled = false;
+
+  const handsInst = new THREE.InstancedMesh(handGeo, sharedMat, count * 2);
+  handsInst.castShadow = false;
+  handsInst.frustumCulled = false;
+
+  const variantCount = headGeos.length; // 4
+  const perVariant = count / variantCount; // 16
+  const headInsts = headGeos.map((geo) => {
+    const inst = new THREE.InstancedMesh(geo, sharedMat, perVariant);
+    inst.castShadow = false;
+    inst.frustumCulled = false;
+    return inst;
   });
-  const headInst = new THREE.InstancedMesh(headGeo, headMat, count);
-  headInst.castShadow = false;
-  headInst.frustumCulled = false;
 
   const colorTmp = new THREE.Color();
   const doorLandmarks = LANDMARKS.filter((l) => l.doorPosition);
@@ -233,7 +275,6 @@ export function createPedestrianSystem(): PedestrianSystem {
     for (let attempt = 0; attempt < 8; attempt++) {
       const px = (Math.random() - 0.5) * 21.6; // [-10.8, 10.8]
       const pz = 18.8 + Math.random() * 6.8; // [18.8, 25.6]
-      // Avoid Living Fig Tree ([0, 21.8]), Zeybek Musicians ([-8.2, 20.6]), Dondurmacı ([8.8, 22.8])
       if (
         Math.hypot(px, pz - 21.8) > 2.6 &&
         Math.hypot(px + 8.2, pz - 20.6) > 2.3 &&
@@ -272,8 +313,22 @@ export function createPedestrianSystem(): PedestrianSystem {
   const agents: WalkerAgent[] = [];
 
   for (let i = 0; i < count; i++) {
-    colorTmp.setHex(CLOTHING_PALETTE[i % CLOTHING_PALETTE.length]);
-    bodyInst.setColorAt(i, colorTmp);
+    const shirtHex = CLOTHING_PALETTE[i % CLOTHING_PALETTE.length];
+    const pantsHex = PANTS_PALETTE[(i * 3 + 1) % PANTS_PALETTE.length];
+    const skinHex = HEAD_SKIN_PALETTE[i % HEAD_SKIN_PALETTE.length];
+
+    colorTmp.setHex(shirtHex);
+    torsoInst.setColorAt(i, colorTmp);
+    armLInst.setColorAt(i, colorTmp);
+    armRInst.setColorAt(i, colorTmp);
+
+    colorTmp.setHex(pantsHex);
+    legLInst.setColorAt(i, colorTmp);
+    legRInst.setColorAt(i, colorTmp);
+
+    colorTmp.setHex(skinHex);
+    handsInst.setColorAt(i * 2, colorTmp);
+    handsInst.setColorAt(i * 2 + 1, colorTmp);
 
     const isPlaza = i < 34; // Dense lively crowd in Atatürk Kent Meydanı!
     if (isPlaza) {
@@ -320,21 +375,46 @@ export function createPedestrianSystem(): PedestrianSystem {
     }
   }
 
-  if (bodyInst.instanceColor) bodyInst.instanceColor.needsUpdate = true;
-  bodyInst.computeBoundingSphere();
-  headInst.computeBoundingSphere();
-  group.add(bodyInst, headInst);
+  [torsoInst, armLInst, armRInst, legLInst, legRInst, handsInst].forEach((inst) => {
+    if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+    inst.computeBoundingSphere();
+    group.add(inst);
+  });
+  headInsts.forEach((hInst) => {
+    hInst.computeBoundingSphere();
+    group.add(hInst);
+  });
 
-  const dummy = new THREE.Object3D();
+  const S = SCULPTED_HUMAN_SCALE;
+  const _rootMat = new THREE.Matrix4();
+  const _partMat = new THREE.Matrix4();
+  const _armWorldMat = new THREE.Matrix4();
+  const _handLocalMat = new THREE.Matrix4();
+  const _outMat = new THREE.Matrix4();
+  const _pos = new THREE.Vector3();
+  const _quat = new THREE.Quaternion();
+  const _euler = new THREE.Euler(0, 0, 0, 'YXZ');
+  const _scale = new THREE.Vector3(1, 1, 1);
+
+  _handLocalMat.makeTranslation(0, -2.42 * S, 0.3 * S);
+
+  let pedAccum = 0.04;
+  let pedStepCount = 0;
 
   return {
     group,
-    update: (dt: number, elapsed: number) => {
+    update: (dt: number, elapsed: number, focusX = 0, focusZ = 0) => {
+      pedAccum += dt;
+      if (pedAccum < 0.032) return;
+      const stepDt = pedAccum;
+      pedAccum = 0;
+      pedStepCount++;
+
       for (let i = 0; i < count; i++) {
         const a = agents[i];
 
         if (a.state === 'inside') {
-          a.timer -= dt;
+          a.timer -= stepDt;
           a.scale = 0.001;
           if (a.timer <= 0) {
             a.state = 'exiting';
@@ -343,13 +423,13 @@ export function createPedestrianSystem(): PedestrianSystem {
             a.targetZ = wp[1];
           }
         } else if (a.state === 'entering') {
-          a.scale = Math.max(0.001, a.scale - dt * 2.5);
+          a.scale = Math.max(0.001, a.scale - stepDt * 2.5);
           if (a.scale <= 0.02) {
             a.state = 'inside';
             a.timer = 2.5 + Math.random() * 3.5;
           }
         } else if (a.state === 'exiting') {
-          a.scale = Math.min(1, a.scale + dt * 2.5);
+          a.scale = Math.min(1, a.scale + stepDt * 2.5);
           if (a.scale >= 0.99) {
             a.scale = 1;
             a.state = 'walking';
@@ -362,8 +442,7 @@ export function createPedestrianSystem(): PedestrianSystem {
 
           if (dist < 0.6) {
             if (a.isPlazaWalker) {
-              // Pause briefly to admire Kent Meydanı, then pick another spot in the same walkable zone
-              a.timer -= dt;
+              a.timer -= stepDt;
               if (a.timer <= 0) {
                 const [nx, nz] = pickPlazaPoint(a.plazaZone);
                 a.targetX = nx;
@@ -371,11 +450,9 @@ export function createPedestrianSystem(): PedestrianSystem {
                 a.timer = 1.0 + Math.random() * 2.5;
               }
             } else if (a.doorId) {
-              // Entered a building door!
               a.state = 'entering';
               a.doorId = null;
             } else {
-              // Pick a building door to walk into
               const nextDoor =
                 doorLandmarks[Math.floor(Math.random() * doorLandmarks.length)];
               a.doorId = nextDoor.id;
@@ -383,27 +460,102 @@ export function createPedestrianSystem(): PedestrianSystem {
               a.targetZ = nextDoor.doorPosition![1];
             }
           } else {
-            const step = Math.min(dist, a.speed * dt);
+            const step = Math.min(dist, a.speed * stepDt);
             a.x += (dx / dist) * step;
             a.z += (dz / dist) * step;
-            a.groundY = getWalkableSurfaceHeightAt(a.x, a.z);
+            const dFocusSq = (a.x - focusX) * (a.x - focusX) + (a.z - focusZ) * (a.z - focusZ);
+            if (!a.isPlazaWalker && (dFocusSq < 5625 || (pedStepCount + i) % 4 === 0)) {
+              a.groundY = getWalkableSurfaceHeightAt(a.x, a.z);
+            }
           }
         }
 
         const isMoving =
           a.state === 'walking' && Math.hypot(a.targetX - a.x, a.targetZ - a.z) > 0.6;
-        const bob = isMoving ? Math.abs(Math.sin(elapsed * 6.5 + a.phaseOffset)) * 0.06 : 0;
+        const walkPhase = elapsed * (a.speed * 4.4) + a.phaseOffset;
+        const bob = isMoving ? Math.abs(Math.sin(walkPhase)) * 0.045 : 0;
+        const heightMod = 0.96 + ((i % 5) - 2) * 0.025;
+        const effScale = a.scale * heightMod;
+        const yaw = Math.atan2(a.targetX - a.x, a.targetZ - a.z);
 
-        dummy.position.set(a.x, a.groundY + bob, a.z);
-        dummy.scale.setScalar(a.scale * 1.12);
-        dummy.rotation.y = Math.atan2(a.targetX - a.x, a.targetZ - a.z);
-        dummy.updateMatrix();
-        bodyInst.setMatrixAt(i, dummy.matrix);
-        headInst.setMatrixAt(i, dummy.matrix);
+        // Root transform
+        _pos.set(a.x, a.groundY + bob, a.z);
+        _euler.set(0, yaw, 0);
+        _quat.setFromEuler(_euler);
+        _scale.set(effScale, effScale, effScale);
+        _rootMat.compose(_pos, _quat, _scale);
+
+        // Torso (subtle natural counter-twist while walking, breathing while standing)
+        const torsoYaw = isMoving ? Math.sin(walkPhase) * 0.065 : 0;
+        const breathY = isMoving ? 0 : Math.sin(elapsed * 2.1 + a.phaseOffset) * 0.008;
+        _pos.set(0, 4.95 * S + breathY, 0);
+        _euler.set(0, torsoYaw, 0);
+        _quat.setFromEuler(_euler);
+        _scale.set(1, 1, 1);
+        _partMat.compose(_pos, _quat, _scale);
+        _outMat.multiplyMatrices(_rootMat, _partMat);
+        torsoInst.setMatrixAt(i, _outMat);
+
+        // Head (looks smoothly around when paused, faces forward when walking)
+        const headLookY = isMoving
+          ? -torsoYaw * 0.5
+          : Math.sin(elapsed * 0.85 + a.phaseOffset) * 0.24;
+        const headNodX = isMoving ? 0 : Math.sin(elapsed * 1.4 + a.phaseOffset) * 0.04;
+        _pos.set(0, (4.95 + 3.48) * S + breathY, 0.04 * S);
+        _euler.set(headNodX, torsoYaw + headLookY, 0);
+        _quat.setFromEuler(_euler);
+        _partMat.compose(_pos, _quat, _scale);
+        _outMat.multiplyMatrices(_rootMat, _partMat);
+        const variantIdx = i % variantCount;
+        const slotIdx = (i / variantCount) | 0;
+        headInsts[variantIdx].setMatrixAt(slotIdx, _outMat);
+
+        // Left & Right Legs (hip-pivoted natural stride)
+        const legSwing = isMoving ? Math.sin(walkPhase) * 0.44 : 0;
+        _pos.set(-0.46 * S, 4.95 * S, 0);
+        _euler.set(legSwing, 0, 0);
+        _quat.setFromEuler(_euler);
+        _partMat.compose(_pos, _quat, _scale);
+        _outMat.multiplyMatrices(_rootMat, _partMat);
+        legLInst.setMatrixAt(i, _outMat);
+
+        _pos.set(0.46 * S, 4.95 * S, 0);
+        _euler.set(-legSwing, 0, 0);
+        _quat.setFromEuler(_euler);
+        _partMat.compose(_pos, _quat, _scale);
+        _outMat.multiplyMatrices(_rootMat, _partMat);
+        legRInst.setMatrixAt(i, _outMat);
+
+        // Left & Right Arms + Skin Hands attached at cuff
+        const armSwing = isMoving ? -Math.sin(walkPhase) * 0.38 : Math.sin(elapsed * 1.3 + a.phaseOffset) * 0.03;
+        _pos.set(-1.18 * S, (4.95 + 3.04) * S + breathY, 0.02 * S);
+        _euler.set(armSwing, torsoYaw, -0.09);
+        _quat.setFromEuler(_euler);
+        _partMat.compose(_pos, _quat, _scale);
+        _armWorldMat.multiplyMatrices(_rootMat, _partMat);
+        armLInst.setMatrixAt(i, _armWorldMat);
+        _outMat.multiplyMatrices(_armWorldMat, _handLocalMat);
+        handsInst.setMatrixAt(i * 2, _outMat);
+
+        _pos.set(1.18 * S, (4.95 + 3.04) * S + breathY, 0.02 * S);
+        _euler.set(-armSwing, torsoYaw, 0.09);
+        _quat.setFromEuler(_euler);
+        _partMat.compose(_pos, _quat, _scale);
+        _armWorldMat.multiplyMatrices(_rootMat, _partMat);
+        armRInst.setMatrixAt(i, _armWorldMat);
+        _outMat.multiplyMatrices(_armWorldMat, _handLocalMat);
+        handsInst.setMatrixAt(i * 2 + 1, _outMat);
       }
 
-      bodyInst.instanceMatrix.needsUpdate = true;
-      headInst.instanceMatrix.needsUpdate = true;
+      torsoInst.instanceMatrix.needsUpdate = true;
+      legLInst.instanceMatrix.needsUpdate = true;
+      legRInst.instanceMatrix.needsUpdate = true;
+      armLInst.instanceMatrix.needsUpdate = true;
+      armRInst.instanceMatrix.needsUpdate = true;
+      handsInst.instanceMatrix.needsUpdate = true;
+      for (let v = 0; v < variantCount; v++) {
+        headInsts[v].instanceMatrix.needsUpdate = true;
+      }
     },
   };
 }
@@ -472,7 +624,6 @@ export function createTrafficLightSystem(mats: CityMaterialLibrary): TrafficLigh
 
       const housing = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.88, 0.28), mats.wroughtIron);
       housing.position.set(0, 3.1, 0);
-      housing.castShadow = true;
       poleGroup.add(housing);
 
       const rMat = isNS ? redMatNS : redMatEW;
@@ -492,18 +643,22 @@ export function createTrafficLightSystem(mats: CityMaterialLibrary): TrafficLigh
     });
   });
 
+  let lastTrafficBucket = -1;
   return {
     group,
     update: (elapsed: number) => {
       const cycle = elapsed % 12;
-      // 0..5s: NS Green, EW Red | 5..6s: NS Amber, EW Red | 6..11s: NS Red, EW Green | 11..12s: NS Red, EW Amber
-      greenMatNS.emissiveIntensity = cycle < 5 ? 1.8 : 0.05;
-      amberMatNS.emissiveIntensity = cycle >= 5 && cycle < 6 ? 1.8 : 0.05;
-      redMatNS.emissiveIntensity = cycle >= 6 ? 1.8 : 0.05;
+      const bucket = cycle < 5 ? 0 : cycle < 6 ? 1 : cycle < 11 ? 2 : 3;
+      if (bucket === lastTrafficBucket) return;
+      lastTrafficBucket = bucket;
+      // 0: NS Green, EW Red | 1: NS Amber, EW Red | 2: NS Red, EW Green | 3: NS Red, EW Amber
+      greenMatNS.emissiveIntensity = bucket === 0 ? 1.8 : 0.05;
+      amberMatNS.emissiveIntensity = bucket === 1 ? 1.8 : 0.05;
+      redMatNS.emissiveIntensity = bucket >= 2 ? 1.8 : 0.05;
 
-      redMatEW.emissiveIntensity = cycle < 6 ? 1.8 : 0.05;
-      greenMatEW.emissiveIntensity = cycle >= 6 && cycle < 11 ? 1.8 : 0.05;
-      amberMatEW.emissiveIntensity = cycle >= 11 ? 1.8 : 0.05;
+      redMatEW.emissiveIntensity = bucket < 2 ? 1.8 : 0.05;
+      greenMatEW.emissiveIntensity = bucket === 2 ? 1.8 : 0.05;
+      amberMatEW.emissiveIntensity = bucket === 3 ? 1.8 : 0.05;
     },
   };
 }
@@ -874,6 +1029,8 @@ interface TrafficRider {
   heading: number;
   speed: number;
   bobPhase: number;
+  isScooter: boolean;
+  riderRig: SculptedHumanRig;
 }
 
 const LOOP_CENTRAL: [number, number][] = [
@@ -924,10 +1081,13 @@ function sampleLoop(
   }
 }
 
+
 export function createAmbientTrafficSystem(mats: CityMaterialLibrary): AmbientTrafficSystem {
   const group = new THREE.Group();
   const riderColors = [0xc85a32, 0x3b6e8c, 0x5d8a48, 0xd4923f, 0x6e4555, 0x4c7b7d];
-  const shirtColors = [0xf5ecdc, 0x586f4e, 0xd98a3f, 0x4b7496, 0xc96846, 0x7c5a44];
+  const shirtColors = [0xf5ecdc, 0x586f4e, 0xd98a3f, 0x4b7496, 0xc96846, 0x7c5a44, 0x424a59, 0xad535d];
+  const skinColors = [0xebc29f, 0xdfb088, 0xf2ccb0, 0xd7a379];
+  const hairColors = [0x3b281e, 0x563928, 0x261c17, 0x61554e];
   const riders: TrafficRider[] = [];
   const initOut = { x: 0, z: 0, heading: 0 };
 
@@ -939,11 +1099,6 @@ export function createAmbientTrafficSystem(mats: CityMaterialLibrary): AmbientTr
       color: riderColors[i % riderColors.length],
       roughness: 0.45,
     });
-    const shirtMat = new THREE.MeshStandardMaterial({
-      color: shirtColors[i % shirtColors.length],
-      roughness: 0.78,
-    });
-    const skinMat = new THREE.MeshStandardMaterial({ color: 0xe6be9a, roughness: 0.72 });
 
     const wheels: THREE.Group[] = [];
     const wheelR = isScooter ? 0.24 : 0.32;
@@ -956,7 +1111,6 @@ export function createAmbientTrafficSystem(mats: CityMaterialLibrary): AmbientTr
         mats.wroughtIron
       );
       tire.rotation.y = Math.PI / 2;
-      tire.castShadow = true;
       wheelPivot.add(tire);
 
       const hub = new THREE.Mesh(
@@ -978,25 +1132,56 @@ export function createAmbientTrafficSystem(mats: CityMaterialLibrary): AmbientTr
       apron.rotation.x = 0.2;
       const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), mats.lampBulb);
       lamp.position.set(0, 0.92, -0.58);
-      riderGroup.add(deck, apron, lamp);
+      const handlebar = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.52, 8), mats.wroughtIron);
+      handlebar.rotation.z = Math.PI / 2;
+      handlebar.position.set(0, 0.98, -0.42);
+      riderGroup.add(deck, apron, lamp, handlebar);
     } else {
       const frame = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 1.15), bodyMat);
       frame.position.set(0, 0.56, 0);
+      const seatPost = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.32, 6), mats.wroughtIron);
+      seatPost.position.set(0, 0.68, 0.14);
+      const handlebar = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.48, 8), mats.wroughtIron);
+      handlebar.rotation.z = Math.PI / 2;
+      handlebar.position.set(0, 0.96, -0.4);
       const basket = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, 0.26), mats.darkTimber);
       basket.position.set(0, 0.78, -0.52);
-      riderGroup.add(frame, basket);
+      riderGroup.add(frame, seatPost, handlebar, basket);
     }
 
-    // Rider Torso & Head
-    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.35, 4, 8), shirtMat);
-    torso.position.set(0, 0.96, 0.1);
-    torso.rotation.x = isScooter ? -0.1 : -0.22;
-    torso.castShadow = true;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.135, 10, 8), skinMat);
-    head.position.set(0, 1.38, 0.04);
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.15, 0.09, 10), bodyMat);
-    cap.position.set(0, 1.48, 0.04);
-    riderGroup.add(torso, head, cap);
+    // Articulated Sculpted Human Rider (matching player's sculpted human avatar style)
+    const riderRig = createSculptedHumanRig(
+      {
+        skinHex: skinColors[i % skinColors.length],
+        shirtHex: shirtColors[i % shirtColors.length],
+        pantsHex: 0x2e3b46,
+        hairHex: hairColors[i % hairColors.length],
+        hatHex: riderColors[i % riderColors.length],
+        hairStyle: i % 3 === 0 ? 'waves' : 'short',
+        hatStyle: isScooter ? 'beret' : i % 2 === 0 ? 'newsboy' : 'none',
+        facialHair: i % 4 === 3 ? 'mustache' : 'none',
+      },
+      { scale: 0.132, forwardIsNegZ: true }
+    );
+    riderRig.root.position.set(0, isScooter ? 0.3 : 0.34, 0.14);
+    // Seated posture gripping handlebars
+    riderRig.torsoPivot.rotation.x = isScooter ? 0.14 : 0.28;
+    riderRig.armL.shoulder.rotation.x = -0.85;
+    riderRig.armR.shoulder.rotation.x = -0.85;
+    riderRig.armL.shoulder.rotation.z = -0.18;
+    riderRig.armR.shoulder.rotation.z = 0.18;
+    riderRig.armL.elbow.rotation.x = -0.35;
+    riderRig.armR.elbow.rotation.x = -0.35;
+    if (isScooter) {
+      riderRig.scaleGroup.position.y = -1.65;
+      riderRig.legL.hip.rotation.x = -1.18;
+      riderRig.legR.hip.rotation.x = -1.18;
+      riderRig.legL.knee.rotation.x = 1.25;
+      riderRig.legR.knee.rotation.x = 1.25;
+    } else {
+      riderRig.scaleGroup.position.y = -1.35;
+    }
+    riderGroup.add(riderRig.root);
 
     const startProgress = ((i % 4) / 4) * LOOP_LENGTHS[loopIndex];
     sampleLoop(loopIndex === 0 ? LOOP_CENTRAL : LOOP_NORTH, LOOP_LENGTHS[loopIndex], startProgress, initOut);
@@ -1011,6 +1196,8 @@ export function createAmbientTrafficSystem(mats: CityMaterialLibrary): AmbientTr
       heading: initOut.heading,
       speed: isScooter ? 6.4 : 4.7,
       bobPhase: i * 1.4,
+      isScooter,
+      riderRig,
     });
   }
 
@@ -1042,6 +1229,19 @@ export function createAmbientTrafficSystem(mats: CityMaterialLibrary): AmbientTr
         r.group.rotation.order = 'YXZ';
         r.group.rotation.y = r.heading;
         r.group.rotation.x = slopes.pitch;
+
+        // Subtle head look & bicycle pedaling leg kinematics
+        r.riderRig.headPivot.rotation.y = Math.sin(elapsed * 0.9 + r.bobPhase) * 0.14;
+        if (!r.isScooter) {
+          const pedalPhi = (r.progress / r.wheelR) * 0.85;
+          const sL = Math.sin(pedalPhi);
+          const sR = Math.sin(pedalPhi + Math.PI);
+          r.riderRig.legL.hip.rotation.x = -0.92 + sL * 0.36;
+          r.riderRig.legR.hip.rotation.x = -0.92 + sR * 0.36;
+          r.riderRig.legL.knee.rotation.x = 1.02 - sL * 0.42;
+          r.riderRig.legR.knee.rotation.x = 1.02 - sR * 0.42;
+        }
+
         for (let w = 0; w < r.wheels.length; w++) {
           r.wheels[w].rotation.x -= (r.speed * dt) / r.wheelR;
         }
