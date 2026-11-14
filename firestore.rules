@@ -8,7 +8,7 @@ service cloud.firestore {
     }
 
     function isValidId(id) {
-      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
     function incoming() {
@@ -32,16 +32,15 @@ service cloud.firestore {
     }
 
     function isHexColor(val) {
-      return val is string && val.size() >= 4 && val.size() <= 16 && val.matches('^#[0-9a-fA-F]{3,8}$');
+      return val is string && val.matches('^#[0-9a-fA-F]{3,8}$');
     }
 
     function isValidVehicleConfig(vc) {
       return vc is map &&
-        vc.keys().hasAll(['type', 'color', 'finish', 'accentColor', 'hasAccessory', 'hasStripe']) &&
         vc.keys().hasOnly(['type', 'color', 'finish', 'accentColor', 'hasAccessory', 'hasStripe']) &&
-        vc.type is string && vc.type.size() <= 20 && vc.type in ['car', 'bicycle', 'motorcycle'] &&
+        vc.type in ['car', 'bicycle', 'motorcycle'] &&
         isHexColor(vc.color) &&
-        vc.finish is string && vc.finish.size() <= 16 && vc.finish in ['gloss', 'matte'] &&
+        vc.finish in ['gloss', 'matte'] &&
         isHexColor(vc.accentColor) &&
         vc.hasAccessory is bool &&
         vc.hasStripe is bool;
@@ -49,9 +48,7 @@ service cloud.firestore {
 
     function isValidHouseExterior(he) {
       return he is map &&
-        he.keys().hasAll(['style', 'wallColor', 'roofColor', 'trimColor']) &&
         he.keys().hasOnly(['style', 'wallColor', 'roofColor', 'trimColor']) &&
-        he.style is string && he.style.size() <= 32 &&
         he.style in ['cottage_villa', 'modern_gable', 'aegean_veranda', 'twin_cottage'] &&
         isHexColor(he.wallColor) &&
         isHexColor(he.roofColor) &&
@@ -60,18 +57,16 @@ service cloud.firestore {
 
     function isValidAvatarConfig(ac) {
       return ac is map &&
-        ac.keys().hasAll(['skinColor', 'shirtColor', 'pantsColor', 'hairStyle', 'hairColor']) &&
         ac.keys().hasOnly(['skinColor', 'shirtColor', 'pantsColor', 'hairStyle', 'hairColor']) &&
         isHexColor(ac.skinColor) &&
         isHexColor(ac.shirtColor) &&
         isHexColor(ac.pantsColor) &&
-        ac.hairStyle is string && ac.hairStyle.size() <= 20 && ac.hairStyle in ['kasket', 'short', 'long', 'bun'] &&
+        ac.hairStyle in ['kasket', 'short', 'long', 'bun'] &&
         isHexColor(ac.hairColor);
     }
 
     function isValidFurnitureItem(fi) {
       return fi is map &&
-        fi.keys().hasAll(['id', 'enabled', 'slotIndex']) &&
         fi.keys().hasOnly(['id', 'enabled', 'slotIndex', 'x', 'z', 'rotY', 'styleId']) &&
         fi.id is string && fi.id.size() >= 1 && fi.id.size() <= 24 &&
         fi.enabled is bool &&
@@ -84,12 +79,11 @@ service cloud.firestore {
 
     function isValidCozyRoomState(cr) {
       return cr is map &&
-        cr.keys().hasAll(['wallColor', 'floorTone', 'lampOn', 'petType', 'petAffection', 'avatarPlaced', 'avatarConfig', 'furniture']) &&
         cr.keys().hasOnly(['wallColor', 'floorTone', 'lampOn', 'petType', 'petAffection', 'avatarPlaced', 'avatarConfig', 'furniture']) &&
         isHexColor(cr.wallColor) &&
-        cr.floorTone is string && cr.floorTone.size() <= 16 && cr.floorTone in ['oak', 'pine', 'stone'] &&
+        cr.floorTone in ['oak', 'pine', 'stone'] &&
         cr.lampOn is bool &&
-        cr.petType is string && cr.petType.size() <= 16 && cr.petType in ['cat', 'dog', 'both'] &&
+        cr.petType in ['cat', 'dog', 'both'] &&
         cr.petAffection is int && cr.petAffection >= 0 && cr.petAffection <= 100000 &&
         cr.avatarPlaced is bool &&
         isValidAvatarConfig(cr.avatarConfig) &&
@@ -99,7 +93,6 @@ service cloud.firestore {
 
     function isValidAgendaNote(an) {
       return an is map &&
-        an.keys().hasAll(['id', 'dateKey', 'text', 'done']) &&
         an.keys().hasOnly(['id', 'dateKey', 'text', 'done']) &&
         an.id is string && an.id.size() >= 1 && an.id.size() <= 48 &&
         an.dateKey is string && an.dateKey.size() >= 8 && an.dateKey.size() <= 16 &&
@@ -108,23 +101,9 @@ service cloud.firestore {
     }
 
     function isValidUserProfile(data) {
-      return data.keys().hasAll([
-          'uid',
-          'displayName',
-          'avatarEmoji',
-          'coins',
-          'lokmaPower',
-          'discoveredIds',
-          'chattedNpcIds',
-          'unlockedFurnitureStyles',
-          'vehicleConfig',
-          'houseExterior',
-          'cozyRoomState',
-          'agendaNotes',
-          'createdAt',
-          'updatedAt'
-        ]) &&
-        data.keys().hasOnly([
+      // Field validators reject missing required fields. The match block validates
+      // the document ID, and the UID below must match the authenticated owner.
+      return data.keys().hasOnly([
           'uid',
           'displayName',
           'avatarEmoji',
@@ -141,7 +120,6 @@ service cloud.firestore {
           'createdAt',
           'updatedAt'
         ]) &&
-        isValidId(data.uid) &&
         data.uid == request.auth.uid &&
         data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 40 &&
         data.avatarEmoji is string && data.avatarEmoji.size() >= 1 && data.avatarEmoji.size() <= 12 &&
@@ -171,16 +149,14 @@ service cloud.firestore {
       allow get: if isValidId(userId) && isOwner(userId);
       allow list: if false;
 
-      allow create: if isSignedIn() &&
-        isVerified() &&
+      allow create: if isVerified() &&
         isValidId(userId) &&
         isOwner(userId) &&
         isValidUserProfile(incoming()) &&
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time;
 
-      allow update: if isSignedIn() &&
-        isVerified() &&
+      allow update: if isVerified() &&
         isValidId(userId) &&
         isOwner(userId) &&
         isValidUserProfile(incoming()) &&
