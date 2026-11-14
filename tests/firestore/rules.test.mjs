@@ -186,3 +186,79 @@ test('unverified owner cannot delete a profile', async () => {
   await seedProfile();
   await assertFails(deleteDoc(doc(unverifiedDb, 'users', 'alice')));
 });
+
+function profileAtLimits() {
+  const data = validProfile();
+  data.displayName = 'x'.repeat(40);
+  data.avatarEmoji = '🏡'.repeat(6);
+  data.coins = 1000000;
+  data.lokmaPower = 100000;
+  for (const [field, count, length] of [
+    ['discoveredIds', 30, 40],
+    ['completedErrandIds', 40, 48],
+    ['chattedNpcIds', 40, 40],
+    ['unlockedFurnitureStyles', 80, 64],
+  ]) {
+    data[field] = Array.from({ length: count }, (_, index) =>
+      `item-${index}`.padEnd(length, 'x'));
+  }
+  data.vehicleConfig.type = 'motorcycle';
+  data.vehicleConfig.finish = 'matte';
+  data.houseExterior.style = 'twin_cottage';
+  data.cozyRoomState.floorTone = 'stone';
+  data.cozyRoomState.petAffection = 100000;
+  data.cozyRoomState.avatarConfig.hairStyle = 'bun';
+  data.cozyRoomState.furniture = Array.from({ length: 20 }, () => ({
+    id: 'armchair', enabled: true, slotIndex: 10,
+    x: 1.25, z: -2.5, rotY: 3.14, styleId: 'x'.repeat(40),
+  }));
+  data.agendaNotes = Array.from({ length: 120 }, (_, index) => ({
+    id: `note-${index}`.padEnd(48, 'x'),
+    dateKey: '2026-11-14', text: 'x'.repeat(240), done: true,
+  }));
+  return data;
+}
+
+test('owner can create a profile with all lists at their limits', async () => {
+  await assertSucceeds(setDoc(doc(ownerDb, 'users', 'alice'), profileAtLimits()));
+});
+
+test('owner can update all editable fields to a populated profile', async () => {
+  await assertSucceeds(setDoc(doc(ownerDb, 'users', 'alice'), validProfile()));
+  const data = profileAtLimits();
+  delete data.createdAt;
+  await assertSucceeds(updateDoc(doc(ownerDb, 'users', 'alice'), data));
+});
+
+const requiredFieldGroups = [
+  [[], ['uid', 'displayName', 'avatarEmoji', 'coins', 'lokmaPower',
+    'discoveredIds', 'chattedNpcIds', 'unlockedFurnitureStyles',
+    'vehicleConfig', 'houseExterior', 'cozyRoomState', 'agendaNotes',
+    'createdAt', 'updatedAt']],
+  [['vehicleConfig'], ['type', 'color', 'finish', 'accentColor', 'hasAccessory', 'hasStripe']],
+  [['houseExterior'], ['style', 'wallColor', 'roofColor', 'trimColor']],
+  [['cozyRoomState'], ['wallColor', 'floorTone', 'lampOn', 'petType',
+    'petAffection', 'avatarPlaced', 'avatarConfig', 'furniture']],
+  [['cozyRoomState', 'avatarConfig'], ['skinColor', 'shirtColor', 'pantsColor', 'hairStyle', 'hairColor']],
+  [['cozyRoomState', 'furniture', 0], ['id', 'enabled', 'slotIndex']],
+  [['agendaNotes', 0], ['id', 'dateKey', 'text', 'done']],
+];
+
+for (const [prefix, fields] of requiredFieldGroups) {
+  for (const field of fields) {
+    const path = [...prefix, field].join('.');
+    test(`owner cannot create a profile missing ${path}`, async () => {
+      const data = validProfile();
+      const container = prefix.reduce((value, key) => value[key], data);
+      delete container[field];
+      await assertFails(setDoc(doc(ownerDb, 'users', 'alice'), data));
+    });
+  }
+}
+
+test('optional completion and furniture style fields can remain absent', async () => {
+  const data = validProfile();
+  delete data.completedErrandIds;
+  delete data.cozyRoomState.furniture[0].styleId;
+  await assertSucceeds(setDoc(doc(ownerDb, 'users', 'alice'), data));
+});
