@@ -75,3 +75,67 @@ test('the existing forty-entry eviction limit is retained', async () => {
   assert.deepEqual(cache.get('1'), audio);
   assert.deepEqual(cache.get('40'), audio);
 });
+
+test('the default budget returns a large response without retaining it', async () => {
+  const cache = new TtsAudioCache();
+  await cache.getOrGenerate('small', async () => audio);
+  const largeAudio = { ...audio, audioBase64: 'A'.repeat(32 * 1024 * 1024) };
+  assert.equal(await cache.getOrGenerate('large', async () => largeAudio), largeAudio);
+  assert.equal(cache.get('large'), undefined);
+  assert.deepEqual(cache.get('small'), audio);
+});
+
+test('an entry fits at the exact byte limit but not one byte over it', async () => {
+  // One-byte key + eight-byte base64 data + nine-byte MIME type = 18 bytes.
+  const exact = new TtsAudioCache(18);
+  await exact.getOrGenerate('a', async () => audio);
+  assert.deepEqual(exact.get('a'), audio);
+
+  const tooSmall = new TtsAudioCache(17);
+  assert.deepEqual(await tooSmall.getOrGenerate('a', async () => audio), audio);
+  assert.equal(tooSmall.get('a'), undefined);
+});
+
+test('byte pressure evicts enough oldest entries and releases their budget', async () => {
+  const cache = new TtsAudioCache(72);
+  for (const key of ['a', 'b', 'c', 'd']) {
+    await cache.getOrGenerate(key, async () => audio);
+  }
+  const largerAudio = { ...audio, audioBase64: 'A'.repeat(32) };
+  await cache.getOrGenerate('e', async () => largerAudio);
+  for (const key of ['a', 'b', 'c']) assert.equal(cache.get(key), undefined);
+  assert.deepEqual(cache.get('d'), audio);
+  assert.deepEqual(cache.get('e'), largerAudio);
+
+  await cache.getOrGenerate('f', async () => audio);
+  assert.equal(cache.get('d'), undefined);
+  assert.deepEqual(cache.get('e'), largerAudio);
+  assert.deepEqual(cache.get('f'), audio);
+});
+
+test('oversized concurrent responses are shared without flushing cached audio', async () => {
+  const cache = new TtsAudioCache(64);
+  await cache.getOrGenerate('small', async () => audio);
+  const largeAudio = { ...audio, audioBase64: 'A'.repeat(64) };
+  const gate = Promise.withResolvers();
+  let calls = 0;
+  const generate = async () => { calls += 1; return gate.promise; };
+  const requests = Array.from({ length: 10 }, () => cache.getOrGenerate('large', generate));
+  await Promise.resolve();
+  assert.equal(calls, 1);
+  gate.resolve(largeAudio);
+  assert.deepEqual(await Promise.all(requests), Array(10).fill(largeAudio));
+  assert.equal(cache.get('large'), undefined);
+  assert.deepEqual(cache.get('small'), audio);
+
+  await cache.getOrGenerate('large', generate);
+  assert.equal(calls, 2);
+});
+
+test('UTF-8 cache keys count toward the byte budget', async () => {
+  const cache = new TtsAudioCache(18);
+  await cache.getOrGenerate('a', async () => audio);
+  await cache.getOrGenerate('ı', async () => audio);
+  assert.equal(cache.get('ı'), undefined);
+  assert.deepEqual(cache.get('a'), audio);
+});
