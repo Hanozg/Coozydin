@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import http from 'http';
 import path from 'path';
 import { GoogleGenAI } from '@google/genai';
 import { TtsAudioCache } from './server/ttsCache.ts';
@@ -28,6 +29,7 @@ const ttsCache = new TtsAudioCache();
 
 async function startServer() {
   const app = express();
+  const httpServer = http.createServer(app);
   app.use(express.json({ limit: '64kb' }));
 
   app.get('/api/health', (_req, res) => {
@@ -128,7 +130,10 @@ async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        ws: { server: httpServer },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -140,7 +145,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Efeler server running on http://0.0.0.0:${PORT}`);
   });
 }
