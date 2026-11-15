@@ -134,7 +134,7 @@ export function ProfileModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-[#2C1E14]/55 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 pointer-events-auto"
+      className="fixed inset-0 z-50 bg-[#1C120B]/75 flex items-center justify-center p-3 sm:p-6 pointer-events-auto"
       role="dialog"
       aria-modal="true"
       aria-label="Oyuncu Profili ve Kayıt"

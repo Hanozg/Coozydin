@@ -277,6 +277,7 @@ class CozyAudioEngine {
   private ambientGain: GainNode | null = null;
   private sfxGain: GainNode | null = null;
   private delayNode: DelayNode | null = null;
+  private musicDucked = false;
 
   private engineOsc: OscillatorNode | null = null;
   private engineSubOsc: OscillatorNode | null = null;
@@ -1468,9 +1469,17 @@ class CozyAudioEngine {
   public setMusicEnabled(enabled: boolean) {
     this.musicEnabled = enabled;
     if (this.ctx && this.musicGain) {
-      this.musicGain.gain.setTargetAtTime(enabled ? 0.58 : 0, this.ctx.currentTime, 0.16);
+      const target = enabled ? (this.musicDucked ? 0.14 : 0.58) : 0;
+      this.musicGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.16);
     }
     this.applyTrackTexture();
+  }
+
+  public setMusicDucked(ducked: boolean) {
+    this.musicDucked = ducked;
+    if (this.ctx && this.musicGain && this.musicEnabled) {
+      this.musicGain.gain.setTargetAtTime(ducked ? 0.14 : 0.58, this.ctx.currentTime, 0.18);
+    }
   }
 
   public setSfxEnabled(enabled: boolean) {

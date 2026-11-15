@@ -1,4 +1,4 @@
-import { RotateCcw, Play, Home } from 'lucide-react';
+import { Home, Info, Play, RotateCcw } from 'lucide-react';
 
 interface PauseModalProps {
   discoveredCount: number;
@@ -7,6 +7,7 @@ interface PauseModalProps {
   onResume: () => void;
   onReturnTitle: () => void;
   onResetPosition: () => void;
+  onOpenAbout: () => void;
 }
 
 export function PauseModal({
@@ -16,6 +17,7 @@ export function PauseModal({
   onResume,
   onReturnTitle,
   onResetPosition,
+  onOpenAbout,
 }: PauseModalProps) {
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#2E1E12]/65 p-3 sm:p-6">
@@ -56,6 +58,15 @@ export function PauseModal({
           >
             <RotateCcw className="w-4 h-4 text-[#6B5038]" aria-hidden="true" />
             <span>Sevgi Yolu’na Dön</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenAbout}
+            className="w-full inline-flex items-center justify-center gap-2.5 px-5 py-2.5 rounded-xl bg-[#FAF2E2] hover:bg-[#EDE0C6] text-[#3A2618] font-semibold text-sm border border-[#B99464]/50 transition-colors cursor-pointer"
+          >
+            <Info className="w-4 h-4 text-[#B84C27]" aria-hidden="true" />
+            <span>Hakkında</span>
           </button>
 
           <button

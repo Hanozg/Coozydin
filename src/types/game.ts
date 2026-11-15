@@ -243,6 +243,7 @@ export interface PlayerHudSnapshot {
   sparrowState?: 'perched' | 'grounded' | 'flying';
   sparrowStamina?: number;
   isDancingZeybek?: boolean;
+  elevationMeters?: number;
 }
 
 export interface RoofColliderMeta {

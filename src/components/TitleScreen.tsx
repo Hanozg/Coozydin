@@ -1,22 +1,27 @@
 import { useEffect } from 'react';
-import { ArrowRight, User } from 'lucide-react';
+import { ArrowRight, Info, User } from 'lucide-react';
 
 interface TitleScreenProps {
   profileName?: string;
   profileEmoji?: string;
   isCloudSignedIn?: boolean;
+  disableStartShortcut?: boolean;
   onStart: () => void;
   onOpenProfile?: () => void;
+  onOpenAbout?: () => void;
 }
 
 export function TitleScreen({
   profileName = 'Efeler Gezgini',
   profileEmoji = '🏡',
   isCloudSignedIn = false,
+  disableStartShortcut = false,
   onStart,
   onOpenProfile,
+  onOpenAbout,
 }: TitleScreenProps) {
   useEffect(() => {
+    if (disableStartShortcut) return;
     const onKey = (e: KeyboardEvent) => {
       const tag = document.activeElement?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
@@ -27,7 +32,7 @@ export function TitleScreen({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onStart]);
+  }, [disableStartShortcut, onStart]);
 
   return (
     <div className="absolute inset-0 z-20 flex flex-col justify-between p-3 sm:p-6 md:p-12 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pointer-events-none overflow-y-auto efeler-scroll">
@@ -112,6 +117,17 @@ export function TitleScreen({
               {isCloudSignedIn && (
                 <span className="w-2 h-2 rounded-full bg-[#5D8A48]" aria-hidden="true" />
               )}
+            </button>
+          )}
+
+          {onOpenAbout && (
+            <button
+              type="button"
+              onClick={onOpenAbout}
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-3 rounded-xl bg-[#FAF2E2] hover:bg-[#EFE0C3] border-2 border-[#B99464]/80 text-[#4D3623] font-semibold text-xs sm:text-sm shadow-sm transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            >
+              <Info className="w-3.5 h-3.5 text-[#B84C27]" aria-hidden="true" />
+              <span>Hakkında</span>
             </button>
           )}
         </div>

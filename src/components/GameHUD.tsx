@@ -24,7 +24,9 @@ import {
   Feather,
   Footprints,
   Gamepad2,
+  Headphones,
   Home,
+  Info,
   MapPin,
   MessageCircle,
   Music,
@@ -34,6 +36,7 @@ import {
   Radio,
   SlidersHorizontal,
   Sparkles,
+  Square,
   Sun,
   Volume2,
   VolumeX,
@@ -42,6 +45,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
+import { AydinTopographicMinimap } from './AydinTopographicMinimap';
 import { TouchDriveInput } from './EfelerCanvas';
 import { VirtualJoystick } from './VirtualJoystick';
 import {
@@ -109,6 +113,8 @@ interface GameHUDProps {
   errandToast: string | null;
   isMuted: boolean;
   musicEnabled: boolean;
+  voiceGuideLandmark: LandmarkDef | null;
+  voiceGuideLoading?: boolean;
   onChangeExplorationMode: (next: ExplorationMode) => void;
   onChangeVehicleConfig: (next: VehicleConfig) => void;
   onChangeHouseExterior: (next: HouseExteriorConfig) => void;
@@ -122,9 +128,13 @@ interface GameHUDProps {
   onInteractNpc: (npc: BuildingNpcDef) => void;
   onToggleMute: () => void;
   onToggleMusic: () => void;
+  onToggleVoiceGuide: () => void;
+  onStopVoiceGuide: () => void;
   onOpenJournal: () => void;
   onOpenRealMap: () => void;
+  onJumpToLandmark: (landmark: LandmarkDef) => void;
   onOpenProfile: () => void;
+  onOpenAbout: () => void;
   onEnterHome: () => void;
   onPause: () => void;
   onDiscoverNearby: () => void;
@@ -158,6 +168,8 @@ export const GameHUD = memo(function GameHUD({
   errandToast,
   isMuted,
   musicEnabled,
+  voiceGuideLandmark,
+  voiceGuideLoading = false,
   onChangeExplorationMode,
   onChangeVehicleConfig,
   onChangeHouseExterior,
@@ -171,9 +183,13 @@ export const GameHUD = memo(function GameHUD({
   onInteractNpc,
   onToggleMute,
   onToggleMusic,
+  onToggleVoiceGuide,
+  onStopVoiceGuide,
   onOpenJournal,
   onOpenRealMap,
+  onJumpToLandmark,
   onOpenProfile,
+  onOpenAbout,
   onEnterHome,
   onPause,
   onDiscoverNearby,
@@ -361,6 +377,13 @@ export const GameHUD = memo(function GameHUD({
               )}
               <span className="font-mono-num text-[#3A2618] font-semibold">
                 {hud.speedKmh} km/s
+              </span>
+              <span aria-hidden="true">·</span>
+              <span
+                className="font-mono-num text-[#4B743B] font-semibold"
+                title="1:100 Aydın Haritası Gerçek Rakım"
+              >
+                {hud.elevationMeters ?? 64} m
               </span>
               <span aria-hidden="true">·</span>
               <span className="font-mono-num">
@@ -559,6 +582,67 @@ export const GameHUD = memo(function GameHUD({
 
             <button
               type="button"
+              onClick={onToggleVoiceGuide}
+              aria-pressed={Boolean(voiceGuideLandmark)}
+              title={
+                voiceGuideLoading
+                  ? 'Sesli Rehber hazırlanıyor...'
+                  : voiceGuideLandmark
+                    ? `Sesli Rehber’i Durdur (${voiceGuideLandmark.name})`
+                    : hud.nearbyLandmark
+                      ? `Sesli Rehber: ${hud.nearbyLandmark.name}`
+                      : 'Sesli Rehber (Yakındaki tarihi yapı hakkında bilgi dinle)'
+              }
+              aria-label="Sesli Rehber"
+              className={`inline-flex items-center gap-1.5 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                isCompactLandscape ? 'p-1.5' : 'px-2.5 sm:px-3 py-1.5'
+              } ${
+                voiceGuideLandmark || voiceGuideLoading
+                  ? 'bg-[#C85A32] text-[#FAF2E2] border border-[#9E4120]'
+                  : hud.nearbyLandmark
+                    ? 'bg-[#EFE0C3] hover:bg-[#E4D1AE] border border-[#C85A32]/70 text-[#3A2618]'
+                    : 'hover:bg-[#EDE0C6] text-[#3A2618]'
+              }`}
+            >
+              <Headphones
+                className={`w-4 h-4 sm:w-3.5 sm:h-3.5 ${
+                  voiceGuideLandmark || voiceGuideLoading
+                    ? 'text-[#FAF2E2] animate-pulse'
+                    : hud.nearbyLandmark
+                      ? 'text-[#B84C27]'
+                      : 'text-[#6B5038]'
+                }`}
+                aria-hidden="true"
+              />
+              {!isCompactLandscape && (
+                <span className="hidden sm:inline">
+                  {voiceGuideLoading
+                    ? 'Hazırlanıyor...'
+                    : voiceGuideLandmark
+                      ? 'Rehber · Durdur'
+                      : 'Sesli Rehber'}
+                </span>
+              )}
+              {hud.nearbyLandmark && !voiceGuideLandmark && !voiceGuideLoading && (
+                <span className="w-2 h-2 rounded-full bg-[#C85A32] shrink-0" aria-hidden="true" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={onOpenAbout}
+              aria-label="Hakkında"
+              title="Hakkında"
+              className={`inline-flex items-center gap-1.5 rounded-xl hover:bg-[#EDE0C6] text-xs font-semibold text-[#3A2618] transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                isCompactLandscape ? 'p-1.5' : 'px-2 sm:px-2.5 py-1.5'
+              }`}
+            >
+              <Info className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-[#B84C27]" aria-hidden="true" />
+              {!isCompactLandscape && <span className="hidden xl:inline">Hakkında</span>}
+            </button>
+
+            <button
+              type="button"
               onClick={onPause}
               aria-label="Duraklat"
               title="Duraklat"
@@ -661,11 +745,23 @@ export const GameHUD = memo(function GameHUD({
               )}
             </div>
           )}
+
+          <AydinTopographicMinimap
+            playerPos={hud.playerPos}
+            headingRad={hud.headingRad}
+            elevationMeters={hud.elevationMeters ?? 64}
+            currentDistrict={hud.currentDistrict}
+            discoveredIds={discoveredIds}
+            activeErrand={activeErrand}
+            errandPickedUp={errandPickedUp}
+            isCompactViewport={isCompactViewport}
+            onJumpToLandmark={onJumpToLandmark}
+          />
         </div>
       </div>
 
       {/* Discovery / Errand Celebration Banner (Non-blocking, top-center) */}
-      {(recentlyDiscovered || errandToast) && (
+      {(recentlyDiscovered || errandToast) ? (
         <div className="self-center pointer-events-auto rounded-2xl bg-[#F7EEDC]/98 border-2 border-[#C85A32]/75 px-5 py-3 text-center max-w-md shadow-xl">
           {recentlyDiscovered ? (
             <div key={`disc-${recentlyDiscovered.id}`}>
@@ -686,103 +782,155 @@ export const GameHUD = memo(function GameHUD({
             </div>
           )}
         </div>
+      ) : (
+        (voiceGuideLandmark || voiceGuideLoading) && (
+          <div className="self-center pointer-events-auto inline-flex items-center gap-2.5 rounded-2xl bg-[#3A2618]/94 border-2 border-[#B99464] px-3.5 py-2 text-[#FAF2E2] shadow-xl max-w-[88vw] sm:max-w-md">
+            <Headphones className="w-4 h-4 text-[#FFD43B] animate-pulse shrink-0" aria-hidden="true" />
+            <div className="min-w-0 text-left">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-[#FFD43B]">
+                {voiceGuideLoading ? 'Sesli Rehber Hazırlanıyor...' : 'Sesli Rehber Anlatıyor'}
+              </div>
+              <div className="text-xs font-semibold truncate">
+                {voiceGuideLandmark?.name || hud.nearbyLandmark?.name || ''}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onStopVoiceGuide}
+              aria-label="Sesli Rehberi Durdur"
+              title="Sesli Rehberi Durdur"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#C85A32] hover:bg-[#B44D28] text-[11px] font-bold text-[#FAF2E2] shrink-0 cursor-pointer transition-colors"
+            >
+              <Square className="w-3 h-3 fill-current" aria-hidden="true" />
+              <span>{voiceGuideLoading ? 'İptal' : 'Durdur'}</span>
+            </button>
+          </div>
+        )
       )}
 
       {/* Bottom Area: Nearby Prompt + Collapsible Bottom Dock */}
       <div className={`flex flex-col items-center ${isCompactLandscape ? 'gap-1.5' : 'gap-2.5'}`}>
-        {hud.nearbyStreetInteraction ? (
-          <button
-            key="street-interaction"
-            type="button"
-            onClick={onDiscoverNearby}
-            className="pointer-events-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#C85A32] hover:bg-[#B44D28] border-2 border-[#FAF2E2]/80 text-[#FAF2E2] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
-          >
-            <Sparkles className="w-4 h-4 shrink-0" aria-hidden="true" />
-            <span className="truncate max-w-[75vw]">
-              {touchControlsEnabled ? '' : '[E] '}
-              {hud.nearbyStreetInteraction.label.replace(' (Tıkla veya E)', '')}
-            </span>
-          </button>
-        ) : hud.nearbyNpc ? (
-          <button
-            key="nearby-npc"
-            type="button"
-            onClick={() => onInteractNpc(hud.nearbyNpc!)}
-            className="pointer-events-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#C85A32] hover:bg-[#B44D28] border-2 border-[#FAF2E2]/80 text-[#FAF2E2] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
-          >
-            <MessageCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
-            <span>
-              {touchControlsEnabled ? '' : '[E] '}
-              {hud.nearbyNpc.name} ile Sohbet Et ({hud.nearbyNpc.role})
-            </span>
-          </button>
-        ) : hud.nearPlayerHome ? (
-          <div key="near-home" className="pointer-events-auto flex flex-wrap items-center justify-center gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-2 max-w-[94vw]">
+          {hud.nearbyStreetInteraction ? (
             <button
-              type="button"
-              onClick={onEnterHome}
-              className="inline-flex items-center gap-2 px-3.5 sm:px-5 py-2 rounded-xl bg-[#5D8A48] hover:bg-[#4F783C] border-2 border-[#FAF2E2]/80 text-[#FAF2E2] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
-            >
-              <Home className="w-4 h-4" aria-hidden="true" />
-              <span>{touchControlsEnabled ? 'Sıcak Yuvam’a Gir' : '[E] Sıcak Yuvam’a Gir (Evim)'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setDockCollapsed(false);
-                setActiveDrawer((d) => (d === 'house' ? 'none' : 'house'));
-              }}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#F7EEDC] hover:bg-[#EFE0C3] border-2 border-[#B99464] text-[#3A2618] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
-            >
-              <Paintbrush className="w-4 h-4 text-[#C85A32]" aria-hidden="true" />
-              <span>Dış Cepheyi Tasarla</span>
-            </button>
-          </div>
-        ) : hud.nearbyLandmark && (nearbyIsUndiscovered || nearbyIsErrandPoint) ? (
-          <button
-            key="nearby-landmark"
-            type="button"
-            onClick={onDiscoverNearby}
-            className="pointer-events-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#C85A32] hover:bg-[#B44D28] border-2 border-[#FAF2E2]/80 text-[#FAF2E2] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
-          >
-            <Compass className="w-4 h-4 shrink-0" aria-hidden="true" />
-            <span>
-              <span>
-                {touchControlsEnabled ? '' : '[E] '}
-                {hud.nearbyLandmark.name} —{' '}
-              </span>
-              <span
-                key={
-                  nearbyIsErrandPoint
-                    ? errandPickedUp
-                      ? 'deliver'
-                      : 'pickup'
-                    : 'discover'
-                }
-              >
-                {nearbyIsErrandPoint
-                  ? errandPickedUp
-                    ? 'Görevi Teslim Et'
-                    : 'Paketi Teslim Al'
-                  : 'Yapıyı Keşfet'}
-              </span>
-            </span>
-          </button>
-        ) : (
-          hud.nearAncientSignpost && (
-            <button
-              key="ancient-signpost"
+              key="street-interaction"
               type="button"
               onClick={onDiscoverNearby}
-              className="pointer-events-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#F7EEDC] hover:bg-[#EFE0C3] border-2 border-[#B99464] text-[#3A2618] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
+              className="pointer-events-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#C85A32] hover:bg-[#B44D28] border-2 border-[#FAF2E2]/80 text-[#FAF2E2] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
             >
-              <Compass className="w-4 h-4 text-[#B84C27]" aria-hidden="true" />
-              <span>
-                {touchControlsEnabled ? '' : '[E] '}Aydın Antik Kentleri Levhasını İncele
+              <Sparkles className="w-4 h-4 shrink-0" aria-hidden="true" />
+              <span className="truncate max-w-[75vw]">
+                {touchControlsEnabled ? '' : '[E] '}
+                {hud.nearbyStreetInteraction.label.replace(' (Tıkla veya E)', '')}
               </span>
             </button>
-          )
-        )}
+          ) : hud.nearbyNpc ? (
+            <button
+              key="nearby-npc"
+              type="button"
+              onClick={() => onInteractNpc(hud.nearbyNpc!)}
+              className="pointer-events-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#C85A32] hover:bg-[#B44D28] border-2 border-[#FAF2E2]/80 text-[#FAF2E2] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
+            >
+              <MessageCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
+              <span>
+                {touchControlsEnabled ? '' : '[E] '}
+                {hud.nearbyNpc.name} ile Sohbet Et ({hud.nearbyNpc.role})
+              </span>
+            </button>
+          ) : hud.nearPlayerHome ? (
+            <div key="near-home" className="pointer-events-auto flex flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={onEnterHome}
+                className="inline-flex items-center gap-2 px-3.5 sm:px-5 py-2 rounded-xl bg-[#5D8A48] hover:bg-[#4F783C] border-2 border-[#FAF2E2]/80 text-[#FAF2E2] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
+              >
+                <Home className="w-4 h-4" aria-hidden="true" />
+                <span>{touchControlsEnabled ? 'Sıcak Yuvam’a Gir' : '[E] Sıcak Yuvam’a Gir (Evim)'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDockCollapsed(false);
+                  setActiveDrawer((d) => (d === 'house' ? 'none' : 'house'));
+                }}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#F7EEDC] hover:bg-[#EFE0C3] border-2 border-[#B99464] text-[#3A2618] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
+              >
+                <Paintbrush className="w-4 h-4 text-[#C85A32]" aria-hidden="true" />
+                <span>Dış Cepheyi Tasarla</span>
+              </button>
+            </div>
+          ) : hud.nearbyLandmark && (nearbyIsUndiscovered || nearbyIsErrandPoint) ? (
+            <button
+              key="nearby-landmark"
+              type="button"
+              onClick={onDiscoverNearby}
+              className="pointer-events-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#C85A32] hover:bg-[#B44D28] border-2 border-[#FAF2E2]/80 text-[#FAF2E2] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
+            >
+              <Compass className="w-4 h-4 shrink-0" aria-hidden="true" />
+              <span>
+                <span>
+                  {touchControlsEnabled ? '' : '[E] '}
+                  {hud.nearbyLandmark.name} —{' '}
+                </span>
+                <span
+                  key={
+                    nearbyIsErrandPoint
+                      ? errandPickedUp
+                        ? 'deliver'
+                        : 'pickup'
+                      : 'discover'
+                  }
+                >
+                  {nearbyIsErrandPoint
+                    ? errandPickedUp
+                      ? 'Görevi Teslim Et'
+                      : 'Paketi Teslim Al'
+                    : 'Yapıyı Keşfet'}
+                </span>
+              </span>
+            </button>
+          ) : (
+            hud.nearAncientSignpost && (
+              <button
+                key="ancient-signpost"
+                type="button"
+                onClick={onDiscoverNearby}
+                className="pointer-events-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#F7EEDC] hover:bg-[#EFE0C3] border-2 border-[#B99464] text-[#3A2618] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
+              >
+                <Compass className="w-4 h-4 text-[#B84C27]" aria-hidden="true" />
+                <span>
+                  {touchControlsEnabled ? '' : '[E] '}Aydın Antik Kentleri Levhasını İncele
+                </span>
+              </button>
+            )
+          )}
+
+          {hud.nearbyLandmark && (
+            <button
+              type="button"
+              onClick={onToggleVoiceGuide}
+              aria-pressed={voiceGuideLandmark?.id === hud.nearbyLandmark.id}
+              className={`pointer-events-auto inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer ${
+                voiceGuideLandmark?.id === hud.nearbyLandmark.id || voiceGuideLoading
+                  ? 'bg-[#3A2618] hover:bg-[#2A1B10] border-[#FFD43B]/80 text-[#FAF2E2]'
+                  : 'bg-[#F7EEDC] hover:bg-[#EFE0C3] border-[#B99464] text-[#3A2618]'
+              }`}
+            >
+              {voiceGuideLandmark?.id === hud.nearbyLandmark.id || voiceGuideLoading ? (
+                <Square className="w-3.5 h-3.5 text-[#FFD43B] fill-current shrink-0" aria-hidden="true" />
+              ) : (
+                <Headphones className="w-4 h-4 text-[#B84C27] shrink-0" aria-hidden="true" />
+              )}
+              <span className="truncate max-w-[65vw]">
+                {voiceGuideLoading
+                  ? `Hazırlanıyor · ${hud.nearbyLandmark.name}`
+                  : voiceGuideLandmark?.id === hud.nearbyLandmark.id
+                    ? `Sesli Rehber’i Durdur · ${hud.nearbyLandmark.name}`
+                    : `Sesli Rehber · ${hud.nearbyLandmark.name}`}
+              </span>
+            </button>
+          )}
+        </div>
 
         {/* Efeler Regional Radio Tuner Drawer */}
         {!dockCollapsed && activeDrawer === 'radio' && (

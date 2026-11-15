@@ -1,14 +1,16 @@
 import * as THREE from 'three';
+import { RAIL_TRACK_Z } from '../data/aydinRoads';
 import { ANCIENT_SIGNPOST_POSITIONS, LANDMARKS } from '../data/efelerData';
 import { ColliderBox, SeasonType } from '../types/game';
 import { CityMaterialLibrary } from './materials';
+import { mergeStaticGroupMeshes } from './meshMerge';
 import {
   createArticulatedPedestrianGeos,
   createSculptedHumanRig,
   SCULPTED_HUMAN_SCALE,
   SculptedHumanRig,
 } from './sculptedHumans';
-import { getWalkableSlopeAngles, getWalkableSurfaceHeightAt } from './terrain';
+import { getTerrainHeightAt, getWalkableSlopeAngles, getWalkableSurfaceHeightAt } from './terrain';
 
 /**
  * 1. Growing Fig Tree in the Heart of Kent Meydanı (scales with İncir Puanı)
@@ -27,7 +29,7 @@ export interface LivingFigTree {
 
 export function createLivingFigTree(mats: CityMaterialLibrary): LivingFigTree {
   const group = new THREE.Group();
-  group.position.set(0, 0, 21.8);
+  group.position.set(0, getTerrainHeightAt(0, 19.8), 19.8);
 
   // Octagonal Travertine Planter & Soil Bed
   const planter = new THREE.Mesh(
@@ -201,6 +203,7 @@ interface WalkerAgent {
   scale: number;
   phaseOffset: number;
   groundY: number;
+  hiddenWritten?: boolean;
 }
 
 export interface PedestrianSystem {
@@ -266,48 +269,52 @@ export function createPedestrianSystem(): PedestrianSystem {
 
   const pickPlazaPoint = (zone: 'north' | 'south'): [number, number] => {
     if (zone === 'north') {
-      // Large open paved event plaza south of Burger King / Popeyes / Usta Döner & north of Belediye Kafeleri
+      // Large open paved event plaza south of north perimeter & north of Belediye Kafeleri
       const px = (Math.random() - 0.5) * 21.6; // [-10.8, 10.8]
-      const pz = -7.6 + Math.random() * 10.4; // [-7.6, +2.8]
+      const pz = -9.6 + Math.random() * 10.4; // [-9.6, +0.8]
       return [px, pz];
     }
     // Southern promenade south of the turquoise pool & monument (around Fig Tree & Zeybek)
     for (let attempt = 0; attempt < 8; attempt++) {
       const px = (Math.random() - 0.5) * 21.6; // [-10.8, 10.8]
-      const pz = 18.8 + Math.random() * 6.8; // [18.8, 25.6]
+      const pz = 16.8 + Math.random() * 6.8; // [16.8, 23.6]
       if (
-        Math.hypot(px, pz - 21.8) > 2.6 &&
-        Math.hypot(px + 8.2, pz - 20.6) > 2.3 &&
-        Math.hypot(px - 8.8, pz - 22.8) > 2.2
+        Math.hypot(px, pz - 19.8) > 2.6 &&
+        Math.hypot(px + 8.2, pz - 18.6) > 2.3 &&
+        Math.hypot(px - 8.8, pz - 20.8) > 2.2
       ) {
         return [px, pz];
       }
     }
-    return [3.6, 22.4];
+    return [3.6, 20.4];
   };
 
   const streetWaypoints: [number, number][] = [
-    [-18, -14],
-    [-18, 2],
-    [-18, 26],
-    [-18, 42],
-    [-18, -58],
-    [-18, -77],
-    [18, 26],
-    [18, -4],
-    [18, -30],
-    [18, -58],
-    [58, -40],
-    [64, -40],
-    [58, -78],
-    [63, -78],
-    [28, 12],
-    [-28, 12],
-    [58, 18],
-    [68, 30],
-    [-54, 22],
-    [-62, 30],
-    [0, 56],
+    [-19, -15],
+    [-19, 2],
+    [-19, 24],
+    [-19, 52],
+    [-19, -52],
+    [-58, -50],
+    [-64, -47],
+    [-39.5, 11.5],
+    [-58, 11.5],
+    [19, 24],
+    [19, -4],
+    [19, -30],
+    [19, -52],
+    [68, -48],
+    [76, -48],
+    [68, -82],
+    [74, -82],
+    [25, 10],
+    [68, 22],
+    [74, 24],
+    [-58, 30],
+    [-76, 30],
+    [0, 70],
+    [-102, 11.5],
+    [118, 10],
   ];
 
   const agents: WalkerAgent[] = [];
@@ -418,23 +425,31 @@ export function createPedestrianSystem(): PedestrianSystem {
           a.scale = 0.001;
           if (a.timer <= 0) {
             a.state = 'exiting';
+            a.hiddenWritten = false;
             const wp = streetWaypoints[Math.floor(Math.random() * streetWaypoints.length)];
             a.targetX = wp[0];
             a.targetZ = wp[1];
+          } else if (a.hiddenWritten) {
+            continue;
+          } else {
+            a.hiddenWritten = true;
           }
         } else if (a.state === 'entering') {
+          a.hiddenWritten = false;
           a.scale = Math.max(0.001, a.scale - stepDt * 2.5);
           if (a.scale <= 0.02) {
             a.state = 'inside';
             a.timer = 2.5 + Math.random() * 3.5;
           }
         } else if (a.state === 'exiting') {
+          a.hiddenWritten = false;
           a.scale = Math.min(1, a.scale + stepDt * 2.5);
           if (a.scale >= 0.99) {
             a.scale = 1;
             a.state = 'walking';
           }
         } else {
+          a.hiddenWritten = false;
           // Walking slowly & peacefully
           const dx = a.targetX - a.x;
           const dz = a.targetZ - a.z;
@@ -464,7 +479,7 @@ export function createPedestrianSystem(): PedestrianSystem {
             a.x += (dx / dist) * step;
             a.z += (dz / dist) * step;
             const dFocusSq = (a.x - focusX) * (a.x - focusX) + (a.z - focusZ) * (a.z - focusZ);
-            if (!a.isPlazaWalker && (dFocusSq < 5625 || (pedStepCount + i) % 4 === 0)) {
+            if (!a.isPlazaWalker && (dFocusSq < 5625 ? (pedStepCount + i) % 2 === 0 : (pedStepCount + i) % 6 === 0)) {
               a.groundY = getWalkableSurfaceHeightAt(a.x, a.z);
             }
           }
@@ -572,15 +587,21 @@ export function createTrafficLightSystem(mats: CityMaterialLibrary): TrafficLigh
   const group = new THREE.Group();
 
   const intersections: [number, number][] = [
-    [-54, 12],
-    [-18, 12],
-    [18, 12],
-    [58, 12],
-    [18, -22],
-    [18, 48],
-    [58, -58],
-    [-18, -58],
-    [58, -96],
+    [-58, 30],
+    [-19, 11.5],
+    [19, 38],
+    [-19, 38],
+    [19, -30],
+    [-19, -30],
+    [19, 70],
+    [-19, 70],
+    [68, -30],
+    [68, 10],
+    [118, 10],
+    [19, -72],
+    [-19, -72],
+    [-102, 11.5],
+    [-102, 70],
   ];
 
   const redMatNS = new THREE.MeshStandardMaterial({
@@ -603,45 +624,73 @@ export function createTrafficLightSystem(mats: CityMaterialLibrary): TrafficLigh
   const amberMatEW = amberMatNS.clone();
   const greenMatEW = greenMatNS.clone();
 
+  const totalPoles = intersections.length * 2;
+  const halfPoles = intersections.length;
+  const poleGeo = new THREE.CylinderGeometry(0.07, 0.09, 3.1, 8);
+  poleGeo.translate(0, 1.55, 0);
+  const housingGeo = new THREE.BoxGeometry(0.32, 0.88, 0.28);
+  housingGeo.translate(0, 3.1, 0);
+  const bulbGeo = new THREE.SphereGeometry(0.085, 8, 6);
+
+  const poleInst = new THREE.InstancedMesh(poleGeo, mats.wroughtIron, totalPoles);
+  const housingInst = new THREE.InstancedMesh(housingGeo, mats.wroughtIron, totalPoles);
+  const redNSInst = new THREE.InstancedMesh(bulbGeo, redMatNS, halfPoles);
+  const amberNSInst = new THREE.InstancedMesh(bulbGeo, amberMatNS, halfPoles);
+  const greenNSInst = new THREE.InstancedMesh(bulbGeo, greenMatNS, halfPoles);
+  const redEWInst = new THREE.InstancedMesh(bulbGeo, redMatEW, halfPoles);
+  const amberEWInst = new THREE.InstancedMesh(bulbGeo, amberMatEW, halfPoles);
+  const greenEWInst = new THREE.InstancedMesh(bulbGeo, greenMatEW, halfPoles);
+
+  const dummy = new THREE.Object3D();
+  const bulbDummy = new THREE.Object3D();
+
   intersections.forEach(([ix, iz], idx) => {
-    // Place two corner poles cleanly on sidewalk corners
     const corners: [number, number, boolean][] = [
-      [ix + 5.2, iz + 5.2, true], // faces N-S traffic
-      [ix - 5.2, iz - 5.2, false], // faces E-W traffic
+      [ix + 5.0, iz + 5.0, true], // faces N-S traffic
+      [ix - 5.0, iz - 5.0, false], // faces E-W traffic
     ];
 
-    corners.forEach(([px, pz, isNS]) => {
-      const poleGroup = new THREE.Group();
-      poleGroup.position.set(px, getWalkableSurfaceHeightAt(px, pz), pz);
-      if (!isNS) poleGroup.rotation.y = Math.PI / 2;
+    corners.forEach(([px, pz, isNS], cIdx) => {
+      const py = getWalkableSurfaceHeightAt(px, pz);
+      const yaw = isNS ? 0 : Math.PI / 2;
+      const poleSlot = idx * 2 + cIdx;
 
-      const pole = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.07, 0.09, 3.1, 8),
-        mats.wroughtIron
-      );
-      pole.position.y = 1.55;
-      poleGroup.add(pole);
+      dummy.position.set(px, py, pz);
+      dummy.rotation.set(0, yaw, 0);
+      dummy.scale.setScalar(1);
+      dummy.updateMatrix();
+      poleInst.setMatrixAt(poleSlot, dummy.matrix);
+      housingInst.setMatrixAt(poleSlot, dummy.matrix);
 
-      const housing = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.88, 0.28), mats.wroughtIron);
-      housing.position.set(0, 3.1, 0);
-      poleGroup.add(housing);
+      const fwdX = Math.sin(yaw) * 0.14;
+      const fwdZ = Math.cos(yaw) * 0.14;
+      const rInst = isNS ? redNSInst : redEWInst;
+      const aInst = isNS ? amberNSInst : amberEWInst;
+      const gInst = isNS ? greenNSInst : greenEWInst;
 
-      const rMat = isNS ? redMatNS : redMatEW;
-      const aMat = isNS ? amberMatNS : amberMatEW;
-      const gMat = isNS ? greenMatNS : greenMatEW;
+      bulbDummy.rotation.set(0, 0, 0);
+      bulbDummy.scale.setScalar(1);
+      bulbDummy.position.set(px + fwdX, py + 3.36, pz + fwdZ);
+      bulbDummy.updateMatrix();
+      rInst.setMatrixAt(idx, bulbDummy.matrix);
 
-      const rLamp = new THREE.Mesh(new THREE.SphereGeometry(0.085, 8, 8), rMat);
-      rLamp.position.set(0, 3.36, 0.14);
-      const aLamp = new THREE.Mesh(new THREE.SphereGeometry(0.085, 8, 8), aMat);
-      aLamp.position.set(0, 3.1, 0.14);
-      const gLamp = new THREE.Mesh(new THREE.SphereGeometry(0.085, 8, 8), gMat);
-      gLamp.position.set(0, 2.84, 0.14);
+      bulbDummy.position.set(px + fwdX, py + 3.1, pz + fwdZ);
+      bulbDummy.updateMatrix();
+      aInst.setMatrixAt(idx, bulbDummy.matrix);
 
-      poleGroup.add(rLamp, aLamp, gLamp);
-      group.add(poleGroup);
-      void idx;
+      bulbDummy.position.set(px + fwdX, py + 2.84, pz + fwdZ);
+      bulbDummy.updateMatrix();
+      gInst.setMatrixAt(idx, bulbDummy.matrix);
     });
   });
+
+  [poleInst, housingInst, redNSInst, amberNSInst, greenNSInst, redEWInst, amberEWInst, greenEWInst].forEach(
+    (inst) => {
+      inst.instanceMatrix.needsUpdate = true;
+      inst.computeBoundingSphere();
+      group.add(inst);
+    }
+  );
 
   let lastTrafficBucket = -1;
   return {
@@ -706,12 +755,15 @@ export function buildAncientCitiesSignposts(
     capRoof.position.set(0, 3.45, 0);
     signGroup.add(capRoof);
 
+    mergeStaticGroupMeshes(signGroup);
     group.add(signGroup);
+    const halfX = idx === 1 ? 0.9 : 2.3;
+    const halfZ = idx === 1 ? 2.3 : 0.9;
     colliders.push({
-      minX: sx - 2.3,
-      maxX: sx + 2.3,
-      minZ: sz - 0.9,
-      maxZ: sz + 0.9,
+      minX: sx - halfX,
+      maxX: sx + halfX,
+      minZ: sz - halfZ,
+      maxZ: sz + halfZ,
     });
   });
 
@@ -728,10 +780,10 @@ export interface SteamTrainSystem {
 
 export function createSteamTrainSystem(mats: CityMaterialLibrary): SteamTrainSystem {
   const group = new THREE.Group();
-  const trackZ = 77.1;
+  const trackZ = RAIL_TRACK_Z;
 
   const trainGroup = new THREE.Group();
-  trainGroup.position.set(-76, 0.34, trackZ);
+  trainGroup.position.set(-108, 0.34, trackZ);
   group.add(trainGroup);
 
   const locoGreenMat = new THREE.MeshStandardMaterial({
@@ -769,7 +821,6 @@ export function createSteamTrainSystem(mats: CityMaterialLibrary): SteamTrainSys
         mats.wroughtIron
       );
       wheel.rotation.x = Math.PI / 2;
-      wheel.castShadow = true;
       wheelPivot.add(wheel);
 
       const spokeBar = new THREE.Mesh(
@@ -784,6 +835,7 @@ export function createSteamTrainSystem(mats: CityMaterialLibrary): SteamTrainSys
       );
       wheelPivot.add(spokeCross);
 
+      mergeStaticGroupMeshes(wheelPivot);
       parent.add(wheelPivot);
       wheels.push(wheelPivot);
     });
@@ -793,11 +845,12 @@ export function createSteamTrainSystem(mats: CityMaterialLibrary): SteamTrainSys
   const locoGroup = new THREE.Group();
   locoGroup.position.set(8.5, 0, 0);
   trainGroup.add(locoGroup);
+  const locoStatic = new THREE.Group();
 
   const locoFrame = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.42, 2.05), chassisMat);
   locoFrame.position.set(0, 0.65, 0);
   locoFrame.castShadow = true;
-  locoGroup.add(locoFrame);
+  locoStatic.add(locoFrame);
 
   // Cylindrical Boiler + Smokebox
   const boiler = new THREE.Mesh(
@@ -807,7 +860,7 @@ export function createSteamTrainSystem(mats: CityMaterialLibrary): SteamTrainSys
   boiler.rotation.z = Math.PI / 2;
   boiler.position.set(0.55, 1.65, 0);
   boiler.castShadow = true;
-  locoGroup.add(boiler);
+  locoStatic.add(boiler);
 
   const smokebox = new THREE.Mesh(
     new THREE.CylinderGeometry(0.84, 0.84, 1.15, 16),
@@ -816,39 +869,38 @@ export function createSteamTrainSystem(mats: CityMaterialLibrary): SteamTrainSys
   smokebox.rotation.z = Math.PI / 2;
   smokebox.position.set(2.55, 1.65, 0);
   smokebox.castShadow = true;
-  locoGroup.add(smokebox);
+  locoStatic.add(smokebox);
 
   // Brass Boiler Bands & Steam Dome
   [-0.5, 0.65, 1.8].forEach((bx) => {
     const band = new THREE.Mesh(new THREE.CylinderGeometry(0.845, 0.845, 0.1, 16), mats.brass);
     band.rotation.z = Math.PI / 2;
     band.position.set(bx, 1.65, 0);
-    locoGroup.add(band);
+    locoStatic.add(band);
   });
 
   const steamDome = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.38, 0.58, 12), mats.brass);
   steamDome.position.set(0.65, 2.55, 0);
-  locoGroup.add(steamDome);
+  locoStatic.add(steamDome);
 
   // Tall Smokestack Funnel + Flared Lip
   const funnel = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.19, 1.05, 12), chassisMat);
   funnel.position.set(2.55, 2.75, 0);
-  funnel.castShadow = true;
   const funnelRim = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.24, 0.18, 12), mats.brass);
   funnelRim.position.set(2.55, 3.28, 0);
-  locoGroup.add(funnel, funnelRim);
+  locoStatic.add(funnel, funnelRim);
 
   // Front Brass Headlamp + Cowcatcher
   const headlamp = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.26, 10), mats.lampBulb);
   headlamp.rotation.z = Math.PI / 2;
   headlamp.position.set(3.22, 2.05, 0);
-  locoGroup.add(headlamp);
+  locoStatic.add(headlamp);
 
   const cowcatcher = new THREE.Mesh(new THREE.ConeGeometry(0.92, 0.9, 4), chassisMat);
   cowcatcher.rotation.y = Math.PI / 4;
   cowcatcher.rotation.z = -Math.PI / 2;
   cowcatcher.position.set(3.5, 0.48, 0);
-  locoGroup.add(cowcatcher);
+  locoStatic.add(cowcatcher);
 
   // Driver's Cab with Warm Lit Windows & Arched Roof
   const cab = new THREE.Mesh(new THREE.BoxGeometry(2.15, 2.25, 2.15), locoGreenMat);
@@ -858,7 +910,10 @@ export function createSteamTrainSystem(mats: CityMaterialLibrary): SteamTrainSys
   cabRoof.position.set(-2.15, 3.04, 0);
   const cabWin = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.72, 2.2), mats.windowLit);
   cabWin.position.set(-2.15, 2.25, 0);
-  locoGroup.add(cab, cabRoof, cabWin);
+  locoStatic.add(cab, cabRoof, cabWin);
+
+  mergeStaticGroupMeshes(locoStatic);
+  locoGroup.add(locoStatic);
 
   addWheelPair(locoGroup, -2.2, 0.5);
   addWheelPair(locoGroup, -0.4, 0.56);
@@ -869,13 +924,16 @@ export function createSteamTrainSystem(mats: CityMaterialLibrary): SteamTrainSys
   const tenderGroup = new THREE.Group();
   tenderGroup.position.set(2.6, 0, 0);
   trainGroup.add(tenderGroup);
+  const tenderStatic = new THREE.Group();
 
   const tenderBody = new THREE.Mesh(new THREE.BoxGeometry(3.6, 1.35, 1.98), locoGreenMat);
   tenderBody.position.set(0, 1.25, 0);
   tenderBody.castShadow = true;
   const coalMound = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.4, 1.55), chassisMat);
   coalMound.position.set(0, 1.98, 0);
-  tenderGroup.add(tenderBody, coalMound);
+  tenderStatic.add(tenderBody, coalMound);
+  mergeStaticGroupMeshes(tenderStatic);
+  tenderGroup.add(tenderStatic);
   addWheelPair(tenderGroup, -1.0, 0.42);
   addWheelPair(tenderGroup, 1.0, 0.42);
 
@@ -884,6 +942,7 @@ export function createSteamTrainSystem(mats: CityMaterialLibrary): SteamTrainSys
     const coach = new THREE.Group();
     coach.position.set(cx, 0, 0);
     trainGroup.add(coach);
+    const coachStatic = new THREE.Group();
 
     const chassis = new THREE.Mesh(new THREE.BoxGeometry(8.2, 0.34, 2.05), chassisMat);
     chassis.position.set(0, 0.62, 0);
@@ -897,13 +956,15 @@ export function createSteamTrainSystem(mats: CityMaterialLibrary): SteamTrainSys
     roof.castShadow = true;
     const clerestory = new THREE.Mesh(new THREE.BoxGeometry(6.2, 0.24, 1.1), coachTrimMat);
     clerestory.position.set(0, 3.08, 0);
-    coach.add(chassis, body, upperBand, roof, clerestory);
+    coachStatic.add(chassis, body, upperBand, roof, clerestory);
 
     [-2.7, -0.9, 0.9, 2.7].forEach((wx) => {
       const winStrip = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.78, 2.1), mats.windowLit);
       winStrip.position.set(wx, 1.86, 0);
-      coach.add(winStrip);
+      coachStatic.add(winStrip);
     });
+    mergeStaticGroupMeshes(coachStatic);
+    coach.add(coachStatic);
 
     addWheelPair(coach, -2.9, 0.4);
     addWheelPair(coach, -1.6, 0.4);
@@ -921,14 +982,14 @@ export function createSteamTrainSystem(mats: CityMaterialLibrary): SteamTrainSys
   const puffs = Array.from({ length: puffCount }, (_, i) => ({
     life: (i / puffCount) * 2.2,
     maxLife: 2.2,
-    x: -76,
+    x: -108,
     y: 3.7,
     z: trackZ,
   }));
   const puffDummy = new THREE.Object3D();
 
-  // Train journey state: cruise from West (-76) -> stop at platform (+2) for 6.5s -> depart East (+78) -> loop
-  let trainX = -52;
+  // Train journey state: cruise from West (-108) -> stop at platform (+2) for 6.5s -> depart East (+124) -> loop
+  let trainX = -78;
   let phase: 'arriving' | 'dwelling' | 'departing' = 'arriving';
   let dwellTimer = 0;
   let speed = 6.8;
@@ -959,8 +1020,8 @@ export function createSteamTrainSystem(mats: CityMaterialLibrary): SteamTrainSys
       } else {
         speed = THREE.MathUtils.damp(speed, 8.2, 1.3, dt);
         trainX += speed * dt;
-        if (trainX > 92) {
-          trainX = -82;
+        if (trainX > 124) {
+          trainX = -112;
           speed = 6.8;
           phase = 'arriving';
         }
@@ -1017,7 +1078,7 @@ export function createSteamTrainSystem(mats: CityMaterialLibrary): SteamTrainSys
  */
 export interface AmbientTrafficSystem {
   group: THREE.Group;
-  update: (dt: number, elapsed: number) => void;
+  update: (dt: number, elapsed: number, focusX?: number, focusZ?: number) => void;
 }
 
 interface TrafficRider {
@@ -1031,20 +1092,30 @@ interface TrafficRider {
   bobPhase: number;
   isScooter: boolean;
   riderRig: SculptedHumanRig;
+  lastPitch: number;
 }
 
 const LOOP_CENTRAL: [number, number][] = [
-  [-52, -20.2],
-  [56, -20.2],
-  [56, 46.2],
-  [-52, 46.2],
+  [-102, -16],
+  [-58, -30],
+  [19, -30],
+  [68, -30],
+  [68, 30],
+  [42, 30],
+  [19, 38],
+  [-19, 38],
+  [-58, 38],
+  [-58, 30],
+  [-102, 30],
 ];
 
 const LOOP_NORTH: [number, number][] = [
-  [-16, -94.2],
-  [56, -94.2],
-  [56, -23.8],
-  [-16, -23.8],
+  [-19, -72],
+  [19, -72],
+  [68, -72],
+  [68, -30],
+  [19, -30],
+  [-19, -30],
 ];
 
 function computeLoopLength(pts: [number, number][]): number {
@@ -1091,6 +1162,20 @@ export function createAmbientTrafficSystem(mats: CityMaterialLibrary): AmbientTr
   const riders: TrafficRider[] = [];
   const initOut = { x: 0, z: 0, heading: 0 };
 
+  // Shared vehicle part geometries across all 8 riders
+  const scooterTireGeo = new THREE.TorusGeometry(0.24, 0.07, 7, 14);
+  const bikeTireGeo = new THREE.TorusGeometry(0.32, 0.045, 7, 14);
+  const scooterHubGeo = new THREE.BoxGeometry(0.06, 0.36, 0.04);
+  const bikeHubGeo = new THREE.BoxGeometry(0.06, 0.48, 0.04);
+  const deckGeo = new THREE.BoxGeometry(0.36, 0.24, 1.05);
+  const apronGeo = new THREE.BoxGeometry(0.34, 0.65, 0.22);
+  const scooterLampGeo = new THREE.SphereGeometry(0.08, 8, 6);
+  const scooterBarGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.52, 8);
+  const frameGeo = new THREE.BoxGeometry(0.08, 0.1, 1.15);
+  const seatPostGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.32, 6);
+  const bikeBarGeo = new THREE.CylinderGeometry(0.022, 0.022, 0.48, 8);
+  const basketGeo = new THREE.BoxGeometry(0.3, 0.22, 0.26);
+
   for (let i = 0; i < 8; i++) {
     const isScooter = i % 2 === 1;
     const loopIndex = i < 4 ? 0 : 1;
@@ -1107,14 +1192,14 @@ export function createAmbientTrafficSystem(mats: CityMaterialLibrary): AmbientTr
       wheelPivot.position.set(0, wheelR, wz);
 
       const tire = new THREE.Mesh(
-        new THREE.TorusGeometry(wheelR, isScooter ? 0.07 : 0.045, 7, 14),
+        isScooter ? scooterTireGeo : bikeTireGeo,
         mats.wroughtIron
       );
       tire.rotation.y = Math.PI / 2;
       wheelPivot.add(tire);
 
       const hub = new THREE.Mesh(
-        new THREE.BoxGeometry(0.06, wheelR * 1.5, 0.04),
+        isScooter ? scooterHubGeo : bikeHubGeo,
         mats.brass
       );
       wheelPivot.add(hub);
@@ -1124,27 +1209,26 @@ export function createAmbientTrafficSystem(mats: CityMaterialLibrary): AmbientTr
     });
 
     if (isScooter) {
-      const deck = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.24, 1.05), bodyMat);
+      const deck = new THREE.Mesh(deckGeo, bodyMat);
       deck.position.set(0, 0.44, 0.05);
-      deck.castShadow = true;
-      const apron = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.65, 0.22), bodyMat);
+      const apron = new THREE.Mesh(apronGeo, bodyMat);
       apron.position.set(0, 0.72, -0.45);
       apron.rotation.x = 0.2;
-      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), mats.lampBulb);
+      const lamp = new THREE.Mesh(scooterLampGeo, mats.lampBulb);
       lamp.position.set(0, 0.92, -0.58);
-      const handlebar = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.52, 8), mats.wroughtIron);
+      const handlebar = new THREE.Mesh(scooterBarGeo, mats.wroughtIron);
       handlebar.rotation.z = Math.PI / 2;
       handlebar.position.set(0, 0.98, -0.42);
       riderGroup.add(deck, apron, lamp, handlebar);
     } else {
-      const frame = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 1.15), bodyMat);
+      const frame = new THREE.Mesh(frameGeo, bodyMat);
       frame.position.set(0, 0.56, 0);
-      const seatPost = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.32, 6), mats.wroughtIron);
+      const seatPost = new THREE.Mesh(seatPostGeo, mats.wroughtIron);
       seatPost.position.set(0, 0.68, 0.14);
-      const handlebar = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.48, 8), mats.wroughtIron);
+      const handlebar = new THREE.Mesh(bikeBarGeo, mats.wroughtIron);
       handlebar.rotation.z = Math.PI / 2;
       handlebar.position.set(0, 0.96, -0.4);
-      const basket = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, 0.26), mats.darkTimber);
+      const basket = new THREE.Mesh(basketGeo, mats.darkTimber);
       basket.position.set(0, 0.78, -0.52);
       riderGroup.add(frame, seatPost, handlebar, basket);
     }
@@ -1161,7 +1245,7 @@ export function createAmbientTrafficSystem(mats: CityMaterialLibrary): AmbientTr
         hatStyle: isScooter ? 'beret' : i % 2 === 0 ? 'newsboy' : 'none',
         facialHair: i % 4 === 3 ? 'mustache' : 'none',
       },
-      { scale: 0.132, forwardIsNegZ: true }
+      { scale: 0.132, forwardIsNegZ: true, castShadow: false }
     );
     riderRig.root.position.set(0, isScooter ? 0.3 : 0.34, 0.14);
     // Seated posture gripping handlebars
@@ -1198,14 +1282,17 @@ export function createAmbientTrafficSystem(mats: CityMaterialLibrary): AmbientTr
       bobPhase: i * 1.4,
       isScooter,
       riderRig,
+      lastPitch: 0,
     });
   }
 
   const sampleOut = { x: 0, z: 0, heading: 0 };
+  let stepCounter = 0;
 
   return {
     group,
-    update: (dt: number, elapsed: number) => {
+    update: (dt: number, elapsed: number, focusX = 0, focusZ = 0) => {
+      stepCounter += 1;
       for (let i = 0; i < riders.length; i++) {
         const r = riders[i];
         const pts = r.loopIndex === 0 ? LOOP_CENTRAL : LOOP_NORTH;
@@ -1213,13 +1300,25 @@ export function createAmbientTrafficSystem(mats: CityMaterialLibrary): AmbientTr
         r.progress = (r.progress + r.speed * dt) % len;
         sampleLoop(pts, len, r.progress, sampleOut);
 
+        const fdx = sampleOut.x - focusX;
+        const fdz = sampleOut.z - focusZ;
+        const focusDistSq = fdx * fdx + fdz * fdz;
+        if (focusDistSq > 8100) {
+          if (r.group.visible) r.group.visible = false;
+          r.heading = sampleOut.heading;
+          continue;
+        }
+        if (!r.group.visible) r.group.visible = true;
+
         let hDiff = sampleOut.heading - r.heading;
         while (hDiff > Math.PI) hDiff -= Math.PI * 2;
         while (hDiff < -Math.PI) hDiff += Math.PI * 2;
         r.heading += hDiff * Math.min(1, dt * 8.5);
 
         const groundY = getWalkableSurfaceHeightAt(sampleOut.x, sampleOut.z);
-        const slopes = getWalkableSlopeAngles(sampleOut.x, sampleOut.z, r.heading);
+        if ((stepCounter + i) % 2 === 0 || focusDistSq < 1600) {
+          r.lastPitch = getWalkableSlopeAngles(sampleOut.x, sampleOut.z, r.heading).pitch;
+        }
 
         r.group.position.set(
           sampleOut.x,
@@ -1228,7 +1327,7 @@ export function createAmbientTrafficSystem(mats: CityMaterialLibrary): AmbientTr
         );
         r.group.rotation.order = 'YXZ';
         r.group.rotation.y = r.heading;
-        r.group.rotation.x = slopes.pitch;
+        r.group.rotation.x = r.lastPitch;
 
         // Subtle head look & bicycle pedaling leg kinematics
         r.riderRig.headPivot.rotation.y = Math.sin(elapsed * 0.9 + r.bobPhase) * 0.14;

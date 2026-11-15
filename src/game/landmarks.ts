@@ -140,7 +140,13 @@ function buildTralleis(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandma
     group.add(col);
   });
 
-  const ringMesh = makeDiscoveryRing(lx, lz + 9.5);
+  // South stepped travertine apron meeting Tralleis Yokuşu approach spur cleanly
+  const southStep = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.34, 1.3), mats.travertine);
+  southStep.position.set(0, 0.17, 5.05);
+  southStep.receiveShadow = true;
+  group.add(southStep);
+
+  const ringMesh = makeDiscoveryRing(lx, lz + 6.6);
   const colliders: ColliderBox[] = [];
   addBoxCollider(colliders, lx, lz, 17, 9, 9.2);
 
@@ -154,6 +160,11 @@ function buildBeyCamii(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandma
   const group = new THREE.Group();
   const [lx, , lz] = def.position;
   group.position.set(lx, 0, lz);
+
+  const skirt = new THREE.Mesh(new THREE.BoxGeometry(13.9, 2.4, 14.9), mats.travertine);
+  skirt.position.y = -1.18;
+  skirt.receiveShadow = true;
+  group.add(skirt);
 
   const plinth = new THREE.Mesh(new THREE.BoxGeometry(13.5, 0.4, 14.5), mats.travertine);
   plinth.position.y = 0.2;
@@ -235,7 +246,13 @@ function buildBeyCamii(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandma
   spire.castShadow = true;
   group.add(spire);
 
-  const ringMesh = makeDiscoveryRing(lx - 10.5, lz + 4);
+  // South travertine threshold linking Bey Camii plinth seamlessly to Sevgi Yolu promenade
+  const southThreshold = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.24, 1.9), mats.travertine);
+  southThreshold.position.set(0, 0.12, 8.0);
+  southThreshold.receiveShadow = true;
+  group.add(southThreshold);
+
+  const ringMesh = makeDiscoveryRing(lx, lz + 8.6);
   const colliders: ColliderBox[] = [];
   addBoxCollider(colliders, lx, lz, 13.5, 14.5, 9.5);
 
@@ -249,6 +266,11 @@ function buildNasuhPasa(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandm
   const group = new THREE.Group();
   const [lx, , lz] = def.position;
   group.position.set(lx, 0, lz);
+
+  const skirt = new THREE.Mesh(new THREE.BoxGeometry(17.9, 2.2, 15.9), mats.travertine);
+  skirt.position.y = -1.08;
+  skirt.receiveShadow = true;
+  group.add(skirt);
 
   const yard = new THREE.Mesh(new THREE.BoxGeometry(17.5, 0.25, 15.5), mats.plaza);
   yard.position.y = 0.125;
@@ -315,7 +337,12 @@ function buildNasuhPasa(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandm
   sadirvanDome.castShadow = true;
   group.add(sadirvanDome);
 
-  const ringMesh = makeDiscoveryRing(lx - 11.8, lz);
+  const westStep = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.22, 6.2), mats.travertine);
+  westStep.position.set(-9.1, 0.11, 0);
+  westStep.receiveShadow = true;
+  group.add(westStep);
+
+  const ringMesh = makeDiscoveryRing(lx - 10.2, lz);
   const colliders: ColliderBox[] = [];
   addBoxCollider(colliders, lx, lz, 17.5, 15.5, 6.8);
 
@@ -329,6 +356,11 @@ function buildRamazanPasa(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLan
   const group = new THREE.Group();
   const [lx, , lz] = def.position;
   group.position.set(lx, 0, lz);
+
+  const skirt = new THREE.Mesh(new THREE.BoxGeometry(14.4, 2.4, 13.4), mats.travertine);
+  skirt.position.y = -1.18;
+  skirt.receiveShadow = true;
+  group.add(skirt);
 
   const base = new THREE.Mesh(new THREE.BoxGeometry(14, 0.35, 13), mats.cobble);
   base.position.y = 0.175;
@@ -394,6 +426,11 @@ function buildCihanoglu(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandm
   const [lx, , lz] = def.position;
   group.position.set(lx, 0, lz);
 
+  const skirt = new THREE.Mesh(new THREE.BoxGeometry(15.4, 2.2, 15.4), mats.travertine);
+  skirt.position.y = -1.08;
+  skirt.receiveShadow = true;
+  group.add(skirt);
+
   const plinth = new THREE.Mesh(new THREE.BoxGeometry(15, 0.4, 15), mats.travertine);
   plinth.position.y = 0.2;
   plinth.receiveShadow = true;
@@ -439,6 +476,11 @@ function buildCihanoglu(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandm
   towerRoof.rotation.y = Math.PI / 4;
   towerRoof.position.set(4.8, 13.1, -3.5);
   group.add(towerRoof);
+
+  const eastStep = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.24, 6.4), mats.travertine);
+  eastStep.position.set(7.7, 0.12, 0);
+  eastStep.receiveShadow = true;
+  group.add(eastStep);
 
   const ringMesh = makeDiscoveryRing(lx + 11.2, lz + 1.5);
   const colliders: ColliderBox[] = [];
@@ -697,22 +739,31 @@ function buildKentMeydani(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLan
   const [lx, , lz] = def.position;
   group.position.set(lx, 0, lz);
 
-  // 1. Expansive Travertine Plaza Floor (x in [-13.0..+13.0], z in [-27.2..+15.8])
-  const plazaSlab = new THREE.Mesh(new THREE.BoxGeometry(26.0, 0.24, 43.0), mats.plaza);
+  // 1. Expansive Travertine Plaza Floor (x in [-13.5..+13.5], z in [-27.2..+15.8], flush with Menderes & Hükümet sidewalks)
+  const plazaSkirt = new THREE.Mesh(new THREE.BoxGeometry(27.2, 2.2, 43.4), mats.travertine);
+  plazaSkirt.position.set(0, -1.08, -5.7);
+  plazaSkirt.receiveShadow = true;
+  group.add(plazaSkirt);
+
+  const plazaSlab = new THREE.Mesh(new THREE.BoxGeometry(27.0, 0.24, 43.0), mats.plaza);
   plazaSlab.position.set(0, 0.12, -5.7);
   plazaSlab.receiveShadow = true;
   group.add(plazaSlab);
 
-  // Travertine Outer Border Curbs
+  // Travertine Outer Border Curbs & North/South Approach Thresholds
   const westCurb = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.27, 43.2), mats.travertine);
-  westCurb.position.set(-13.0, 0.135, -5.7);
+  westCurb.position.set(-13.3, 0.135, -5.7);
   const eastCurb = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.27, 43.2), mats.travertine);
-  eastCurb.position.set(13.0, 0.135, -5.7);
-  const northCurb = new THREE.Mesh(new THREE.BoxGeometry(26.6, 0.27, 0.6), mats.travertine);
+  eastCurb.position.set(13.3, 0.135, -5.7);
+  const northCurb = new THREE.Mesh(new THREE.BoxGeometry(27.2, 0.27, 0.6), mats.travertine);
   northCurb.position.set(0, 0.135, -27.2);
-  const southCurb = new THREE.Mesh(new THREE.BoxGeometry(26.6, 0.27, 0.6), mats.travertine);
+  const southCurb = new THREE.Mesh(new THREE.BoxGeometry(27.2, 0.27, 0.6), mats.travertine);
   southCurb.position.set(0, 0.135, 15.8);
-  group.add(westCurb, eastCurb, northCurb, southCurb);
+  const northGateStep = new THREE.Mesh(new THREE.BoxGeometry(8.6, 0.22, 0.9), mats.travertine);
+  northGateStep.position.set(0, 0.11, -27.6);
+  const southGateStep = new THREE.Mesh(new THREE.BoxGeometry(8.6, 0.22, 0.9), mats.travertine);
+  southGateStep.position.set(0, 0.11, 16.2);
+  group.add(westCurb, eastCurb, northCurb, southCurb, northGateStep, southGateStep);
 
   // Open Event Square ("Büyük Boş Alan", local z in [-20.8..-8.4]) Stone Paving Bands
   for (let gz = -20.0; gz <= -9.0; gz += 3.6) {
@@ -1430,6 +1481,11 @@ function buildSariBelediye(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLa
   group.position.set(lx, 0, lz);
 
   // 1. Travertine Municipal Plaza Terrace & Front Steps facing Hükümet Bulvarı (-X)
+  const terraceSkirt = new THREE.Mesh(new THREE.BoxGeometry(19.6, 2.0, 17.2), mats.travertine);
+  terraceSkirt.position.set(0.4, -0.98, 0);
+  terraceSkirt.receiveShadow = true;
+  group.add(terraceSkirt);
+
   const terrace = new THREE.Mesh(new THREE.BoxGeometry(19.2, 0.42, 16.8), mats.plaza);
   terrace.position.set(0.4, 0.21, 0);
   terrace.receiveShadow = true;
@@ -1686,7 +1742,7 @@ function buildSariBelediye(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLa
   flagGroup.add(poleBase, mast, finial, flagCloth);
   group.add(flagGroup);
 
-  const ringMesh = makeDiscoveryRing(lx - 11.0, lz);
+  const ringMesh = makeDiscoveryRing(lx - 10.2, lz);
   const colliders: ColliderBox[] = [];
   // Curved glass podium & upper tower collider
   addBoxCollider(colliders, lx + bldgX - 0.5, lz, 13.8, 14.2, 11.0);
@@ -1716,7 +1772,10 @@ function buildTekstilPark(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLan
   const path = new THREE.Mesh(new THREE.BoxGeometry(24, 0.22, 3.2), mats.plaza);
   path.position.set(0, 0.12, 4.5);
   path.receiveShadow = true;
-  group.add(path);
+  const westEntryWalk = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.22, 7.8), mats.plaza);
+  westEntryWalk.position.set(-11.4, 0.12, 2.0);
+  westEntryWalk.receiveShadow = true;
+  group.add(path, westEntryWalk);
 
   // Iconic Red-Brick Sawtooth Textile Weaving Hall
   const hall = new THREE.Mesh(new THREE.BoxGeometry(15.5, 4.4, 9.2), mats.industrialBrick);
@@ -1762,7 +1821,7 @@ function buildTekstilPark(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLan
   deck.position.set(4.5, 0.42, 2.4);
   group.add(deck);
 
-  const ringMesh = makeDiscoveryRing(lx + 14.5, lz);
+  const ringMesh = makeDiscoveryRing(lx - 14.5, lz);
   const colliders: ColliderBox[] = [];
   addBoxCollider(colliders, lx - 1.5, lz - 3.5, 15.5, 9.2, 5.8);
   addBoxCollider(colliders, lx + 8.8, lz - 5.2, 2.4, 2.4, 15.5);
@@ -1918,24 +1977,24 @@ function buildTrenGari(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandma
   const railZ1 = 10.4;
   const railZ2 = 11.8;
   // Gravel Ballast Bed under Railway Tracks
-  const ballast = new THREE.Mesh(new THREE.BoxGeometry(165, 0.16, 3.6), mats.dirtPath);
+  const ballast = new THREE.Mesh(new THREE.BoxGeometry(240, 0.16, 3.6), mats.dirtPath);
   ballast.position.set(0, 0.08, (railZ1 + railZ2) / 2);
   ballast.receiveShadow = true;
   group.add(ballast);
 
   [railZ1, railZ2].forEach((rz) => {
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(165, 0.16, 0.16), mats.railSteel);
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(240, 0.16, 0.16), mats.railSteel);
     rail.position.set(0, 0.25, rz);
     group.add(rail);
   });
 
-  for (let tx = -76; tx <= 76; tx += 2.2) {
+  for (let tx = -112; tx <= 112; tx += 2.2) {
     const sleeper = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.12, 2.3), mats.darkTimber);
     sleeper.position.set(tx, 0.14, (railZ1 + railZ2) / 2);
     group.add(sleeper);
   }
 
-  const ringMesh = makeDiscoveryRing(lx, lz - 7.5);
+  const ringMesh = makeDiscoveryRing(lx, lz - 6.5);
   const colliders: ColliderBox[] = [];
   addBoxCollider(colliders, lx, lz + 1.5, 22, 13, 8.6);
 
@@ -2070,6 +2129,11 @@ function buildOrtaMahalle(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLan
   vineCanopy.castShadow = true;
   pergola.add(vineCanopy);
   group.add(pergola);
+
+  const westStep = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.24, 7.0), mats.travertine);
+  westStep.position.set(-10.9, 0.12, 0);
+  westStep.receiveShadow = true;
+  group.add(westStep);
 
   const ringMesh = makeDiscoveryRing(lx - 12.2, lz);
   const colliders: ColliderBox[] = [];
@@ -3156,6 +3220,323 @@ function buildKipaAvm(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandmar
   return { def, group, ringMesh, colliders };
 }
 
+function createBazaarSignTexture(title: string, subtitle: string, bgHex: string, accentHex: string): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+
+  ctx.fillStyle = bgHex;
+  ctx.fillRect(0, 0, 512, 128);
+  ctx.strokeStyle = accentHex;
+  ctx.lineWidth = 8;
+  ctx.strokeRect(8, 8, 496, 112);
+
+  ctx.fillStyle = '#FFF8EA';
+  ctx.font = 'bold 42px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(title, 256, 48);
+
+  ctx.fillStyle = accentHex;
+  ctx.font = 'bold 20px sans-serif';
+  ctx.fillText(subtitle, 256, 92);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/**
+ * 16. Sevgi Yolu (Güzelhisar – Hasanefendi Yaya Caddesi & Işık Takları)
+ */
+function buildSevgiYolu(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandmark {
+  const group = new THREE.Group();
+  const [lx, , lz] = def.position;
+  group.position.set(lx, 0, lz);
+
+  const colliders: ColliderBox[] = [];
+
+  // Flanking Travertine Sidewalk Aprons (keeping center roadway z in [-3.9..+3.9] clear & drivable)
+  [-5.15, 5.15].forEach((az) => {
+    const apron = new THREE.Mesh(new THREE.BoxGeometry(25.2, 0.22, 2.3), mats.plaza);
+    apron.position.set(0, 0.04, az);
+    apron.receiveShadow = true;
+    group.add(apron);
+  });
+
+  const signMat = new THREE.MeshStandardMaterial({
+    map: createBazaarSignTexture('SEVGİ YOLU', 'GÜZELHİSAR · AYDIN EFELER', '#7D3524', '#F3C76B'),
+    roughness: 0.42,
+  });
+
+  // East & West Stone + Wrought-Iron Welcome Portal Arches spanning across Sevgi Yolu
+  [-11.5, 11.5].forEach((ax) => {
+    [-4.65, 4.65].forEach((az) => {
+      const base = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.45, 0.85), mats.travertine);
+      base.position.set(ax, 0.24, az);
+      const col = new THREE.Mesh(new THREE.BoxGeometry(0.62, 4.3, 0.62), mats.creamPlaster);
+      col.position.set(ax, 2.35, az);
+      col.castShadow = true;
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.26, 0.84), mats.travertine);
+      cap.position.set(ax, 4.55, az);
+      group.add(base, col, cap);
+      addBoxCollider(colliders, lx + ax, lz + az, 0.9, 0.9, 4.7);
+    });
+
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.38, 10.2), mats.wroughtIron);
+    beam.position.set(ax, 4.72, 0);
+    beam.castShadow = true;
+    group.add(beam);
+
+    const signBoard = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.96, 4.6), mats.wroughtIron);
+    signBoard.position.set(ax, 5.25, 0);
+    signBoard.castShadow = true;
+    const signE = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 0.84), signMat);
+    signE.rotation.y = Math.PI / 2;
+    signE.position.set(ax + 0.13, 5.25, 0);
+    const signW = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 0.84), signMat);
+    signW.rotation.y = -Math.PI / 2;
+    signW.position.set(ax - 0.13, 5.25, 0);
+    group.add(signBoard, signE, signW);
+  });
+
+  // Overhead Timber & Iron Pergola Light Arches + Warm String-Light Festoons
+  [-7.5, -3.75, 0, 3.75, 7.5].forEach((px) => {
+    [-4.65, 4.65].forEach((pz) => {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 4.2, 8), mats.wroughtIron);
+      post.position.set(px, 2.15, pz);
+      post.castShadow = true;
+      group.add(post);
+    });
+    const crossBeam = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 9.6), mats.darkTimber);
+    crossBeam.position.set(px, 4.25, 0);
+    crossBeam.castShadow = true;
+    group.add(crossBeam);
+
+    for (let bz = -3.6; bz <= 3.6; bz += 1.2) {
+      const sag = Math.cos((bz / 4.2) * Math.PI * 0.5) * 0.25;
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), mats.lampBulb);
+      bulb.position.set(px, 4.08 - sag, bz);
+      group.add(bulb);
+    }
+  });
+
+  // Sahaf / Kitapçı Kiosk on South Promenade (local x = 0, z = +5.35)
+  const kioskBase = new THREE.Mesh(new THREE.BoxGeometry(4.4, 2.45, 1.85), mats.darkTimber);
+  kioskBase.position.set(0, 1.32, 5.4);
+  kioskBase.castShadow = true;
+  const kioskRoof = new THREE.Mesh(createGableRoofGeometry(4.8, 2.25, 0.85), mats.terracottaRoof);
+  kioskRoof.position.set(0, 2.55, 5.4);
+  kioskRoof.castShadow = true;
+  const kioskAwning = new THREE.Mesh(
+    new THREE.BoxGeometry(4.2, 0.12, 1.05),
+    new THREE.MeshStandardMaterial({ color: 0xb64b36, map: mats.stripedAwningMap, roughness: 0.78 })
+  );
+  kioskAwning.position.set(0, 2.18, 4.25);
+  kioskAwning.rotation.x = -0.25;
+  group.add(kioskBase, kioskRoof, kioskAwning);
+
+  // Colorful Book Spines Display Rack in front of Sahaf Kiosk
+  const bookColors = [0xc85a32, 0x3b6e8c, 0x5d8a48, 0xe3a84f, 0x7c4558];
+  bookColors.forEach((hex, idx) => {
+    const book = new THREE.Mesh(
+      new THREE.BoxGeometry(0.45, 0.34, 0.28),
+      new THREE.MeshStandardMaterial({ color: hex, roughness: 0.7 })
+    );
+    book.position.set(-1.3 + idx * 0.65, 1.15, 4.35);
+    group.add(book);
+  });
+  addBoxCollider(colliders, lx, lz + 5.4, 4.6, 2.1, 3.5);
+
+  // Flower Stall (Çiçekçi Standı) & Benches on South & North Promenades
+  const flowerStand = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.85, 1.25), mats.creamPlaster);
+  flowerStand.position.set(-6.4, 0.52, 5.35);
+  flowerStand.castShadow = true;
+  group.add(flowerStand);
+  const bloomPalette = [0xe45a52, 0xf2b938, 0xde6ba0, 0x62a858];
+  for (let fi = 0; fi < 4; fi++) {
+    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.18, 0.28, 8), mats.terracottaPlaster);
+    pot.position.set(-7.35 + fi * 0.64, 1.08, 5.35);
+    const bloom = new THREE.Mesh(
+      new THREE.DodecahedronGeometry(0.26, 0),
+      new THREE.MeshStandardMaterial({ color: bloomPalette[fi], roughness: 0.78 })
+    );
+    bloom.position.set(-7.35 + fi * 0.64, 1.32, 5.35);
+    group.add(pot, bloom);
+  }
+  addBoxCollider(colliders, lx - 6.4, lz + 5.35, 3.0, 1.4, 1.6);
+
+  // Decorative Street Benches & Planters on North Sidewalk
+  [-6.2, 0, 6.2].forEach((bx) => {
+    const benchSeat = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.1, 0.52), mats.darkTimber);
+    benchSeat.position.set(bx, 0.52, -5.2);
+    const benchBack = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.42, 0.09), mats.darkTimber);
+    benchBack.position.set(bx, 0.78, -5.44);
+    const planter = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.46, 0.72), mats.travertine);
+    planter.position.set(bx + 1.9, 0.34, -5.2);
+    const bush = new THREE.Mesh(
+      new THREE.DodecahedronGeometry(0.36, 0),
+      new THREE.MeshStandardMaterial({ color: 0x558444, roughness: 0.85 })
+    );
+    bush.position.set(bx + 1.9, 0.68, -5.2);
+    group.add(benchSeat, benchBack, planter, bush);
+  });
+
+  const ringMesh = makeDiscoveryRing(lx, lz);
+  return { def, group, ringMesh, colliders };
+}
+
+/**
+ * 17. Yağcılar İçi Tarihi Çarşısı (Cuma Mah. – Geleneksel Aydın Arastası)
+ */
+function buildYagcilarIci(def: LandmarkDef, mats: CityMaterialLibrary): BuiltLandmark {
+  const group = new THREE.Group();
+  const [lx, , lz] = def.position;
+  group.position.set(lx, 0, lz);
+
+  const colliders: ColliderBox[] = [];
+
+  // Retaining Skirt & Cobblestone Arasta Courtyard (20m x 18m)
+  const skirt = new THREE.Mesh(new THREE.BoxGeometry(20.6, 2.4, 18.6), mats.travertine);
+  skirt.position.y = -1.15;
+  skirt.receiveShadow = true;
+  group.add(skirt);
+
+  const courtyard = new THREE.Mesh(new THREE.BoxGeometry(20.0, 0.3, 18.0), mats.cobble);
+  courtyard.position.y = 0.15;
+  courtyard.receiveShadow = true;
+  group.add(courtyard);
+
+  const borderCurb = new THREE.Mesh(new THREE.BoxGeometry(20.4, 0.2, 18.4), mats.travertine);
+  borderCurb.position.y = 0.1;
+  group.add(borderCurb);
+
+  // East Stone Arasta Entrance Gate facing Yağcılar Cd. (+X)
+  [-2.8, 2.8].forEach((gz) => {
+    const pier = new THREE.Mesh(new THREE.BoxGeometry(1.2, 4.6, 1.2), mats.travertine);
+    pier.position.set(9.3, 2.45, gz);
+    pier.castShadow = true;
+    pier.receiveShadow = true;
+    group.add(pier);
+    addBoxCollider(colliders, lx + 9.3, lz + gz, 1.35, 1.35, 4.9);
+  });
+  const gateLintel = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.15, 7.2), mats.travertine);
+  gateLintel.position.set(9.3, 5.15, 0);
+  gateLintel.castShadow = true;
+  const gateRoof = new THREE.Mesh(createGableRoofGeometry(1.8, 7.6, 0.95), mats.terracottaRoof);
+  gateRoof.position.set(9.3, 5.72, 0);
+  gateRoof.castShadow = true;
+  group.add(gateLintel, gateRoof);
+
+  const arastaSignMat = new THREE.MeshStandardMaterial({
+    map: createBazaarSignTexture('YAĞCILAR İÇİ', 'TARİHİ AYDIN ÇARŞISI · ARASTA', '#3D4B2F', '#E8BD68'),
+    roughness: 0.45,
+  });
+  const signFaceOut = new THREE.Mesh(new THREE.PlaneGeometry(4.8, 0.92), arastaSignMat);
+  signFaceOut.rotation.y = Math.PI / 2;
+  signFaceOut.position.set(10.02, 5.18, 0);
+  const signFaceIn = new THREE.Mesh(new THREE.PlaneGeometry(4.8, 0.92), arastaSignMat);
+  signFaceIn.rotation.y = -Math.PI / 2;
+  signFaceIn.position.set(8.58, 5.18, 0);
+  group.add(signFaceOut, signFaceIn);
+
+  // North & South Traditional Bazaar Arcade Wings flanking Central Arasta Lane
+  const wingConfigs = [
+    { z: -5.8, awningDir: 1, wallMat: mats.creamPlaster, cumbaMat: mats.ochrePlaster },
+    { z: 5.8, awningDir: -1, wallMat: mats.peachPlaster, cumbaMat: mats.whitePlaster },
+  ];
+  const awningMat1 = new THREE.MeshStandardMaterial({
+    color: 0xb64b36,
+    map: mats.stripedAwningMap,
+    roughness: 0.8,
+  });
+  const awningMat2 = new THREE.MeshStandardMaterial({
+    color: 0x4b6e45,
+    map: mats.stripedAwningMap,
+    roughness: 0.8,
+  });
+
+  wingConfigs.forEach((wc, wi) => {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(16.2, 4.4, 5.0), wc.wallMat);
+    body.position.set(-0.8, 2.45, wc.z);
+    body.castShadow = true;
+    body.receiveShadow = true;
+    group.add(body);
+
+    const cumba = new THREE.Mesh(new THREE.BoxGeometry(16.6, 2.1, 5.4), wc.cumbaMat);
+    cumba.position.set(-0.8, 3.85, wc.z);
+    cumba.castShadow = true;
+    group.add(cumba);
+
+    const roof = new THREE.Mesh(createGableRoofGeometry(17.2, 6.0, 1.85), mats.terracottaRoof);
+    roof.position.set(-0.8, 4.9, wc.z);
+    roof.castShadow = true;
+    group.add(roof);
+
+    // Shop doors, lit upper windows & striped awnings facing central arasta alley
+    [-6.2, -2.6, 1.0, 4.6].forEach((sx, si) => {
+      const faceZ = wc.z + wc.awningDir * 2.52;
+      const door = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.1, 0.16), mats.darkTimber);
+      door.position.set(sx, 1.35, faceZ);
+      const win = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.05, 0.16), mats.windowLit);
+      win.position.set(sx, 3.85, wc.z + wc.awningDir * 2.72);
+      const awning = new THREE.Mesh(
+        new THREE.BoxGeometry(3.1, 0.12, 1.45),
+        (si + wi) % 2 === 0 ? awningMat1 : awningMat2
+      );
+      awning.position.set(sx, 2.55, wc.z + wc.awningDir * 3.15);
+      awning.rotation.x = wc.awningDir * 0.24;
+      awning.castShadow = true;
+      group.add(door, win, awning);
+    });
+
+    addBoxCollider(colliders, lx - 0.8, lz + wc.z, 16.4, 5.3, 6.8);
+  });
+
+  // Olive-Oil Amphoras (Zeytinyağı Küpleri), Spice Sacks & Wicker Fig Baskets along Shop Fronts
+  const amphoraMat = new THREE.MeshStandardMaterial({ color: 0xb85f3c, roughness: 0.72 });
+  const sackMat = new THREE.MeshStandardMaterial({ color: 0xc2a274, roughness: 0.92 });
+  const spiceColors = [0xd48e28, 0xb8382c, 0x6c8738];
+  [-5.2, -1.6, 2.4, 5.4].forEach((px, idx) => {
+    const küp = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.22, 0.78, 10), amphoraMat);
+    küp.position.set(px, 0.68, -2.75);
+    küp.castShadow = true;
+    const sack = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, 0.56, 8), sackMat);
+    sack.position.set(px + 0.65, 0.58, 2.75);
+    const spiceTop = new THREE.Mesh(
+      new THREE.SphereGeometry(0.24, 8, 6),
+      new THREE.MeshStandardMaterial({ color: spiceColors[idx % spiceColors.length], roughness: 0.85 })
+    );
+    spiceTop.scale.set(1, 0.45, 1);
+    spiceTop.position.set(px + 0.65, 0.88, 2.75);
+    group.add(küp, sack, spiceTop);
+  });
+
+  // Central West Courtyard Octagonal Stone Bazaar Fountain
+  const fountainBase = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.3, 0.65, 8), mats.travertine);
+  fountainBase.position.set(-5.8, 0.52, 0);
+  fountainBase.castShadow = true;
+  const fountainWater = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, 0.14, 8), mats.water);
+  fountainWater.position.set(-5.8, 0.8, 0);
+  const fountainPillar = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 1.35, 8), mats.travertine);
+  fountainPillar.position.set(-5.8, 1.45, 0);
+  group.add(fountainBase, fountainWater, fountainPillar);
+  addBoxCollider(colliders, lx - 5.8, lz, 2.4, 2.4, 2.2);
+
+  // Warm Overhead Market Lanterns across the Bazaar Alley
+  [-4.5, -1.0, 2.5, 6.0].forEach((bx) => {
+    for (let bz = -2.2; bz <= 2.2; bz += 1.1) {
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), mats.lampBulb);
+      bulb.position.set(bx, 3.85 - Math.cos((bz / 2.6) * Math.PI * 0.5) * 0.18, bz);
+      group.add(bulb);
+    }
+  });
+
+  const ringMesh = makeDiscoveryRing(lx + 10.8, lz);
+  return { def, group, ringMesh, colliders };
+}
+
 export function buildAllLandmarks(
   defs: LandmarkDef[],
   mats: CityMaterialLibrary
@@ -3207,6 +3588,12 @@ export function buildAllLandmarks(
         break;
       case 'kipaavm':
         built = buildKipaAvm(def, mats);
+        break;
+      case 'sevgiyolu':
+        built = buildSevgiYolu(def, mats);
+        break;
+      case 'yagcilarici':
+        built = buildYagcilarIci(def, mats);
         break;
       default:
         built = buildKentMeydani(def, mats);

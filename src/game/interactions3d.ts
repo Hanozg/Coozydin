@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { ColliderBox, StreetInteractionType } from '../types/game';
 import { CityMaterialLibrary } from './materials';
+import { mergeStaticGroupMeshes } from './meshMerge';
 import { createSculptedHumanRig, SculptedHumanRig } from './sculptedHumans';
 import { SPARROW_PALETTE } from './sculptor';
 import { getTerrainHeightAt, getWalkableSurfaceHeightAt } from './terrain';
@@ -27,7 +28,7 @@ export interface LibraryVendorRig {
   headWorldPos: THREE.Vector3;
   isBubbleVisible: () => boolean;
   triggerBubble: () => void;
-  update: (dt: number, elapsed: number) => void;
+  update: (dt: number, elapsed: number, focusX?: number, focusZ?: number) => void;
 }
 
 export interface LokmaStandRig {
@@ -67,7 +68,7 @@ function createEfeDancer(idx = 0): EfeDancerRig {
       hatStyle: 'fes',
       facialHair: 'mustache',
     },
-    { forwardIsNegZ: false }
+    { forwardIsNegZ: false, castShadow: false }
   );
   pivot.add(rig.root);
   return { pivot, rig, baseAngle: 0 };
@@ -93,7 +94,7 @@ export function createStreetMusiciansZeybek(
 ): StreetMusiciansRig {
   const group = new THREE.Group();
   const cx = -8.2;
-  const cz = 20.6;
+  const cz = 18.6;
   const plazaY = getWalkableSurfaceHeightAt(cx, cz);
   group.position.set(cx, plazaY, cz);
 
@@ -127,7 +128,7 @@ export function createStreetMusiciansZeybek(
         hatStyle: 'newsboy',
         facialHair: 'mustache',
       },
-      { forwardIsNegZ: false }
+      { forwardIsNegZ: false, castShadow: false }
     );
     m.add(rig.root);
 
@@ -135,7 +136,6 @@ export function createStreetMusiciansZeybek(
       const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.36, 12), mats.creamPlaster);
       drum.rotation.z = Math.PI / 2;
       drum.position.set(0, 0.88, 0.3);
-      drum.castShadow = true;
       m.add(drum);
       const drumRim = new THREE.Mesh(
         new THREE.CylinderGeometry(0.295, 0.295, 0.08, 12),
@@ -218,6 +218,7 @@ export function createStreetMusiciansZeybek(
     },
     update: (dt: number, elapsed: number, focusX?: number, focusZ?: number) => {
       if (danceTimer > 0) {
+        if (!group.visible) group.visible = true;
         danceTimer = Math.max(0, danceTimer - dt);
         if (sparkHidden) {
           sparkInst.visible = true;
@@ -264,10 +265,12 @@ export function createStreetMusiciansZeybek(
         if (poseInitialized && settleTimer <= 0 && focusX !== undefined && focusZ !== undefined) {
           const dx = focusX - cx;
           const dz = focusZ - cz;
-          if (dx * dx + dz * dz > 4225) {
+          if (dx * dx + dz * dz > 5625) {
+            if (group.visible) group.visible = false;
             return;
           }
         }
+        if (!group.visible) group.visible = true;
         settleTimer = Math.max(0, settleTimer - dt);
         poseInitialized = true;
 
@@ -297,9 +300,9 @@ export function createLibraryAndVendor(
 ): LibraryVendorRig {
   const group = new THREE.Group();
 
-  // A. Library Building at [-27.5, y, 25.5] facing East toward Kent Meydanı
-  const libX = -27.5;
-  const libZ = 25.5;
+  // A. Library Building at [-38.0, y, 26.5] facing East toward Kent Meydanı & Menderes Blv.
+  const libX = -38.0;
+  const libZ = 26.5;
   const lib = new THREE.Group();
   lib.position.set(libX, getTerrainHeightAt(libX, libZ), libZ);
 
@@ -335,6 +338,7 @@ export function createLibraryAndVendor(
   signPlate.position.set(3.56, 4.7, 0);
   lib.add(signPlate);
 
+  mergeStaticGroupMeshes(lib);
   group.add(lib);
   colliders.push({
     minX: libX - 4.6,
@@ -343,9 +347,9 @@ export function createLibraryAndVendor(
     maxZ: libZ + 5.7,
   });
 
-  // B. Mendil & Lif Satıcısı (on sidewalk at [-21.4, y, 21.5], facing Kent Meydanı)
-  const vx = -21.4;
-  const vz = 21.5;
+  // B. Mendil & Lif Satıcısı (on Menderes sidewalk at [-25.5, y, 24.5], facing Kent Meydanı)
+  const vx = -25.5;
+  const vz = 24.5;
   const vy = getWalkableSurfaceHeightAt(vx, vz);
   const vendor = new THREE.Group();
   vendor.position.set(vx, vy, vz);
@@ -363,14 +367,13 @@ export function createLibraryAndVendor(
       hatStyle: 'headscarf',
       apron: true,
     },
-    { forwardIsNegZ: false }
+    { forwardIsNegZ: false, castShadow: false }
   );
   vendor.add(vendorRig.root);
 
   // Wooden Portable Display Tray with Colorful Lif & White Mendil Packs
   const tray = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.12, 0.56), mats.darkTimber);
   tray.position.set(0, 0.76, 0.48);
-  tray.castShadow = true;
   vendor.add(tray);
 
   const legL = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.75, 6), mats.darkTimber);
@@ -424,7 +427,15 @@ export function createLibraryAndVendor(
       bubbleTimer = 7.5;
       cycleTimer = 48.0;
     },
-    update: (dt: number, elapsed: number) => {
+    update: (dt: number, elapsed: number, focusX?: number, focusZ?: number) => {
+      if (focusX !== undefined && focusZ !== undefined) {
+        const dx = focusX - vx;
+        const dz = focusZ - vz;
+        const visible = dx * dx + dz * dz <= 5625;
+        if (vendor.visible !== visible) vendor.visible = visible;
+        if (!visible) return;
+      }
+
       // Gentle vendor greeting & waving when calling out
       vendorRig.updateWave(bubbleTimer > 0, dt, elapsed, 1.2);
 
@@ -449,21 +460,24 @@ export function createBeyCamiiLokmaStand(
   colliders: ColliderBox[]
 ): LokmaStandRig {
   const group = new THREE.Group();
-  const lx = 33.8;
-  const lz = -26.8;
+  const lx = -29.2;
+  const lz = 5.2;
   const ly = getWalkableSurfaceHeightAt(lx, lz);
   group.position.set(lx, ly, lz);
+
+  const lokmaStaticGroup = new THREE.Group();
+  group.add(lokmaStaticGroup);
 
   // Stone Serving Counter Base
   const counter = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.92, 1.35), mats.travertine);
   counter.position.y = 0.46;
   counter.castShadow = true;
   counter.receiveShadow = true;
-  group.add(counter);
+  lokmaStaticGroup.add(counter);
 
   const counterTop = new THREE.Mesh(new THREE.BoxGeometry(3.35, 0.1, 1.5), mats.darkTimber);
   counterTop.position.y = 0.96;
-  group.add(counterTop);
+  lokmaStaticGroup.add(counterTop);
 
   // Copper Cauldron (Bakır Kazan) & Glowing Embers
   const copperMat = new THREE.MeshStandardMaterial({
@@ -473,8 +487,7 @@ export function createBeyCamiiLokmaStand(
   });
   const cauldron = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.45, 0.52, 16), copperMat);
   cauldron.position.set(-0.75, 1.18, 0);
-  cauldron.castShadow = true;
-  group.add(cauldron);
+  lokmaStaticGroup.add(cauldron);
 
   // Golden Sizzling Lokma Rings inside Cauldron
   const lokmaMat = new THREE.MeshStandardMaterial({ color: 0xe6a135, roughness: 0.45 });
@@ -483,18 +496,20 @@ export function createBeyCamiiLokmaStand(
     const lok = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.035, 6, 10), lokmaMat);
     lok.rotation.x = Math.PI / 2;
     lok.position.set(-0.75 + Math.cos(ang) * 0.24, 1.44, Math.sin(ang) * 0.24);
-    group.add(lok);
+    lokmaStaticGroup.add(lok);
   }
 
   // Stack of Paper Serving Plates & Syrup Bowl
   const plateMat = new THREE.MeshStandardMaterial({ color: 0xf6f3eb, roughness: 0.65 });
   const plates = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.22, 0.22, 12), plateMat);
   plates.position.set(0.55, 1.12, 0.15);
-  group.add(plates);
+  lokmaStaticGroup.add(plates);
 
   const syrupBowl = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.16, 0.2, 12), mats.brass);
   syrupBowl.position.set(1.05, 1.1, -0.15);
-  group.add(syrupBowl);
+  lokmaStaticGroup.add(syrupBowl);
+
+  mergeStaticGroupMeshes(lokmaStaticGroup);
 
   // Friendly Attendant pouring Lokma (Sparrow Sim sculpted chef figure)
   const attendantRig = createSculptedHumanRig(
@@ -510,7 +525,7 @@ export function createBeyCamiiLokmaStand(
       facialHair: 'mustache',
       apron: true,
     },
-    { forwardIsNegZ: false }
+    { forwardIsNegZ: false, castShadow: false }
   );
   attendantRig.root.position.set(-0.2, getWalkableSurfaceHeightAt(lx - 0.2, lz - 1.0) - ly, -1.0);
   group.add(attendantRig.root);
@@ -569,10 +584,12 @@ export function createBeyCamiiLokmaStand(
       if (servePopTimer <= 0 && poseInitialized && focusX !== undefined && focusZ !== undefined) {
         const dx = focusX - lx;
         const dz = focusZ - lz;
-        if (dx * dx + dz * dz > 4225) {
+        if (dx * dx + dz * dz > 5625) {
+          if (group.visible) group.visible = false;
           return;
         }
       }
+      if (!group.visible) group.visible = true;
       poseInitialized = true;
 
       steamPuffs.forEach((puff, i) => {
@@ -628,7 +645,6 @@ function createAcousticGuitarMesh(spruceHex: number, rimHex: number): THREE.Grou
   sideGeo.translate(0, 0, -0.0475);
   const rimMat = new THREE.MeshStandardMaterial({ color: rimHex, roughness: 0.42 });
   const bodySide = new THREE.Mesh(sideGeo, rimMat);
-  bodySide.castShadow = true;
   g.add(bodySide);
 
   const topGeo = new THREE.ShapeGeometry(bodyShape, 12);
@@ -649,7 +665,6 @@ function createAcousticGuitarMesh(spruceHex: number, rimHex: number): THREE.Grou
   // Fretboard Neck & Slotted Headstock
   const neck = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.44, 0.022), GUITAR_NECK_MAT);
   neck.position.set(0, 0.44, 0.045);
-  neck.castShadow = true;
   const headstock = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.12, 0.022), rimMat);
   headstock.position.set(0, 0.7, 0.04);
   headstock.rotation.x = 0.14;
@@ -684,10 +699,13 @@ export function createParkGuitarYouthGroup(
   colliders: ColliderBox[]
 ): ParkGuitarYouthRig {
   const group = new THREE.Group();
-  const cx = -117.4;
-  const cz = 34.4;
+  const cx = -126.4;
+  const cz = 18.4;
   const baseY = getWalkableSurfaceHeightAt(cx, cz);
   group.position.set(cx, baseY, cz);
+
+  const parkStaticGroup = new THREE.Group();
+  group.add(parkStaticGroup);
 
   // Cozy bohemian picnic kilim + wooden log cushions on park lawn
   const rugMat = new THREE.MeshStandardMaterial({ color: 0xa64935, roughness: 0.9 });
@@ -697,26 +715,24 @@ export function createParkGuitarYouthGroup(
   const rugPatternMat = new THREE.MeshStandardMaterial({ color: 0xe3b15b, roughness: 0.88 });
   const rugInner = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.05, 1.9), rugPatternMat);
   rugInner.position.y = 0.028;
-  group.add(rug, rugInner);
+  parkStaticGroup.add(rug, rugInner);
 
   // Wooden seat log & cajon box drum
   const seatLog = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.26, 1.55, 10), mats.darkTimber);
   seatLog.rotation.z = Math.PI / 2;
   seatLog.rotation.y = 0.28;
   seatLog.position.set(-0.92, 0.22, 0.46);
-  seatLog.castShadow = true;
-  group.add(seatLog);
+  parkStaticGroup.add(seatLog);
 
   const cajonMat = new THREE.MeshStandardMaterial({ color: 0xc98b4d, roughness: 0.65 });
   const cajon = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.56, 0.42), cajonMat);
   cajon.position.set(-0.02, 0.3, -0.78);
-  cajon.castShadow = true;
   const cajonFront = new THREE.Mesh(
     new THREE.BoxGeometry(0.36, 0.48, 0.03),
     new THREE.MeshStandardMaterial({ color: 0x5c361e, roughness: 0.72 })
   );
   cajonFront.position.set(-0.02, 0.3, -0.56);
-  group.add(cajon, cajonFront);
+  parkStaticGroup.add(cajon, cajonFront);
 
   // Open guitar hardcase + two takeaway park coffee cups on blanket
   const caseBase = new THREE.Mesh(
@@ -731,7 +747,7 @@ export function createParkGuitarYouthGroup(
   );
   caseLining.position.set(0.05, 0.13, 0.92);
   caseLining.rotation.y = -0.18;
-  group.add(caseBase, caseLining);
+  parkStaticGroup.add(caseBase, caseLining);
 
   [
     [-0.35, 0.22],
@@ -739,7 +755,7 @@ export function createParkGuitarYouthGroup(
   ].forEach(([tx, tz]) => {
     const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.14, 8), mats.creamPlaster);
     cup.position.set(tx, 0.11, tz);
-    group.add(cup);
+    parkStaticGroup.add(cup);
   });
 
   // Warm fairy-light lantern post beside blanket
@@ -748,11 +764,12 @@ export function createParkGuitarYouthGroup(
     const pz = i === 0 ? -1.1 : 1.05;
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 1.85, 6), postMat);
     post.position.set(px, 0.92, pz);
-    post.castShadow = true;
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), mats.lampBulb);
     bulb.position.set(px, 1.86, pz);
-    group.add(post, bulb);
+    parkStaticGroup.add(post, bulb);
   });
+
+  mergeStaticGroupMeshes(parkStaticGroup);
 
   // Youth 1: Kerem — Seated Lead Acoustic Guitarist on Wooden Log
   const keremRig = createSculptedHumanRig(
@@ -765,13 +782,14 @@ export function createParkGuitarYouthGroup(
       hairStyle: 'short',
       hatStyle: 'none',
     },
-    { forwardIsNegZ: false }
+    { forwardIsNegZ: false, castShadow: false }
   );
   keremRig.root.position.set(-0.92, 0.18, 0.44);
   keremRig.root.rotation.y = 1.1;
   group.add(keremRig.root);
 
   const guitarKerem = createAcousticGuitarMesh(0xe0ae67, 0x6b3a1e);
+  mergeStaticGroupMeshes(guitarKerem);
   // Attach guitar across Kerem's torso (inverse human scale ~ 1/0.152 = 6.58)
   guitarKerem.scale.setScalar(1 / 0.152);
   guitarKerem.position.set(0.1, 1.05, 0.96);
@@ -789,13 +807,14 @@ export function createParkGuitarYouthGroup(
       hairStyle: 'waves',
       hatStyle: 'none',
     },
-    { forwardIsNegZ: false }
+    { forwardIsNegZ: false, castShadow: false }
   );
   elifRig.root.position.set(0.88, 0.02, 0.36);
   elifRig.root.rotation.y = -1.05;
   group.add(elifRig.root);
 
   const guitarElif = createAcousticGuitarMesh(0xe8c488, 0x7c4526);
+  mergeStaticGroupMeshes(guitarElif);
   guitarElif.scale.setScalar(0.94 / 0.152);
   guitarElif.position.set(0.1, 1.05, 0.94);
   guitarElif.rotation.set(-0.14, 0.08, -1.2);
@@ -812,7 +831,7 @@ export function createParkGuitarYouthGroup(
       hairStyle: 'short',
       hatStyle: 'none',
     },
-    { forwardIsNegZ: false }
+    { forwardIsNegZ: false, castShadow: false }
   );
   ardaRig.root.position.set(-0.02, 0.22, -0.94);
   ardaRig.root.rotation.y = 0.04;
@@ -829,7 +848,7 @@ export function createParkGuitarYouthGroup(
       hairStyle: 'bun',
       hatStyle: 'none',
     },
-    { forwardIsNegZ: false }
+    { forwardIsNegZ: false, castShadow: false }
   );
   defneRig.root.position.set(1.52, 0.03, -0.45);
   defneRig.root.rotation.y = -1.95;
@@ -926,6 +945,7 @@ export function createParkGuitarYouthGroup(
     update: (dt: number, elapsed: number, focusX?: number, focusZ?: number) => {
       const active = jamTimer > 0;
       if (active) {
+        if (!group.visible) group.visible = true;
         jamTimer = Math.max(0, jamTimer - dt);
         settleTimer = 1.2;
         if (noteHidden) {
@@ -941,10 +961,12 @@ export function createParkGuitarYouthGroup(
         if (poseInitialized && settleTimer <= 0 && focusX !== undefined && focusZ !== undefined) {
           const dx = focusX - cx;
           const dz = focusZ - cz;
-          if (dx * dx + dz * dz > 4225) {
+          if (dx * dx + dz * dz > 5625) {
+            if (group.visible) group.visible = false;
             return;
           }
         }
+        if (!group.visible) group.visible = true;
         settleTimer = Math.max(0, settleTimer - dt);
         ringMat.emissiveIntensity = 0.36 + Math.sin(elapsed * 2.2) * 0.1;
       }

@@ -53,6 +53,11 @@ const PRESET_QUERIES = [
     label: 'Orta Mahalle & ADÜ',
     query: 'Aydın Orta Mahalle Adnan Menderes Üniversitesi',
   },
+  {
+    id: 'sevgi_yagcilar',
+    label: 'Sevgi Yolu & Yağcılar İçi',
+    query: 'Aydın Efeler Sevgi Yolu Yağcılar İçi Çarşısı',
+  },
 ] as const;
 
 interface PlaceEntry {
@@ -128,6 +133,8 @@ function matchGameLandmark(placeName: string): LandmarkDef | null {
     { keywords: ['magnesia', 'artemis', 'germencik'], landmarkId: 'magnesia' },
     { keywords: ['nevzat biçer', 'nevzat bicer', 'biçer parkı'], landmarkId: 'nevzatbicerpark' },
     { keywords: ['kipa', 'kipa avm', 'aydın kipa'], landmarkId: 'kipaavm' },
+    { keywords: ['sevgi yolu', 'sevgiyolu'], landmarkId: 'sevgiyolu' },
+    { keywords: ['yağcılar içi', 'yagcilar ici', 'yağcılar çarşısı', 'yağcılar'], landmarkId: 'yagcilarici' },
   ];
 
   for (const rule of rules) {

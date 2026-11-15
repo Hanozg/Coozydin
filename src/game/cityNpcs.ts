@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { COZY_ERRANDS } from '../data/efelerData';
 import { BUILDING_NPCS } from '../data/npcData';
 import {
   AvatarConfig,
@@ -8,6 +10,7 @@ import {
   HeldTreatType,
 } from '../types/game';
 import { CityMaterialLibrary } from './materials';
+import { mergeStaticGroupMeshes } from './meshMerge';
 import {
   createSculptedHumanRig,
   SculptedHumanAppearance,
@@ -15,6 +18,43 @@ import {
 } from './sculptedHumans';
 import { SPARROW_PALETTE } from './sculptor';
 import { getWalkableSurfaceHeightAt } from './terrain';
+
+let _sharedQuestMarkerGeo: THREE.BufferGeometry | null = null;
+let _sharedQuestMarkerMat: THREE.MeshStandardMaterial | null = null;
+
+function getQuestMarkerGeometry(): THREE.BufferGeometry {
+  if (_sharedQuestMarkerGeo) return _sharedQuestMarkerGeo;
+
+  const bar = new THREE.CylinderGeometry(0.064, 0.032, 0.27, 10);
+  bar.translate(0, 0.22, 0);
+
+  const topCap = new THREE.SphereGeometry(0.064, 10, 8);
+  topCap.translate(0, 0.355, 0);
+
+  const dot = new THREE.SphereGeometry(0.052, 10, 8);
+  dot.translate(0, -0.02, 0);
+
+  const merged = mergeGeometries([bar, topCap, dot], false);
+  bar.dispose();
+  topCap.dispose();
+  dot.dispose();
+
+  merged.userData = { isSharedHumanGeo: true };
+  _sharedQuestMarkerGeo = merged;
+  return merged;
+}
+
+function getQuestMarkerMaterial(): THREE.MeshStandardMaterial {
+  if (_sharedQuestMarkerMat) return _sharedQuestMarkerMat;
+  _sharedQuestMarkerMat = new THREE.MeshStandardMaterial({
+    color: 0xffd43b,
+    emissive: 0xf59f00,
+    emissiveIntensity: 0.58,
+    roughness: 0.25,
+    metalness: 0.08,
+  });
+  return _sharedQuestMarkerMat;
+}
 
 function hexToNum(hex: string | number): number {
   if (typeof hex === 'number') return hex;
@@ -187,6 +227,7 @@ export function createCityAvatarRig(
   const rig = createSculptedHumanRig(avatarConfigToAppearance(initial), {
     forwardIsNegZ: true,
     contactShadowTex,
+    castShadow: 'full',
   });
 
   const applyConfig = (cfg: AvatarConfig) => {
@@ -233,6 +274,8 @@ export interface BuildingNpcRuntime {
   group: THREE.Group;
   rig: SculptedHumanRig;
   ringMesh: THREE.Mesh;
+  questMarker: THREE.Mesh;
+  givesQuestIds: string[];
   baseY: number;
 }
 
@@ -240,7 +283,16 @@ export interface BuildingNpcSystem {
   group: THREE.Group;
   clickTargets: THREE.Object3D[];
   npcs: BuildingNpcRuntime[];
-  update: (dt: number, elapsed: number, playerX: number, playerZ: number) => void;
+  update: (
+    dt: number,
+    elapsed: number,
+    playerX: number,
+    playerZ: number,
+    activeErrandId?: string | null,
+    completedErrandIds?: string[],
+    focusX?: number,
+    focusZ?: number
+  ) => void;
 }
 
 function createPropStation(propType: BuildingNpcDef['propType'], mats: CityMaterialLibrary): THREE.Group {
@@ -348,6 +400,17 @@ export function createBuildingNpcSystem(
   const clickTargets: THREE.Object3D[] = [];
   const npcs: BuildingNpcRuntime[] = [];
 
+  const sharedNpcRingGeo = new THREE.RingGeometry(0.72, 0.98, 20);
+  const sharedNpcRingMat = new THREE.MeshStandardMaterial({
+    color: 0xe3a84f,
+    emissive: 0xd98834,
+    emissiveIntensity: 0.65,
+    side: THREE.DoubleSide,
+    roughness: 0.45,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+  });
+
   BUILDING_NPCS.forEach((def) => {
     const [nx, nz] = def.position;
     const ny = getWalkableSurfaceHeightAt(nx, nz);
@@ -357,24 +420,14 @@ export function createBuildingNpcSystem(
     npcGroup.rotation.y = def.facingRad;
 
     // Subtle interactive spot ring
-    const ringMesh = new THREE.Mesh(
-      new THREE.RingGeometry(0.72, 0.98, 24),
-      new THREE.MeshStandardMaterial({
-        color: 0xe3a84f,
-        emissive: 0xd98834,
-        emissiveIntensity: 0.65,
-        side: THREE.DoubleSide,
-        roughness: 0.45,
-        polygonOffset: true,
-        polygonOffsetFactor: -3,
-      })
-    );
+    const ringMesh = new THREE.Mesh(sharedNpcRingGeo, sharedNpcRingMat);
     ringMesh.rotation.x = -Math.PI / 2;
     ringMesh.position.y = 0.06;
     npcGroup.add(ringMesh);
 
     const npcRig = createSculptedHumanRig(npcDefToAppearance(def), {
       forwardIsNegZ: false,
+      castShadow: false,
     });
     npcGroup.add(npcRig.root);
 
@@ -382,8 +435,20 @@ export function createBuildingNpcSystem(
     if (def.propType !== 'none') {
       const propStation = createPropStation(def.propType, mats);
       propStation.position.set(1.08, 0, 0.18);
+      mergeStaticGroupMeshes(propStation);
       npcGroup.add(propStation);
     }
+
+    // Small floating yellow exclamation mark for quest-giving NPCs
+    const givesQuestIds = COZY_ERRANDS.filter((e) => e.fromLandmarkId === def.landmarkId).map(
+      (e) => e.id
+    );
+    const questMarker = new THREE.Mesh(getQuestMarkerGeometry(), getQuestMarkerMaterial());
+    questMarker.position.set(0, 2.28, 0);
+    questMarker.castShadow = false;
+    questMarker.receiveShadow = false;
+    questMarker.visible = givesQuestIds.length > 0;
+    npcGroup.add(questMarker);
 
     // Invisible click target for 3D raycasting
     const clickTarget = new THREE.Mesh(
@@ -396,7 +461,15 @@ export function createBuildingNpcSystem(
     clickTargets.push(clickTarget);
 
     group.add(npcGroup);
-    npcs.push({ def, group: npcGroup, rig: npcRig, ringMesh, baseY: ny });
+    npcs.push({
+      def,
+      group: npcGroup,
+      rig: npcRig,
+      ringMesh,
+      questMarker,
+      givesQuestIds,
+      baseY: ny,
+    });
 
     // Tight collider around NPC & prop station
     const colPad = def.propType === 'icecream_cart' ? 1.1 : 0.72;
@@ -414,16 +487,50 @@ export function createBuildingNpcSystem(
     group,
     clickTargets,
     npcs,
-    update: (dt: number, elapsed: number, playerX: number, playerZ: number) => {
+    update: (
+      dt: number,
+      elapsed: number,
+      playerX: number,
+      playerZ: number,
+      activeErrandId?: string | null,
+      completedErrandIds?: string[],
+      focusX = playerX,
+      focusZ = playerZ
+    ) => {
       frameCounter += 1;
       for (let idx = 0; idx < npcs.length; idx++) {
         const npc = npcs[idx];
+        const fdx = focusX - npc.def.position[0];
+        const fdz = focusZ - npc.def.position[1];
+        const focusDistSq = fdx * fdx + fdz * fdz;
+        if (focusDistSq > 6400) {
+          if (npc.group.visible) npc.group.visible = false;
+          continue;
+        }
+        if (!npc.group.visible) npc.group.visible = true;
+
         const dx = playerX - npc.def.position[0];
         const dz = playerZ - npc.def.position[1];
         const distSq = dx * dx + dz * dz;
         const near = distSq < 60.84; // 7.8^2
 
-        if (distSq <= 3600) {
+        if (npc.givesQuestIds.length > 0) {
+          let hasAvailableQuest = false;
+          for (let q = 0; q < npc.givesQuestIds.length; q++) {
+            const qId = npc.givesQuestIds[q];
+            if (qId !== activeErrandId && (!completedErrandIds || !completedErrandIds.includes(qId))) {
+              hasAvailableQuest = true;
+              break;
+            }
+          }
+          npc.questMarker.visible = hasAvailableQuest;
+          if (hasAvailableQuest) {
+            npc.questMarker.position.y = 2.28 + Math.sin(elapsed * 3.4 + idx) * 0.065;
+            npc.questMarker.rotation.y = elapsed * 1.6 + idx * 0.7;
+          }
+        }
+
+        if (focusDistSq <= 3600 || distSq <= 3600) {
           let lookYaw: number | undefined;
           if (distSq < 81 && distSq > 0.04) {
             const worldAngleToPlayer = Math.atan2(dx, dz);
@@ -437,11 +544,9 @@ export function createBuildingNpcSystem(
           npc.rig.updateWave(false, Math.min(0.1, dt * 8), elapsed, npc.def.position[0], undefined);
         }
 
-        if (distSq <= 5625) {
-          npc.ringMesh.scale.setScalar(
-            near ? 1.18 + Math.sin(elapsed * 4.5) * 0.1 : 1.0 + Math.sin(elapsed * 2.2) * 0.05
-          );
-        }
+        npc.ringMesh.scale.setScalar(
+          near ? 1.18 + Math.sin(elapsed * 4.5) * 0.1 : 1.0 + Math.sin(elapsed * 2.2) * 0.05
+        );
       }
     },
   };

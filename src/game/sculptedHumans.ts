@@ -791,6 +791,7 @@ export function createSculptedHumanRig(
     scale?: number;
     forwardIsNegZ?: boolean;
     contactShadowTex?: THREE.Texture;
+    castShadow?: boolean | 'full';
   }
 ): SculptedHumanRig {
   const mat = getSharedSculptedHumanMaterial();
@@ -828,6 +829,9 @@ export function createSculptedHumanRig(
   const scarfHex = initial.scarfHex ?? SPARROW_PALETTE.wallCreamTrim;
   const sleeveHex = initial.sleeveHex ?? initial.shirtHex;
 
+  const castTorsoShadow = opts?.castShadow !== false;
+  const castHeadShadow = opts?.castShadow === 'full';
+
   const torsoMesh = new THREE.Mesh(
     getCachedTorsoGeometry(
       initial.shirtHex,
@@ -839,7 +843,7 @@ export function createSculptedHumanRig(
     ),
     mat
   );
-  torsoMesh.castShadow = true;
+  torsoMesh.castShadow = castTorsoShadow;
   torsoMesh.receiveShadow = true;
   torsoPivot.add(torsoMesh);
 
@@ -859,7 +863,7 @@ export function createSculptedHumanRig(
     ),
     mat
   );
-  headMesh.castShadow = true;
+  headMesh.castShadow = castHeadShadow;
   headMesh.receiveShadow = true;
   headPivot.add(headMesh);
 

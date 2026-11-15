@@ -95,14 +95,12 @@ function buildCar(
     roughness: 0.35,
     metalness: 0.65,
   });
-  const glassMat = new THREE.MeshPhysicalMaterial({
+  const glassMat = new THREE.MeshStandardMaterial({
     color: 0x263847,
     roughness: 0.08,
-    metalness: 0.1,
-    transmission: isSoftwareGl ? 0 : 0.35,
+    metalness: 0.3,
     transparent: true,
-    opacity: isSoftwareGl ? 0.72 : 0.92,
-    ior: 1.5,
+    opacity: isSoftwareGl ? 0.72 : 0.68,
   });
   const tireMat = new THREE.MeshStandardMaterial({
     color: 0x1e2022,
@@ -162,12 +160,10 @@ function buildCar(
   // 3. Lower rocker / bumpers
   const frontBumper = new THREE.Mesh(new THREE.BoxGeometry(1.56, 0.14, 0.14), chromeMat);
   frontBumper.position.set(0, 0.36, -1.68);
-  frontBumper.castShadow = true;
   tiltGroup.add(frontBumper);
 
   const rearBumper = new THREE.Mesh(new THREE.BoxGeometry(1.56, 0.14, 0.14), chromeMat);
   rearBumper.position.set(0, 0.36, 1.66);
-  rearBumper.castShadow = true;
   tiltGroup.add(rearBumper);
 
   // Front grille
@@ -224,7 +220,6 @@ function buildCar(
     const suitcaseMat = new THREE.MeshStandardMaterial({ color: 0x8f5632, roughness: 0.72 });
     const suitcase = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.22, 0.46), suitcaseMat);
     suitcase.position.set(0, 0.14, 0);
-    suitcase.castShadow = true;
     rackGroup.add(suitcase);
     tiltGroup.add(rackGroup);
   }
@@ -319,7 +314,6 @@ function buildBicycle(config: VehicleConfig, shadowTex: THREE.Texture): VehicleR
   const fork = new THREE.Mesh(forkGeo, frameMat);
   fork.position.set(0, 0.3, 0.06);
   fork.rotation.x = -0.22;
-  fork.castShadow = true;
   forkPivot.add(fork);
 
   const handleBar = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.68, 8), accentMat);
@@ -345,7 +339,6 @@ function buildBicycle(config: VehicleConfig, shadowTex: THREE.Texture): VehicleR
     const basketMat = new THREE.MeshStandardMaterial({ color: 0xc29864, roughness: 0.88 });
     const basket = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.24, 0.28), basketMat);
     basket.position.set(0, 0.54, -0.14);
-    basket.castShadow = true;
     forkPivot.add(basket);
 
     const figMat = new THREE.MeshStandardMaterial({ color: 0x623b4e, roughness: 0.7 });
@@ -480,13 +473,11 @@ function buildMotorcycle(
   // Front mudguard + fork + sculpted legshield
   const fender = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.12, 0.38), paintMat);
   fender.position.set(0, 0.24, -0.02);
-  fender.castShadow = true;
   frontPivot.add(fender);
 
   const shield = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.68, 0.16), paintMat);
   shield.position.set(0, 0.56, 0.08);
   shield.rotation.x = -0.22;
-  shield.castShadow = true;
   frontPivot.add(shield);
 
   const handleBar = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.72, 10), chromeMat);
@@ -533,12 +524,12 @@ function buildMotorcycle(
 
   // Optional Windshield + Rear Top-box
   if (config.hasAccessory) {
-    const glassMat = new THREE.MeshPhysicalMaterial({
+    const glassMat = new THREE.MeshStandardMaterial({
       color: 0xdff1f7,
       roughness: 0.08,
-      transmission: isSoftwareGl ? 0 : 0.65,
+      metalness: 0.25,
       transparent: true,
-      opacity: isSoftwareGl ? 0.45 : 0.85,
+      opacity: 0.45,
     });
     const shieldGlass = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.36, 0.03), glassMat);
     shieldGlass.position.set(0, 1.08, 0.08);

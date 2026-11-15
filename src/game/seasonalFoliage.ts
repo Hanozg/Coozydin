@@ -403,7 +403,7 @@ export function createSeasonalFoliageSystem(
   const pCount = Math.max(1, pineSpots.length);
   const pineTrunks = new THREE.InstancedMesh(pineTrunkGeo, pineTrunkMat, pCount);
   const pineCrowns = new THREE.InstancedMesh(pineCrownGeo, pineCrownMat, pCount);
-  pineTrunks.castShadow = true;
+  pineTrunks.castShadow = false;
   pineCrowns.castShadow = true;
   pineCrowns.receiveShadow = true;
 
@@ -454,7 +454,7 @@ export function createSeasonalFoliageSystem(
   const palmCount = Math.max(1, palmSpots.length);
   const palmTrunks = new THREE.InstancedMesh(palmTrunkGeo, palmTrunkMat, palmCount);
   const palmCrowns = new THREE.InstancedMesh(palmCrownGeo, palmCrownMat, palmCount);
-  palmTrunks.castShadow = true;
+  palmTrunks.castShadow = false;
   palmCrowns.castShadow = true;
 
   const palmBaseY: number[] = [];
@@ -496,7 +496,7 @@ export function createSeasonalFoliageSystem(
   group.add(shrubInst);
 
   // --- 5. Floating Seasonal Petals (Spring) & Falling Leaves (Autumn) ---
-  const driftCount = 64;
+  const driftCount = 36;
   const driftGeo = new THREE.PlaneGeometry(0.24, 0.16);
   const driftMat = new THREE.MeshBasicMaterial({
     color: 0xffffff,
@@ -604,7 +604,7 @@ export function createSeasonalFoliageSystem(
       }
 
       swayAccum += dt;
-      const shouldUpdateMatrices = swayAccum >= 0.05 || colorsDirty;
+      const shouldUpdateMatrices = swayAccum >= 0.08 || colorsDirty;
       if (shouldUpdateMatrices) {
         swayAccum = 0;
 
@@ -613,9 +613,16 @@ export function createSeasonalFoliageSystem(
         const showBirds = winterBirdPresence > 0.03;
         blCrowns.visible = showCrowns;
         blBirds.visible = showBirds;
+        const maxSwayDistSq = 95 * 95;
+        let blMoved = colorsDirty;
+        let pineMoved = colorsDirty;
+        let palmMoved = colorsDirty;
 
         for (let i = 0; i < broadleafSpots.length; i++) {
           const spot = broadleafSpots[i];
+          const dx = spot.x - state.lookX;
+          const dz = spot.z - state.lookZ;
+          if (!colorsDirty && dx * dx + dz * dz > maxSwayDistSq) continue;
           const gy = broadleafBaseY[i];
           const swayZ = Math.sin(elapsed * (1.2 + state.windStrength * 0.45) + i * 0.7) * 0.025 * state.windStrength;
           const swayX = Math.cos(elapsed * 1.05 + i * 1.1) * 0.018 * state.windStrength;
@@ -627,6 +634,7 @@ export function createSeasonalFoliageSystem(
             dummy.scale.set(crownS, crownS * spot.heightScale, crownS);
             dummy.updateMatrix();
             blCrowns.setMatrixAt(i, dummy.matrix);
+            blMoved = true;
           }
 
           if (showBirds) {
@@ -636,6 +644,7 @@ export function createSeasonalFoliageSystem(
             dummy.scale.set(birdS, birdS * spot.heightScale, birdS);
             dummy.updateMatrix();
             blBirds.setMatrixAt(i, dummy.matrix);
+            blMoved = true;
           }
 
           if (colorsDirty) {
@@ -643,13 +652,16 @@ export function createSeasonalFoliageSystem(
             blCrowns.setColorAt(i, cTmp);
           }
         }
-        if (showCrowns) blCrowns.instanceMatrix.needsUpdate = true;
-        if (showBirds) blBirds.instanceMatrix.needsUpdate = true;
+        if (showCrowns && blMoved) blCrowns.instanceMatrix.needsUpdate = true;
+        if (showBirds && blMoved) blBirds.instanceMatrix.needsUpdate = true;
         if (colorsDirty && blCrowns.instanceColor) blCrowns.instanceColor.needsUpdate = true;
 
         // Update Low-Poly Tiered Pines (gentle wind sway + snow frosting)
         for (let i = 0; i < pineSpots.length; i++) {
           const spot = pineSpots[i];
+          const dx = spot.x - state.lookX;
+          const dz = spot.z - state.lookZ;
+          if (!colorsDirty && dx * dx + dz * dz > maxSwayDistSq) continue;
           const gy = pineBaseY[i];
           const swayZ = Math.sin(elapsed * 1.4 + i * 0.9) * 0.022 * state.windStrength;
           dummy.position.set(spot.x, gy, spot.z);
@@ -657,18 +669,22 @@ export function createSeasonalFoliageSystem(
           dummy.scale.set(spot.scale, spot.scale * spot.heightScale, spot.scale);
           dummy.updateMatrix();
           pineCrowns.setMatrixAt(i, dummy.matrix);
+          pineMoved = true;
 
           if (colorsDirty) {
             blendSeasonalColor(SEASON_PINE_PALETTES, spot.variant, state.frostFactor * 0.68, cTmp);
             pineCrowns.setColorAt(i, cTmp);
           }
         }
-        pineCrowns.instanceMatrix.needsUpdate = true;
+        if (pineMoved) pineCrowns.instanceMatrix.needsUpdate = true;
         if (colorsDirty && pineCrowns.instanceColor) pineCrowns.instanceColor.needsUpdate = true;
 
         // Update Palms & Shrubs
         for (let i = 0; i < palmSpots.length; i++) {
           const spot = palmSpots[i];
+          const dx = spot.x - state.lookX;
+          const dz = spot.z - state.lookZ;
+          if (!colorsDirty && dx * dx + dz * dz > maxSwayDistSq) continue;
           const gy = palmBaseY[i];
           const swayZ = Math.sin(elapsed * 1.5 + i * 0.6) * 0.03 * state.windStrength;
           dummy.position.set(spot.x, gy, spot.z);
@@ -676,13 +692,14 @@ export function createSeasonalFoliageSystem(
           dummy.scale.setScalar(spot.scale);
           dummy.updateMatrix();
           palmCrowns.setMatrixAt(i, dummy.matrix);
+          palmMoved = true;
 
           if (colorsDirty) {
             blendSeasonalColor(SEASON_PALM_PALETTES, spot.variant, state.frostFactor * 0.45, cTmp);
             palmCrowns.setColorAt(i, cTmp);
           }
         }
-        palmCrowns.instanceMatrix.needsUpdate = true;
+        if (palmMoved) palmCrowns.instanceMatrix.needsUpdate = true;
         if (colorsDirty && palmCrowns.instanceColor) palmCrowns.instanceColor.needsUpdate = true;
 
         if (colorsDirty) {

@@ -1,10 +1,14 @@
-import { Coffee, Footprints, IceCreamCone, MessageCircle, Sparkles, UtensilsCrossed, X } from 'lucide-react';
-import { BuildingNpcDef, NpcActionOption } from '../types/game';
+import { Coffee, Footprints, IceCreamCone, MessageCircle, ScrollText, Sparkles, UtensilsCrossed, X } from 'lucide-react';
+import { LANDMARKS } from '../data/efelerData';
+import { BuildingNpcDef, ErrandDef, NpcActionOption } from '../types/game';
 
 interface NpcDialogueModalProps {
   npc: BuildingNpcDef;
   coins: number;
   isFirstChat: boolean;
+  availableErrand?: ErrandDef | null;
+  isActiveErrandFromNpc?: boolean;
+  onAcceptErrand?: (errand: ErrandDef) => void;
   onSelectAction: (npc: BuildingNpcDef, action: NpcActionOption) => void;
   onClose: () => void;
 }
@@ -136,11 +140,17 @@ export function NpcDialogueModal({
   npc,
   coins,
   isFirstChat,
+  availableErrand,
+  isActiveErrandFromNpc,
+  onAcceptErrand,
   onSelectAction,
   onClose,
 }: NpcDialogueModalProps) {
+  const errandDestName = availableErrand
+    ? LANDMARKS.find((l) => l.id === availableErrand.toLandmarkId)?.name || 'Hedef'
+    : '';
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-[#2A1D12]/55 backdrop-blur-sm p-3 sm:p-4">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-[#1C120B]/75 p-3 sm:p-4">
       <div className="w-full max-w-lg max-h-[92dvh] overflow-y-auto efeler-scroll rounded-2xl bg-[#FBF4E4] border-2 border-[#B99464] text-[#3A2618] shadow-2xl">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 px-5 py-4 bg-[#EFE1C4] border-b border-[#B99464]/50">
@@ -180,6 +190,47 @@ export function NpcDialogueModal({
           <div className="rounded-xl bg-[#F4E9D2] border border-[#B99464]/45 p-3.5 text-sm leading-relaxed text-[#3A2618]">
             “{npc.greeting}”
           </div>
+
+          {availableErrand && onAcceptErrand && (
+            <div className="rounded-xl bg-[#FFF6D6] border-2 border-[#E0A800] p-3.5 space-y-2.5 shadow-sm">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="w-6 h-6 rounded-full bg-[#FFD43B] border border-[#C98A00] text-[#3A2618] font-display font-black text-sm flex items-center justify-center shrink-0">
+                    !
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-bold uppercase tracking-wide text-[#9A6700]">
+                      Yeni Görev · {errandDestName}
+                    </div>
+                    <h3 className="text-sm font-bold text-[#3A2618] leading-snug">
+                      {availableErrand.title}
+                    </h3>
+                  </div>
+                </div>
+                <span className="font-mono-num text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#F3C63F]/45 text-[#6D4700] shrink-0">
+                  +{availableErrand.rewardCoins} İncir
+                </span>
+              </div>
+              <p className="text-xs leading-relaxed text-[#5C432B]">
+                {availableErrand.description}
+              </p>
+              <button
+                type="button"
+                onClick={() => onAcceptErrand(availableErrand)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#E5A000] hover:bg-[#CC8D00] border border-[#A87200] text-[#2B1B0C] text-xs sm:text-sm font-bold transition-colors cursor-pointer"
+              >
+                <ScrollText className="w-4 h-4" aria-hidden="true" />
+                Görevi Al ve Yola Çık
+              </button>
+            </div>
+          )}
+
+          {!availableErrand && isActiveErrandFromNpc && (
+            <div className="rounded-xl bg-[#EFE1C4] border border-[#B99464] px-3.5 py-2.5 flex items-center gap-2 text-xs font-semibold text-[#6B5038]">
+              <ScrollText className="w-4 h-4 text-[#B84C27] shrink-0" aria-hidden="true" />
+              <span>Bu karakterin görevini zaten aldın — teslimat noktasına ulaştırabilirsin.</span>
+            </div>
+          )}
 
           <div className="flex items-center justify-between text-xs font-semibold text-[#6B5038]">
             <span>İkramlar &amp; Etkinlikler</span>

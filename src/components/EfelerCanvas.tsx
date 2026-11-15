@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { sampleNearestRoad, TABAKHANE_BRIDGE_ZS } from '../data/aydinRoads';
 import {
   ANCIENT_SIGNPOST_POSITIONS,
   DISTRICT_ZONES,
@@ -9,12 +10,8 @@ import {
   LANDMARKS,
   pickAutoWeatherForCycle,
   PLAYER_HOME_DOOR_POS,
-  ROAD_X_COORDS,
-  ROAD_Z_COORDS,
   SampledSolarMood,
   sampleSolarCurve,
-  STREET_NAMES_X,
-  STREET_NAMES_Z,
   TIME_MOODS,
   TIME_PHASE_ANCHORS,
 } from '../data/efelerData';
@@ -29,6 +26,7 @@ import {
 } from '../game/cityNpcs';
 import { createCityMaterials } from '../game/materials';
 import {
+  getRealElevationMeters,
   getTabakhaneCenterX,
   getWalkableSlopeAngles,
   getWalkableSurfaceHeightAt,
@@ -93,6 +91,7 @@ interface EfelerCanvasProps {
   autoAtmosphere: boolean;
   cameraPreset: CameraPreset;
   discoveredIds: string[];
+  completedErrandIds?: string[];
   coins: number;
   activeErrand: ErrandDef | null;
   errandPickedUp: boolean;
@@ -158,41 +157,35 @@ function resolveLocationLabels(x: number, z: number): { district: string; street
   }
 
   let bestStreet = 'Efeler Sokakları';
-  let minDist = 8.5;
-
-  for (const rx of ROAD_X_COORDS) {
-    const d = Math.abs(x - rx);
-    if (d < minDist) {
-      minDist = d;
-      bestStreet = STREET_NAMES_X[rx] || bestStreet;
-    }
-  }
-  for (const rz of ROAD_Z_COORDS) {
-    const d = Math.abs(z - rz);
-    if (d < minDist) {
-      minDist = d;
-      bestStreet = STREET_NAMES_Z[rz] || bestStreet;
-    }
+  const roadSample = sampleNearestRoad(x, z, 9.5);
+  if (roadSample.road) {
+    bestStreet = roadSample.road.name;
   }
 
-  if (Math.hypot(x, z - 12) < 18) {
-    bestStreet = 'Atatürk Kent Meydanı';
-  } else if (x < -94 && Math.abs(z + 22) < 9.5) {
-    bestStreet = 'Magnesia Antik Yolu';
-  } else if (Math.abs(x + 132) < 15 && Math.abs(z + 40) < 15) {
+  if (Math.hypot(x, z - 10) < 17) {
+    bestStreet = 'Atatürk Kent Meydanı (Güzelhisar)';
+  } else if (Math.hypot(x + 39.5, z - 11.5) < 16) {
+    bestStreet = 'Sevgi Yolu (Güzelhisar)';
+  } else if (Math.hypot(x + 76, z + 47) < 15) {
+    bestStreet = 'Yağcılar İçi Tarihi Çarşısı';
+  } else if (Math.hypot(x + 58, z + 108) < 15) {
+    bestStreet = 'Tralleis Antik Kenti · Kalfaköy';
+  } else if (Math.hypot(x - 92, z + 104) < 18) {
+    bestStreet = 'ADÜ Aytepe Kampüsü';
+  } else if (Math.hypot(x + 188, z + 12) < 15) {
     bestStreet = 'Magnesia Artemis Tapınağı';
-  } else if (Math.abs(x + 118) < 16 && Math.abs(z - 30) < 14) {
-    bestStreet = 'Nevzat Biçer Parkı';
-  } else if (Math.abs(x + 74) < 15 && Math.abs(z - 61) < 10) {
-    bestStreet = 'Kipa AVM · İstasyon Blv.';
-  } else if (Math.abs(x + 96) < 7.5 && z > -26 && z < 54) {
-    bestStreet = 'Cumhuriyet & Körfez Cd.';
+  } else if (Math.hypot(x + 127, z - 14) < 16) {
+    bestStreet = 'Nevzat Biçer Parkı (Cumhuriyet)';
+  } else if (Math.hypot(x + 80, z - 52) < 14) {
+    bestStreet = 'Aydın Kipa AVM · Kıbrıs / İstasyon';
+  } else if (Math.hypot(x - 93, z - 34) < 16) {
+    bestStreet = 'Tekstil Park (Sümerbank)';
+  } else if (Math.hypot(x - 142, z - 10) < 16) {
+    bestStreet = 'Forum Aydın · Doğu Blv.';
   }
 
   return { district, street: bestStreet };
 }
-
-const STREAM_BRIDGE_ZS = [-96, -58, -22, 12, 48];
 
 function resolveCollision(
   x: number,
@@ -200,11 +193,11 @@ function resolveCollision(
   radius: number,
   colliders: ColliderBox[]
 ): [number, number] {
-  let nx = THREE.MathUtils.clamp(x, -154, 104);
-  let nz = THREE.MathUtils.clamp(z, -106, 72);
+  let nx = THREE.MathUtils.clamp(x, -224, 198);
+  let nz = THREE.MathUtils.clamp(z, -142, 114);
 
   // Keep player on riverbanks / stone bridges instead of stepping into Tabakhane Deresi water
-  const onBridge = STREAM_BRIDGE_ZS.some((bz) => Math.abs(nz - bz) < 4.5);
+  const onBridge = TABAKHANE_BRIDGE_ZS.some((bz) => Math.abs(nz - bz) < 4.5);
   if (!onBridge) {
     const streamX = getTabakhaneCenterX(nz);
     const bankMinDist = 3.1 + radius;
@@ -248,6 +241,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       autoAtmosphere,
       cameraPreset,
       discoveredIds,
+      completedErrandIds = [],
       coins,
       activeErrand,
       errandPickedUp,
@@ -280,6 +274,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
     const autoAtmosphereRef = useRef(autoAtmosphere);
     const cameraPresetRef = useRef(cameraPreset);
     const discoveredIdsRef = useRef(discoveredIds);
+    const completedErrandIdsRef = useRef(completedErrandIds);
     const coinsRef = useRef(coins);
     const activeErrandRef = useRef(activeErrand);
     const errandPickedUpRef = useRef(errandPickedUp);
@@ -308,6 +303,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
     autoAtmosphereRef.current = autoAtmosphere;
     cameraPresetRef.current = cameraPreset;
     discoveredIdsRef.current = discoveredIds;
+    completedErrandIdsRef.current = completedErrandIds;
     coinsRef.current = coins;
     activeErrandRef.current = activeErrand;
     errandPickedUpRef.current = errandPickedUp;
@@ -329,9 +325,9 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
     const manualTargetPhaseRef = useRef<number | null>(null);
 
     const simRef = useRef({
-      x: initialTransform?.x ?? -18,
-      z: initialTransform?.z ?? 27,
-      y: getWalkableSurfaceHeightAt(initialTransform?.x ?? -18, initialTransform?.z ?? 27),
+      x: initialTransform?.x ?? -19,
+      z: initialTransform?.z ?? 24,
+      y: getWalkableSurfaceHeightAt(initialTransform?.x ?? -19, initialTransform?.z ?? 24),
       pitch: 0,
       roll: 0,
       heading: initialTransform?.heading ?? 0,
@@ -357,8 +353,8 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       companionTimer: 0,
       companionChatAccum: 0,
       companionChatIdx: 0,
-      companionX: initialTransform?.x ?? -18,
-      companionZ: initialTransform?.z ?? 27,
+      companionX: initialTransform?.x ?? -19,
+      companionZ: initialTransform?.z ?? 24,
       companionDirty: false,
       zeybekTimer: 0,
       zeybekElapsed: 0,
@@ -554,7 +550,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.18;
-      const maxDpr = isSoftwareGl ? 1 : isTouchDevice ? 1.2 : 1.5;
+      const maxDpr = isSoftwareGl ? 1 : isTouchDevice ? 1.0 : 1.25;
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
       renderer.shadowMap.enabled = !isSoftwareGl;
       renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -635,19 +631,19 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       );
       sunLight.position.set(...initialMood.sunPosition);
       sunLight.castShadow = !isSoftwareGl;
-      const shadowRes = isTouchDevice ? 768 : 1024;
+      const shadowRes = isTouchDevice ? 512 : 768;
       sunLight.shadow.mapSize.width = shadowRes;
       sunLight.shadow.mapSize.height = shadowRes;
-      sunLight.shadow.camera.near = 5;
-      sunLight.shadow.camera.far = 210;
-      const d = isTouchDevice ? 28 : 34;
+      sunLight.shadow.camera.near = 10;
+      sunLight.shadow.camera.far = 155;
+      const d = isTouchDevice ? 24 : 28;
       sunLight.shadow.camera.left = -d;
       sunLight.shadow.camera.right = d;
       sunLight.shadow.camera.top = d;
       sunLight.shadow.camera.bottom = -d;
       sunLight.shadow.bias = -0.0004;
       sunLight.shadow.normalBias = 0.02;
-      sunLight.shadow.radius = isTouchDevice ? 1.0 : 1.3;
+      sunLight.shadow.radius = isTouchDevice ? 1.0 : 1.2;
       const shadowTexel = (2 * d) / shadowRes;
       scene.add(sunLight);
       scene.add(sunLight.target);
@@ -1023,6 +1019,38 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       let frameId = 0;
       let disposed = false;
       let hudAccum = 0;
+      let prevCamZoom = camera.zoom;
+      let cachedGroundX = NaN;
+      let cachedGroundZ = NaN;
+      let cachedGroundY = simRef.current.y;
+      let cachedSlopeX = NaN;
+      let cachedSlopeZ = NaN;
+      let cachedSlopeH = NaN;
+      let cachedSlopes = { pitch: 0, roll: 0 };
+
+      const getCachedGroundY = (x: number, z: number) => {
+        if (Math.abs(x - cachedGroundX) < 0.004 && Math.abs(z - cachedGroundZ) < 0.004) {
+          return cachedGroundY;
+        }
+        cachedGroundX = x;
+        cachedGroundZ = z;
+        cachedGroundY = getWalkableSurfaceHeightAt(x, z);
+        return cachedGroundY;
+      };
+      const getCachedSlopes = (x: number, z: number, h: number) => {
+        if (
+          Math.abs(x - cachedSlopeX) < 0.004 &&
+          Math.abs(z - cachedSlopeZ) < 0.004 &&
+          Math.abs(h - cachedSlopeH) < 0.004
+        ) {
+          return cachedSlopes;
+        }
+        cachedSlopeX = x;
+        cachedSlopeZ = z;
+        cachedSlopeH = h;
+        cachedSlopes = getWalkableSlopeAngles(x, z, h);
+        return cachedSlopes;
+      };
 
       // Continuous Daily Solar Clock & Gradual Weather State Machine
       let solarPhase = TIME_PHASE_ANCHORS[timeOfDayRef.current];
@@ -1255,7 +1283,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         });
 
         // Update Living World, Seasonal Trees, Diorama Roofs/Ground, Street Encounters & NPCs
-        city.update(dt, elapsed);
+        city.update(dt, elapsed, _lookCurrent.x, _lookCurrent.z);
         city.figTree.update(
           dt,
           coinsRef.current,
@@ -1274,11 +1302,18 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         });
         city.pedestrians.update(dt, elapsed, _lookCurrent.x, _lookCurrent.z);
         city.trafficLights.update(elapsed);
-        city.musicians.update(dt, elapsed, simRef.current.x, simRef.current.z);
-        city.libraryVendor.update(dt, elapsed);
-        city.lokmaStand.update(dt, elapsed, simRef.current.x, simRef.current.z);
-        city.parkGuitarBand.update(dt, elapsed, simRef.current.x, simRef.current.z);
-        city.buildingNpcs.update(dt, elapsed, simRef.current.x, simRef.current.z);
+        city.musicians.update(dt, elapsed, _lookCurrent.x, _lookCurrent.z);
+        city.libraryVendor.update(dt, elapsed, _lookCurrent.x, _lookCurrent.z);
+        city.lokmaStand.update(dt, elapsed, _lookCurrent.x, _lookCurrent.z);
+        city.parkGuitarBand.update(dt, elapsed, _lookCurrent.x, _lookCurrent.z);
+        city.buildingNpcs.update(
+          dt,
+          elapsed,
+          _lookCurrent.x,
+          _lookCurrent.z,
+          activeErrandRef.current?.id ?? null,
+          completedErrandIdsRef.current
+        );
 
         const bubbleNow = city.libraryVendor.isBubbleVisible();
         if (bubbleNow && !prevVendorBubble && phaseRef.current === 'playing') {
@@ -1300,15 +1335,15 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         const isSparrow = curMode === 'sparrow';
         const isFirstPerson =
           cameraPresetRef.current === 'first_person' && phaseRef.current !== 'title';
-        const slopesPre = getWalkableSlopeAngles(sim.x, sim.z, sim.heading);
+        const slopesPre = getCachedSlopes(sim.x, sim.z, sim.heading);
 
         // Mode switch synchronization (Vehicle/Walk <-> Sparrow)
         if (isSparrow && prevMode !== 'sparrow') {
           sparrowController.resetAt(sim.x, sim.z, sim.heading + Math.PI);
           sparrowChaseCam.snapTo(sparrowController.position, sparrowController.yaw);
         } else if (!isSparrow && prevMode === 'sparrow') {
-          sim.x = THREE.MathUtils.clamp(sparrowController.position.x, -154, 104);
-          sim.z = THREE.MathUtils.clamp(sparrowController.position.z, -106, 72);
+          sim.x = THREE.MathUtils.clamp(sparrowController.position.x, -224, 198);
+          sim.z = THREE.MathUtils.clamp(sparrowController.position.z, -142, 114);
           sim.y = getWalkableSurfaceHeightAt(sim.x, sim.z);
           sim.heading = sparrowController.yaw + Math.PI;
           sim.speed = 0;
@@ -1357,7 +1392,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           }
         }
 
-        let groundY = getWalkableSurfaceHeightAt(sim.x, sim.z);
+        let groundY = getCachedGroundY(sim.x, sim.z);
 
         if (isSparrow) {
           vehicleRig.root.visible = false;
@@ -1416,7 +1451,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           sim.heading = sparrowController.yaw + Math.PI;
           sim.speed = Math.hypot(sparrowController.velocity.x, sparrowController.velocity.z);
           sim.pitch = -sparrowMesh.bodyPivot.rotation.x;
-          groundY = getWalkableSurfaceHeightAt(sim.x, sim.z);
+          groundY = getCachedGroundY(sim.x, sim.z);
         } else {
           sparrowMesh.root.visible = false;
           flapQueued = false;
@@ -1518,9 +1553,9 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
                 if (Math.abs(sim.speed) < 0.04) sim.speed = 0;
               }
 
-              // Gentle uphill resistance & downhill coasting on Aytepe / Tralleis slopes
-              if (!isWalking && Math.abs(slopesPre.pitch) > 0.008 && Math.abs(sim.speed) > 0.25) {
-                sim.speed -= Math.sin(slopesPre.pitch) * 4.8 * dt;
+              // Balanced uphill feel & downhill coasting on real 1:100 Aytepe / Tralleis yokuşları
+              if (!isWalking && Math.abs(slopesPre.pitch) > 0.008 && Math.abs(sim.speed) > 0.35) {
+                sim.speed -= Math.sin(slopesPre.pitch) * 2.5 * dt;
               }
 
               const left = keyLeft || touchInputRef.current.left;
@@ -1567,8 +1602,8 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
             audioEngine.updateEngineSound(0, vType, false);
           }
 
-          groundY = getWalkableSurfaceHeightAt(sim.x, sim.z);
-          const slopes = getWalkableSlopeAngles(sim.x, sim.z, sim.heading);
+          groundY = getCachedGroundY(sim.x, sim.z);
+          const slopes = getCachedSlopes(sim.x, sim.z, sim.heading);
           const yDamp = groundY > sim.y ? 32 : 20;
           sim.y = Math.max(groundY - 0.008, THREE.MathUtils.damp(sim.y, groundY, yDamp, dt));
           sim.pitch = THREE.MathUtils.damp(sim.pitch, slopes.pitch, 12, dt);
@@ -1768,6 +1803,11 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
 
         let closestLm: LandmarkDef | null = null;
         let closestDist = Infinity;
+        const errandTargetId = activeErrandRef.current
+          ? errandPickedUpRef.current
+            ? activeErrandRef.current.toLandmarkId
+            : activeErrandRef.current.fromLandmarkId
+          : null;
         for (const blm of city.landmarks) {
           const rx = blm.ringMesh.position.x;
           const rz = blm.ringMesh.position.z;
@@ -1783,11 +1823,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           }
 
           const isDiscovered = discoveredIdsRef.current.includes(blm.def.id);
-          const isErrandTarget =
-            activeErrandRef.current &&
-            (errandPickedUpRef.current
-              ? activeErrandRef.current.toLandmarkId === blm.def.id
-              : activeErrandRef.current.fromLandmarkId === blm.def.id);
+          const isErrandTarget = errandTargetId === blm.def.id;
 
           if (effDist <= 75) {
             const scalePulse = isErrandTarget
@@ -1892,9 +1928,11 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           sim.z - PLAYER_HOME_DOOR_POS[1]
         );
         sim.nearPlayerHome = dHome < 7.2;
-        city.homeRingMesh.scale.setScalar(
-          sim.nearPlayerHome ? 1.18 + Math.sin(elapsed * 4) * 0.1 : 1.0 + Math.sin(elapsed * 2.2) * 0.06
-        );
+        if (dHome <= 75) {
+          city.homeRingMesh.scale.setScalar(
+            sim.nearPlayerHome ? 1.18 + Math.sin(elapsed * 4) * 0.1 : 1.0 + Math.sin(elapsed * 2.2) * 0.06
+          );
+        }
 
         // Update 3D Weather Particles gradually with crossfaded precipitation strength
         const precipStrength = Math.max(
@@ -1991,7 +2029,10 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           _lookCurrent.lerp(_lookGoal, 1 - Math.exp(-5.5 * dt));
           camera.position.lerp(_camGoal, 1 - Math.exp(-5.5 * dt));
           camera.lookAt(_lookCurrent);
-          camera.updateProjectionMatrix();
+          if (Math.abs(camera.zoom - prevCamZoom) > 1e-4) {
+            prevCamZoom = camera.zoom;
+            camera.updateProjectionMatrix();
+          }
         } else if (isFirstPerson) {
           const eyeH = isSparrow ? 0.34 : isWalking ? 1.46 : 1.32;
           const fwdOff = isSparrow ? 0.24 : isWalking ? 0.14 : 0.38;
@@ -2070,7 +2111,10 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           _lookCurrent.lerp(_lookGoal, 1 - Math.exp(-6.5 * dt));
           camera.position.lerp(_camGoal, 1 - Math.exp(-6.5 * dt));
           camera.lookAt(_lookCurrent);
-          camera.updateProjectionMatrix();
+          if (Math.abs(camera.zoom - prevCamZoom) > 1e-4) {
+            prevCamZoom = camera.zoom;
+            camera.updateProjectionMatrix();
+          }
         }
 
         const snapSunX = Math.round(_lookCurrent.x / shadowTexel) * shadowTexel;
@@ -2133,6 +2177,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
             sparrowState: isSparrow ? sparrowController.mode : undefined,
             sparrowStamina: isSparrow ? sparrowController.flightStamina : undefined,
             isDancingZeybek: sim.zeybekTimer > 0,
+            elevationMeters: getRealElevationMeters(sim.x, sim.z),
           });
         }
 

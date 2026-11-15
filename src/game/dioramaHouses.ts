@@ -292,7 +292,6 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
   const chimneyMat = roofStyle === 0 ? mats.industrialBrick : mats.creamPlaster;
   const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.62, 1.35, 0.62), chimneyMat);
   chimney.position.set(chX, chY, chZ);
-  chimney.castShadow = true;
   const chimneyCap = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.16, 0.76), mats.limestonePlinth);
   chimneyCap.position.set(chX, chY + 0.72, chZ);
   house.add(chimney, chimneyCap);
@@ -313,7 +312,6 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
 
     const dormBody = new THREE.Mesh(new THREE.BoxGeometry(dormW, dormH, dormD), wallMat);
     dormBody.position.y = dormH / 2;
-    dormBody.castShadow = true;
     const dormGable = new THREE.Mesh(
       createGableWallPrismGeometry(dormW, dormD, dormPeak, true),
       wallMat
@@ -324,7 +322,6 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
       roofMat
     );
     dormRoof.position.y = dormH + 0.02;
-    dormRoof.castShadow = true;
     const dormBarge = new THREE.Mesh(
       createGableBargeboardGeometry(dormW + 0.42, dormD + 0.38, dormPeak, 0.13, true),
       mats.whitePlaster
@@ -398,7 +395,6 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
     roofMat
   );
   porchRoof.position.set(0, 0.54 + porchH, porchZ + 0.06);
-  porchRoof.castShadow = true;
   const porchBarge = new THREE.Mesh(
     createGableBargeboardGeometry(porchW + 0.56, porchD + 0.48, porchPeak, 0.14, true),
     mats.whitePlaster
@@ -584,7 +580,6 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
     );
     awning.position.set(w / 2 + 0.3, 2.34, 0);
     awning.rotation.z = -0.34;
-    awning.castShadow = true;
     house.add(awning);
   }
 
@@ -841,7 +836,6 @@ export function buildCustomPlayerHouse(opts: CustomPlayerHouseOptions): BuiltCus
     [-porchW / 2 + 0.2, porchW / 2 - 0.2].forEach((cx) => {
       const col = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2.2, 0.2), trimMat);
       col.position.set(porchX + cx, 1.55, porchZ + porchD / 2 - 0.18);
-      col.castShadow = true;
       house.add(col);
     });
     const porchRoof = new THREE.Mesh(
@@ -916,7 +910,6 @@ export function buildCustomPlayerHouse(opts: CustomPlayerHouseOptions): BuiltCus
       roofMat
     );
     dormRoof.position.set(0, h + 1.54, 0.88);
-    dormRoof.castShadow = true;
     house.add(dormBody, dormGable, dormRoof);
     addMullionedWindow(house, 0, h + 1.0, 1.62, 0.88, 0.78, 0, trimMat, mats.windowLit, trimMat);
 
@@ -952,7 +945,6 @@ export function buildCustomPlayerHouse(opts: CustomPlayerHouseOptions): BuiltCus
       plinthCol.position.set(cx, 0.68, verZ + verD / 2 - 0.18);
       const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 1.85, 8), trimMat);
       shaft.position.set(cx, 1.75, verZ + verD / 2 - 0.18);
-      shaft.castShadow = true;
       house.add(plinthCol, shaft);
     });
 
@@ -962,7 +954,6 @@ export function buildCustomPlayerHouse(opts: CustomPlayerHouseOptions): BuiltCus
     );
     verRoof.position.set(0, 2.72, verZ + 0.05);
     verRoof.rotation.x = 0.24;
-    verRoof.castShadow = true;
     house.add(verRoof);
 
     // Front Door + Parlor Windows
@@ -1217,7 +1208,6 @@ export function buildCustomPlayerHouse(opts: CustomPlayerHouseOptions): BuiltCus
     const chY = h + peakH * 0.72 + 0.58;
     const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.64, 1.45, 0.64), mats.industrialBrick);
     chimney.position.set(chX, chY, chZ);
-    chimney.castShadow = true;
     const chimneyCap = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.16, 0.78), mats.limestonePlinth);
     chimneyCap.position.set(chX, chY + 0.76, chZ);
     house.add(chimney, chimneyCap);
@@ -1239,7 +1229,6 @@ export function buildCustomPlayerHouse(opts: CustomPlayerHouseOptions): BuiltCus
       roofMat
     );
     dormRoof.position.y = 1.02;
-    dormRoof.castShadow = true;
     dormGroup.add(dormBody, dormGable, dormRoof);
     addMullionedWindow(dormGroup, 0, 0.55, 0.72, 0.7, 0.7, 0, accentFrameMat, mats.windowLit, trimMat);
     house.add(dormGroup);
@@ -1264,7 +1253,6 @@ export function buildCustomPlayerHouse(opts: CustomPlayerHouseOptions): BuiltCus
     [-porchW / 2 + 0.22, 0, porchW / 2 - 0.22].forEach((cx) => {
       const col = new THREE.Mesh(new THREE.BoxGeometry(0.18, 2.0, 0.18), trimMat);
       col.position.set(cx, 1.56, d / 2 + porchD - 0.2);
-      col.castShadow = true;
       house.add(col);
     });
     const porchGable = new THREE.Mesh(
@@ -1277,7 +1265,6 @@ export function buildCustomPlayerHouse(opts: CustomPlayerHouseOptions): BuiltCus
       roofMat
     );
     porchRoof.position.set(0, 2.68, porchZ + 0.06);
-    porchRoof.castShadow = true;
     const porchBarge = new THREE.Mesh(
       createGableBargeboardGeometry(porchW + 0.55, porchD + 0.48, 0.85, 0.14, true),
       trimMat

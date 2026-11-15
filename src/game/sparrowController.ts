@@ -4,6 +4,7 @@ import { audioEngine } from './audioEngine';
 import { createPerchQueryResult, PerchSegment, PerchSystem } from './perchSystem';
 import { SparrowFX } from './sparrowFx';
 import { BirdMode, SparrowMesh } from './sparrowMesh';
+import { TABAKHANE_BRIDGE_ZS } from '../data/aydinRoads';
 import {
   getTabakhaneCenterX,
   getTabakhaneWaterY,
@@ -23,8 +24,6 @@ export interface SparrowInputState {
   chirpPressed: boolean;
   peckPressed: boolean;
 }
-
-const STREAM_BRIDGE_ZS = [-96, -58, -22, 12, 48];
 
 const _perchA = new THREE.Vector3();
 const _perchB = new THREE.Vector3();
@@ -182,8 +181,8 @@ export class SparrowController {
   }
 
   private resolveHorizontalWalls(x: number, y: number, z: number): [number, number] {
-    let nx = THREE.MathUtils.clamp(x, -155, 105);
-    let nz = THREE.MathUtils.clamp(z, -108, 74);
+    let nx = THREE.MathUtils.clamp(x, -225, 199);
+    let nz = THREE.MathUtils.clamp(z, -144, 116);
     const radius = 0.36;
     const birdFeetY = y - this.getStandOffset() * 0.65;
 
@@ -348,7 +347,7 @@ export class SparrowController {
     }
 
     // Check Tabakhane Deresi water contact (buoyant playful splash)
-    const onBridge = STREAM_BRIDGE_ZS.some((bz) => Math.abs(this.position.z - bz) < 4.4);
+    const onBridge = TABAKHANE_BRIDGE_ZS.some((bz) => Math.abs(this.position.z - bz) < 4.4);
     if (!onBridge) {
       const sx = getTabakhaneCenterX(this.position.z);
       if (Math.abs(this.position.x - sx) < 2.8) {

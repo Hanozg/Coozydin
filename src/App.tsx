@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
+import { AboutModal } from './components/AboutModal';
 import { AgendaModal } from './components/AgendaModal';
 import { CozyRoomView } from './components/CozyRoomView';
 import { EfelerCanvas, EfelerCanvasHandle, TouchDriveInput } from './components/EfelerCanvas';
@@ -12,6 +13,7 @@ import { ProfileModal } from './components/ProfileModal';
 import { RealAydinMapModal } from './components/RealAydinMapModal';
 import { TitleScreen } from './components/TitleScreen';
 import {
+  COZY_ERRANDS,
   DEFAULT_AVATAR_CONFIG,
   DEFAULT_COZY_ROOM_STATE,
   DEFAULT_HOUSE_EXTERIOR,
@@ -21,6 +23,7 @@ import {
   LANDMARKS,
 } from './data/efelerData';
 import { audioEngine } from './game/audioEngine';
+import { narrateLandmark, stopVoiceGuide } from './game/voiceGuide';
 import { auth } from './services/firebase';
 import {
   loadCloudProfile,
@@ -56,8 +59,8 @@ const LEGACY_AGENDA_STORAGE_KEY = 'efeler_agenda_notes_v1';
 
 const INITIAL_HUD: PlayerHudSnapshot = {
   speedKmh: 0,
-  currentDistrict: 'Efeler Merkez & Kent Meydanı',
-  currentStreet: 'Sevgi Yolu',
+  currentDistrict: 'Güzelhisar Mahallesi · Merkez',
+  currentStreet: 'Adnan Menderes Bulvarı',
   nearbyLandmark: null,
   nearbyNpc: null,
   nearAncientSignpost: false,
@@ -65,10 +68,11 @@ const INITIAL_HUD: PlayerHudSnapshot = {
   nearbyStreetInteraction: null,
   vendorBubble: null,
   distanceToActiveErrand: null,
-  playerPos: [-18, 27],
+  playerPos: [-19, 24],
   headingRad: 0,
   companionName: null,
   heldTreat: 'none',
+  elevationMeters: 64,
 };
 
 function loadInitialPlayerSave(): UserSavePayload {
@@ -127,8 +131,8 @@ export default function App() {
 
   const canvasRef = useRef<EfelerCanvasHandle | null>(null);
   const lastTransformRef = useRef<{ x: number; z: number; heading: number }>({
-    x: -18,
-    z: 27,
+    x: -19,
+    z: 24,
     heading: 0,
   });
 
@@ -138,6 +142,7 @@ export default function App() {
   const [realMapOpen, setRealMapOpen] = useState(false);
   const [agendaOpen, setAgendaOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [activeNpc, setActiveNpc] = useState<BuildingNpcDef | null>(null);
   const [activeNpcIsFirstChat, setActiveNpcIsFirstChat] = useState(false);
   const [quotaExceeded, setQuotaExceeded] = useState(false);
@@ -179,6 +184,8 @@ export default function App() {
 
   const [isMuted, setIsMuted] = useState(false);
   const [musicEnabled, setMusicEnabled] = useState(true);
+  const [voiceGuideLandmark, setVoiceGuideLandmark] = useState<LandmarkDef | null>(null);
+  const [voiceGuideLoading, setVoiceGuideLoading] = useState(false);
 
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [cloudSyncing, setCloudSyncing] = useState(false);
@@ -639,28 +646,32 @@ export default function App() {
     let tz = lz + 10.5;
     let heading = 0;
     if (lm.id === 'beycamii') {
-      tx = lx - 11;
-      tz = lz + 4;
-      heading = -Math.PI / 2;
+      tx = lx;
+      tz = lz + 11.2;
+      heading = 0;
     } else if (lm.id === 'nasuhpasa' || lm.id === 'saribelediye') {
-      tx = lx - 12.5;
+      tx = lx - 12.0;
       tz = lz;
       heading = -Math.PI / 2;
-    } else if (lm.id === 'cihanoglu' || lm.id === 'tekstilpark') {
-      tx = lx + 15.5;
+    } else if (lm.id === 'cihanoglu') {
+      tx = lx + 14.0;
       tz = lz;
       heading = Math.PI / 2;
+    } else if (lm.id === 'tekstilpark') {
+      tx = lx - 15.0;
+      tz = lz;
+      heading = -Math.PI / 2;
     } else if (lm.id === 'forumaydin') {
       tx = lx - 15.5;
       tz = lz;
       heading = -Math.PI / 2;
     } else if (lm.id === 'kentmeydani') {
       tx = lx;
-      tz = lz + 18;
+      tz = lz + 16.5;
       heading = 0;
     } else if (lm.id === 'trengari') {
       tx = lx;
-      tz = lz - 9.5;
+      tz = lz - 9.0;
       heading = Math.PI;
     } else if (lm.id === 'ortamahalle') {
       tx = lx - 14.0;
@@ -675,13 +686,25 @@ export default function App() {
       tz = lz + 15.0;
       heading = 0;
     } else if (lm.id === 'nevzatbicerpark') {
-      tx = lx + 16.5;
+      tx = lx + 17.0;
       tz = lz;
       heading = Math.PI / 2;
     } else if (lm.id === 'kipaavm') {
       tx = lx;
-      tz = lz - 11.5;
+      tz = lz - 12.0;
       heading = Math.PI;
+    } else if (lm.id === 'sevgiyolu') {
+      tx = lx;
+      tz = lz;
+      heading = -Math.PI / 2;
+    } else if (lm.id === 'yagcilarici') {
+      tx = lx + 12.5;
+      tz = lz;
+      heading = -Math.PI / 2;
+    } else if (lm.id === 'tralleis') {
+      tx = lx;
+      tz = lz + 9.0;
+      heading = 0;
     }
     canvasRef.current?.teleportTo(tx, tz, heading);
     setJournalOpen(false);
@@ -709,6 +732,68 @@ export default function App() {
     });
   }, []);
 
+  const handleStopVoiceGuide = useCallback(() => {
+    stopVoiceGuide();
+    audioEngine.setMusicDucked(false);
+    setVoiceGuideLoading(false);
+    setVoiceGuideLandmark(null);
+  }, []);
+
+  const handleToggleVoiceGuide = useCallback(() => {
+    const target = hud.nearbyLandmark;
+    if (
+      voiceGuideLoading ||
+      (voiceGuideLandmark && (!target || voiceGuideLandmark.id === target.id))
+    ) {
+      handleStopVoiceGuide();
+      return;
+    }
+    if (!target) {
+      showErrandToast('Sesli Rehber için bir tarihi yapıya veya bölgeye yaklaşın.');
+      return;
+    }
+    if (isMuted) {
+      showErrandToast('Sesli Rehber’i dinlemek için önce sesi açın.');
+      return;
+    }
+    void narrateLandmark(target, {
+      onLoading: () => {
+        setVoiceGuideLoading(true);
+        setVoiceGuideLandmark(target);
+      },
+      onStart: () => {
+        setVoiceGuideLoading(false);
+        audioEngine.setMusicDucked(true);
+        setVoiceGuideLandmark(target);
+      },
+      onEnd: () => {
+        setVoiceGuideLoading(false);
+        audioEngine.setMusicDucked(false);
+        setVoiceGuideLandmark(null);
+      },
+      onFallbackNotice: (msg) => {
+        showErrandToast(msg);
+      },
+      onError: (reason) => {
+        setVoiceGuideLoading(false);
+        audioEngine.setMusicDucked(false);
+        setVoiceGuideLandmark(null);
+        showErrandToast(
+          reason === 'unsupported'
+            ? 'Tarayıcınız Sesli Rehber özelliğini desteklemiyor.'
+            : 'Sesli Rehber şu anda başlatılamadı.'
+        );
+      },
+    });
+  }, [
+    handleStopVoiceGuide,
+    hud.nearbyLandmark,
+    isMuted,
+    showErrandToast,
+    voiceGuideLandmark,
+    voiceGuideLoading,
+  ]);
+
   const handleEnterHome = useCallback(() => {
     audioEngine.init();
     audioEngine.updateEngineSound(0, vehicleConfig.type, false);
@@ -723,6 +808,7 @@ export default function App() {
     setJournalOpen(false);
     setRealMapOpen(false);
     setProfileOpen(false);
+    setAboutOpen(false);
     setInHome(true);
   }, [vehicleConfig.type]);
 
@@ -751,7 +837,9 @@ export default function App() {
       const tag = document.activeElement?.tagName;
       const typing = tag === 'INPUT' || tag === 'TEXTAREA';
       if (e.code === 'Escape') {
-        if (profileOpen) {
+        if (aboutOpen) {
+          setAboutOpen(false);
+        } else if (profileOpen) {
           setProfileOpen(false);
         } else if (agendaOpen) {
           setAgendaOpen(false);
@@ -774,6 +862,7 @@ export default function App() {
         !inHome &&
         !realMapOpen &&
         !profileOpen &&
+        !aboutOpen &&
         !activeNpc &&
         !typing
       ) {
@@ -785,6 +874,7 @@ export default function App() {
         !journalOpen &&
         !agendaOpen &&
         !profileOpen &&
+        !aboutOpen &&
         !activeNpc &&
         !typing
       ) {
@@ -797,6 +887,7 @@ export default function App() {
         !realMapOpen &&
         !agendaOpen &&
         !profileOpen &&
+        !aboutOpen &&
         !activeNpc &&
         !typing
       ) {
@@ -811,6 +902,7 @@ export default function App() {
         !realMapOpen &&
         !agendaOpen &&
         !profileOpen &&
+        !aboutOpen &&
         !activeNpc &&
         !typing
       ) {
@@ -821,18 +913,28 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [activeNpc, agendaOpen, inHome, journalOpen, phase, profileOpen, realMapOpen]);
+  }, [aboutOpen, activeNpc, agendaOpen, inHome, journalOpen, phase, profileOpen, realMapOpen]);
+
+  useEffect(() => {
+    if (phase !== 'playing' || inHome || isMuted) {
+      if (voiceGuideLandmark || voiceGuideLoading) {
+        handleStopVoiceGuide();
+      }
+    }
+  }, [handleStopVoiceGuide, inHome, isMuted, phase, voiceGuideLandmark, voiceGuideLoading]);
 
   useEffect(() => {
     audioEngine.bindGlobalUnlock();
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      stopVoiceGuide();
       audioEngine.dispose();
     };
   }, []);
 
   const effectivePhase: GamePhase =
-    (journalOpen || realMapOpen || profileOpen || Boolean(activeNpc)) && phase === 'playing'
+    (journalOpen || realMapOpen || profileOpen || aboutOpen || Boolean(activeNpc)) &&
+    phase === 'playing'
       ? 'paused'
       : phase;
 
@@ -893,6 +995,7 @@ export default function App() {
             autoAtmosphere={autoAtmosphere}
             cameraPreset={cameraPreset}
             discoveredIds={discoveredIds}
+            completedErrandIds={completedErrandIds}
             coins={coins}
             activeErrand={activeErrand}
             errandPickedUp={errandPickedUp}
@@ -943,12 +1046,20 @@ export default function App() {
           profileName={displayName}
           profileEmoji={avatarEmoji}
           isCloudSignedIn={Boolean(firebaseUser)}
+          disableStartShortcut={profileOpen || aboutOpen}
           onStart={handleStartGame}
           onOpenProfile={() => setProfileOpen(true)}
+          onOpenAbout={() => setAboutOpen(true)}
         />
       )}
 
-      {phase === 'playing' && !journalOpen && !realMapOpen && !activeNpc && !inHome && (
+      {phase === 'playing' &&
+        !journalOpen &&
+        !realMapOpen &&
+        !profileOpen &&
+        !aboutOpen &&
+        !activeNpc &&
+        !inHome && (
         <GameHUD
           hud={hud}
           explorationMode={explorationMode}
@@ -973,6 +1084,8 @@ export default function App() {
           errandToast={errandToast}
           isMuted={isMuted}
           musicEnabled={musicEnabled}
+          voiceGuideLandmark={voiceGuideLandmark}
+          voiceGuideLoading={voiceGuideLoading}
           onChangeExplorationMode={(next) => {
             audioEngine.init();
             setExplorationMode(next);
@@ -1005,9 +1118,23 @@ export default function App() {
           onInteractNpc={handleInteractNpc}
           onToggleMute={handleToggleMute}
           onToggleMusic={handleToggleMusic}
+          onToggleVoiceGuide={handleToggleVoiceGuide}
+          onStopVoiceGuide={handleStopVoiceGuide}
           onOpenJournal={() => setJournalOpen(true)}
           onOpenRealMap={() => setRealMapOpen(true)}
+          onJumpToLandmark={handleNavigateToLandmark}
           onOpenProfile={() => setProfileOpen(true)}
+          onOpenAbout={() => {
+            canvasRef.current?.setTouchInput({
+              forward: false,
+              backward: false,
+              left: false,
+              right: false,
+              flap: false,
+              dive: false,
+            });
+            setAboutOpen(true);
+          }}
           onEnterHome={handleEnterHome}
           onPause={() => {
             canvasRef.current?.setTouchInput({
@@ -1028,15 +1155,39 @@ export default function App() {
         />
       )}
 
-      {activeNpc && !inHome && (
-        <NpcDialogueModal
-          npc={activeNpc}
-          coins={coins}
-          isFirstChat={activeNpcIsFirstChat}
-          onSelectAction={handleSelectNpcAction}
-          onClose={() => setActiveNpc(null)}
-        />
-      )}
+      {activeNpc && !inHome && (() => {
+        const availableErrandForNpc =
+          COZY_ERRANDS.find(
+            (err) =>
+              err.fromLandmarkId === activeNpc.landmarkId &&
+              err.id !== activeErrand?.id &&
+              !completedErrandIds.includes(err.id)
+          ) ?? null;
+        const isActiveFromNpc = Boolean(
+          activeErrand && activeErrand.fromLandmarkId === activeNpc.landmarkId
+        );
+        return (
+          <NpcDialogueModal
+            npc={activeNpc}
+            coins={coins}
+            isFirstChat={activeNpcIsFirstChat}
+            availableErrand={availableErrandForNpc}
+            isActiveErrandFromNpc={isActiveFromNpc}
+            onAcceptErrand={(err) => {
+              audioEngine.init();
+              audioEngine.playDiscoveryChime();
+              setActiveErrand(err);
+              setErrandPickedUp(true);
+              setActiveNpc(null);
+              const destName =
+                LANDMARKS.find((l) => l.id === err.toLandmarkId)?.name || 'hedefe';
+              showErrandToast(`${err.title} alındı! Şimdi ${destName} noktasına ulaştırın.`);
+            }}
+            onSelectAction={handleSelectNpcAction}
+            onClose={() => setActiveNpc(null)}
+          />
+        );
+      })()}
 
       {journalOpen && !inHome && (
         <JournalModal
@@ -1100,10 +1251,13 @@ export default function App() {
         />
       )}
 
+      {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
+
       {phase === 'paused' &&
         !journalOpen &&
         !realMapOpen &&
         !profileOpen &&
+        !aboutOpen &&
         !activeNpc &&
         !inHome && (
           <PauseModal
@@ -1115,6 +1269,7 @@ export default function App() {
               canvasRef.current?.teleportTo(-18, 27, 0);
               setPhase('playing');
             }}
+            onOpenAbout={() => setAboutOpen(true)}
             onReturnTitle={() => setPhase('title')}
           />
         )}
