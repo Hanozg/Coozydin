@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { GoogleGenAI } from '@google/genai';
+import { TtsAudioCache } from './server/ttsCache.ts';
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -23,13 +24,7 @@ function getGeminiClient(apiKey: string): GoogleGenAI {
   return cachedAiClient;
 }
 
-interface CachedTtsAudio {
-  audioBase64: string;
-  mimeType: string;
-}
-
-const ttsCache = new Map<string, CachedTtsAudio>();
-const MAX_TTS_CACHE = 40;
+const ttsCache = new TtsAudioCache();
 
 async function startServer() {
   const app = express();
@@ -68,53 +63,51 @@ async function startServer() {
     }
 
     try {
-      const ai = getGeminiClient(apiKey);
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash-lite-tts',
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text: rawText,
-                speechMetadata: {
-                  style:
-                    'Warm, expressive, natural Turkish cultural tour guide speaking conversationally with authentic human warmth, gentle breathing pauses, and clear Turkish diction',
+      const payload = await ttsCache.getOrGenerate(cacheKey, async () => {
+        const ai = getGeminiClient(apiKey);
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.8-flash-lite-tts',
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: rawText,
+                  speechMetadata: {
+                    style:
+                      'Warm, expressive, natural Turkish cultural tour guide speaking conversationally with authentic human warmth, gentle breathing pauses, and clear Turkish diction',
+                  },
                 },
+              ],
+            },
+          ],
+          config: {
+            responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: 'Kore' },
               },
-            ],
-          },
-        ],
-        config: {
-          responseModalities: ['AUDIO'],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: 'Kore' },
             },
           },
-        },
+        });
+
+        const inlineData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+        const audioBase64 = inlineData?.data;
+        if (!audioBase64) return null;
+
+        return {
+          audioBase64,
+          mimeType: inlineData?.mimeType || 'audio/wav',
+        };
       });
 
-      const inlineData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData;
-      const audioBase64 = inlineData?.data;
-      if (!audioBase64) {
+      if (!payload) {
         res.status(502).json({
           error: 'Ses verisi üretilemedi.',
           code: 'EMPTY_AUDIO',
         });
         return;
       }
-
-      const payload: CachedTtsAudio = {
-        audioBase64,
-        mimeType: inlineData?.mimeType || 'audio/wav',
-      };
-
-      if (ttsCache.size >= MAX_TTS_CACHE) {
-        const oldestKey = ttsCache.keys().next().value;
-        if (oldestKey) ttsCache.delete(oldestKey);
-      }
-      ttsCache.set(cacheKey, payload);
 
       res.json(payload);
     } catch (err: unknown) {
