@@ -1,17 +1,11 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { sampleNearestRoad, TABAKHANE_BRIDGE_ZS } from '../data/aydinRoads';
 import {
   ANCIENT_SIGNPOST_POSITIONS,
-  DISTRICT_ZONES,
   getSolarClockLabel,
-  getTimeOfDayFromPhase,
   LANDMARKS,
-  pickAutoWeatherForCycle,
   PLAYER_HOME_DOOR_POS,
-  SampledSolarMood,
-  sampleSolarCurve,
   TIME_MOODS,
   TIME_PHASE_ANCHORS,
 } from '../data/efelerData';
@@ -27,7 +21,6 @@ import {
 import { createCityMaterials } from '../game/materials';
 import {
   getRealElevationMeters,
-  getTabakhaneCenterX,
   getWalkableSlopeAngles,
   getWalkableSurfaceHeightAt,
 } from '../game/terrain';
@@ -41,7 +34,6 @@ import {
   AvatarConfig,
   BuildingNpcDef,
   CameraPreset,
-  ColliderBox,
   ErrandDef,
   ExplorationMode,
   GamePhase,
@@ -56,6 +48,18 @@ import {
   VehicleConfig,
   WeatherType,
 } from '../types/game';
+import {
+  createAtmosphereRuntimeState,
+  updateAtmosphereAndLighting,
+} from './canvas/atmosphereUpdater';
+import { updateCanvasCamera } from './canvas/cameraUpdater';
+import {
+  createDustParticleSystem,
+  createWeatherParticleSystem,
+  detectSoftwareWebGL,
+  resolveCollision,
+  resolveLocationLabels,
+} from './canvas/canvasHelpers';
 
 export interface TouchDriveInput {
   forward: boolean;
@@ -109,123 +113,10 @@ interface EfelerCanvasProps {
   onEnterHome: () => void;
 }
 
-const _targetSky = new THREE.Color();
-const _targetSkyB = new THREE.Color();
-const _targetSun = new THREE.Color();
-const _targetSunB = new THREE.Color();
-const _targetHemiSky = new THREE.Color();
-const _targetHemiSkyB = new THREE.Color();
-const _targetHemiGround = new THREE.Color();
-const _targetHemiGroundB = new THREE.Color();
-const _targetRim = new THREE.Color();
-const _stormTint = new THREE.Color(0x3a4354);
-const _rainTint = new THREE.Color(0x6c7c8e);
-const _snowTint = new THREE.Color(0xdde6ef);
-const _lightningTint = new THREE.Color(0xdbe8ff);
-const _dayRimColor = new THREE.Color(0xfff1dc);
-const _goldenRimColor = new THREE.Color(0xffcfa0);
-const _nightRimColor = new THREE.Color(0x7c9ad4);
-const _camGoal = new THREE.Vector3();
-const _lookGoal = new THREE.Vector3();
 const _lookCurrent = new THREE.Vector3();
 const _projVec = new THREE.Vector3();
 const _pointerVec = new THREE.Vector2();
 const _chaseTarget = new THREE.Vector3();
-
-function detectSoftwareWebGL(): boolean {
-  try {
-    const probeCanvas = document.createElement('canvas');
-    const gl = probeCanvas.getContext('webgl2');
-    if (!gl) return true;
-    const ext = gl.getExtension('WEBGL_debug_renderer_info');
-    const param = ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER;
-    const gpu = String(gl.getParameter(param) || '');
-    gl.getExtension('WEBGL_lose_context')?.loseContext();
-    return /SwiftShader|llvmpipe|softpipe|Software|Basic Render/i.test(gpu);
-  } catch {
-    return false;
-  }
-}
-
-function resolveLocationLabels(x: number, z: number): { district: string; street: string } {
-  let district = 'Efeler Merkez';
-  for (const dz of DISTRICT_ZONES) {
-    if (x >= dz.minX && x <= dz.maxX && z >= dz.minZ && z <= dz.maxZ) {
-      district = dz.name;
-      break;
-    }
-  }
-
-  let bestStreet = 'Efeler Sokakları';
-  const roadSample = sampleNearestRoad(x, z, 9.5);
-  if (roadSample.road) {
-    bestStreet = roadSample.road.name;
-  }
-
-  if (Math.hypot(x, z - 10) < 17) {
-    bestStreet = 'Atatürk Kent Meydanı (Güzelhisar)';
-  } else if (Math.hypot(x + 39.5, z - 11.5) < 16) {
-    bestStreet = 'Sevgi Yolu (Güzelhisar)';
-  } else if (Math.hypot(x + 76, z + 47) < 15) {
-    bestStreet = 'Yağcılar İçi Tarihi Çarşısı';
-  } else if (Math.hypot(x + 58, z + 108) < 15) {
-    bestStreet = 'Tralleis Antik Kenti · Kalfaköy';
-  } else if (Math.hypot(x - 92, z + 104) < 18) {
-    bestStreet = 'ADÜ Aytepe Kampüsü';
-  } else if (Math.hypot(x + 188, z + 12) < 15) {
-    bestStreet = 'Magnesia Artemis Tapınağı';
-  } else if (Math.hypot(x + 127, z - 14) < 16) {
-    bestStreet = 'Nevzat Biçer Parkı (Cumhuriyet)';
-  } else if (Math.hypot(x + 80, z - 52) < 14) {
-    bestStreet = 'Aydın Kipa AVM · Kıbrıs / İstasyon';
-  } else if (Math.hypot(x - 93, z - 34) < 16) {
-    bestStreet = 'Tekstil Park (Sümerbank)';
-  } else if (Math.hypot(x - 142, z - 10) < 16) {
-    bestStreet = 'Forum Aydın · Doğu Blv.';
-  }
-
-  return { district, street: bestStreet };
-}
-
-function resolveCollision(
-  x: number,
-  z: number,
-  radius: number,
-  colliders: ColliderBox[]
-): [number, number] {
-  let nx = THREE.MathUtils.clamp(x, -224, 198);
-  let nz = THREE.MathUtils.clamp(z, -142, 114);
-
-  // Keep player on riverbanks / stone bridges instead of stepping into Tabakhane Deresi water
-  const onBridge = TABAKHANE_BRIDGE_ZS.some((bz) => Math.abs(nz - bz) < 4.5);
-  if (!onBridge) {
-    const streamX = getTabakhaneCenterX(nz);
-    const bankMinDist = 3.1 + radius;
-    const dxStream = nx - streamX;
-    if (Math.abs(dxStream) < bankMinDist) {
-      nx = streamX + (dxStream >= 0 ? bankMinDist : -bankMinDist);
-    }
-  }
-
-  for (const b of colliders) {
-    const closestX = Math.max(b.minX, Math.min(nx, b.maxX));
-    const closestZ = Math.max(b.minZ, Math.min(nz, b.maxZ));
-    const dx = nx - closestX;
-    const dz = nz - closestZ;
-    const distSq = dx * dx + dz * dz;
-    if (distSq < radius * radius) {
-      const dist = Math.sqrt(distSq) || 0.001;
-      const overlap = radius - dist;
-      if (distSq > 0.0001) {
-        nx += (dx / dist) * overlap;
-        nz += (dz / dist) * overlap;
-      } else {
-        nx += overlap;
-      }
-    }
-  }
-  return [nx, nz];
-}
 
 export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
   function EfelerCanvas(
@@ -385,7 +276,6 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
     } | null>(null);
 
     const performDiscover = () => {
-      // Priority 1: Specific street interaction (Zeybek musicians, Bey Camii Lokma, Vendor, Park Guitar Band)
       const streetInt = simRef.current.nearbyStreetInteraction;
       if (streetInt && streetTriggersRef.current) {
         if (streetInt.type === 'musicians') {
@@ -406,14 +296,12 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         }
       }
 
-      // Priority 2: Building NPC Chat / Treat / Walk
       if (simRef.current.nearbyNpc) {
         audioEngine.playDiscoveryChime();
         callbacksRef.current.onInteractNpc(simRef.current.nearbyNpc);
         return;
       }
 
-      // Priority 3: Enter Player Home ("Sıcak Yuvam")
       if (simRef.current.nearPlayerHome) {
         audioEngine.updateEngineSound(0, vehicleConfigRef.current.type, false);
         audioEngine.playDiscoveryChime();
@@ -421,14 +309,12 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         return;
       }
 
-      // Priority 4: Ancient Cities Signpost
       if (simRef.current.nearAncientSignpost && !simRef.current.nearbyLandmark) {
         audioEngine.playDiscoveryChime();
         callbacksRef.current.onInspectSignpost();
         return;
       }
 
-      // Priority 5: Landmark Discovery / Errand Pickup & Dropoff
       const lm = simRef.current.nearbyLandmark;
       if (!lm) return;
       if (!discoveredIdsRef.current.includes(lm.id)) {
@@ -585,7 +471,6 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         if (asp < 1) {
           return 32 / Math.max(0.62, Math.pow(asp, 0.48));
         }
-        // Compact landscape mobile viewports need slightly wider vertical frustum so buildings & roads read comfortably
         if (heightPx <= 520 && asp > 1.25) {
           return 36;
         }
@@ -716,7 +601,6 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       const companionRig: CompanionWalkerRig = createCompanionWalkerRig();
       scene.add(companionRig.root);
 
-      // Sparrow Sim articulated 3D sparrow + FX (clouds, chirp rings, trails, crumbs)
       const sparrowMesh = new SparrowMesh(1.32);
       sparrowMesh.root.visible = explorationModeRef.current === 'sparrow';
       scene.add(sparrowMesh.root);
@@ -745,58 +629,13 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         },
       };
 
-      const particleCount = 24;
-      const particleGeo = new THREE.SphereGeometry(0.22, 6, 6);
-      const particleMat = new THREE.MeshBasicMaterial({
-        color: 0xe6dac5,
-        transparent: true,
-        opacity: 0.45,
-      });
-      const particleMesh = new THREE.InstancedMesh(particleGeo, particleMat, particleCount);
-      particleMesh.frustumCulled = false;
-      scene.add(particleMesh);
-      const particles = Array.from({ length: particleCount }, () => ({
-        active: false,
-        x: 0,
-        y: -5,
-        z: 0,
-        vx: 0,
-        vy: 0,
-        vz: 0,
-        life: 0,
-        maxLife: 0.55,
-      }));
-      let nextParticle = 0;
-      let particleSpawnAccum = 0;
-      const pDummy = new THREE.Object3D();
-
-      // Pooled 3D Weather Particles (Rain / Snow / Storm)
-      const weatherCount = isTouchDevice ? 120 : 220;
-      const weatherGeo = new THREE.BoxGeometry(0.08, 0.85, 0.08);
-      const weatherMat = new THREE.MeshBasicMaterial({
-        color: 0xd6e6f5,
-        transparent: true,
-        opacity: 0.58,
-      });
-      const weatherMesh = new THREE.InstancedMesh(weatherGeo, weatherMat, weatherCount);
-      weatherMesh.frustumCulled = false;
-      scene.add(weatherMesh);
-      const weatherDrops = Array.from({ length: weatherCount }, () => ({
-        ox: (Math.random() - 0.5) * 68,
-        y: Math.random() * 26,
-        oz: (Math.random() - 0.5) * 68,
-        speed: 0.75 + Math.random() * 0.5,
-        phase: Math.random() * Math.PI * 2,
-      }));
-      const wDummy = new THREE.Object3D();
-      let lightningTimer = 4.2;
-      let lightningFlash = 0;
+      const dustSystem = createDustParticleSystem(scene);
+      const weatherSystem = createWeatherParticleSystem(scene, isTouchDevice);
 
       if (!isSoftwareGl) {
         renderer.compile(scene, camera);
       }
 
-      // Raycasting for Clicking Street Encounters & Building NPCs + Drag-to-Look / Isometric Orbit
       const raycaster = new THREE.Raycaster();
       let lastMoveRaycast = 0;
       let activeDragPointerId: number | null = null;
@@ -1052,27 +891,11 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         return cachedSlopes;
       };
 
-      // Continuous Daily Solar Clock & Gradual Weather State Machine
-      let solarPhase = TIME_PHASE_ANCHORS[timeOfDayRef.current];
-      const sampledSolar: SampledSolarMood = {
-        a: TIME_MOODS.golden,
-        b: TIME_MOODS.golden,
-        t: 0,
-        sunIntensity: 2.0,
-        hemiIntensity: 0.78,
-        windowGlow: 0.4,
-        lampLevel: 0.5,
-        sunPos: [0, 50, 40],
-      };
-      const weatherWeights = {
-        clear: weatherRef.current === 'clear' ? 1 : 0,
-        rain: weatherRef.current === 'rain' ? 1 : 0,
-        snow: weatherRef.current === 'snow' ? 1 : 0,
-        storm: weatherRef.current === 'storm' ? 1 : 0,
-      };
-      let frostFactor = seasonRef.current === 'winter' || weatherRef.current === 'snow' ? 0.85 : 0;
-      let wetFactor = weatherRef.current === 'rain' || weatherRef.current === 'storm' ? 0.8 : 0;
-      let autoWeatherTimer = 34;
+      const atmosState = createAtmosphereRuntimeState(
+        timeOfDayRef.current,
+        seasonRef.current,
+        weatherRef.current
+      );
 
       function afterDraw(cb: () => void) {
         const gl = renderer.getContext() as WebGL2RenderingContext;
@@ -1123,166 +946,27 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           city.updatePlayerHomeExterior(houseExteriorRef.current);
         }
 
-        // 1. Continuous Solar Clock Progression (Auto-Cycle or Smooth Manual Glide)
-        if (manualTargetPhaseRef.current !== null) {
-          const targetP = manualTargetPhaseRef.current;
-          let diff = targetP - solarPhase;
-          if (diff > 0.6) diff -= 1;
-          if (diff < -0.6) diff += 1;
-          if (Math.abs(diff) < 0.004) {
-            solarPhase = targetP;
-            manualTargetPhaseRef.current = null;
-          } else {
-            solarPhase = ((solarPhase + diff * Math.min(1, dt * 1.65)) % 1 + 1) % 1;
-          }
-        } else if (autoAtmosphereRef.current && phaseRef.current === 'playing') {
-          // Gentle full 24h Efeler cycle (~4 minutes real-time)
-          solarPhase = (solarPhase + dt * 0.0042) % 1;
-          const bucket = getTimeOfDayFromPhase(solarPhase);
-          if (bucket !== lastAutoSyncedTodRef.current) {
-            lastAutoSyncedTodRef.current = bucket;
-            callbacksRef.current.onAutoTimeSync?.(bucket);
-          }
-        }
+        const { frostFactor, wetFactor, windStrength, goldenWarmth, nightMix } =
+          updateAtmosphereAndLighting({
+            dt,
+            state: atmosState,
+            phase: phaseRef.current,
+            season: seasonRef.current,
+            weather: weatherRef.current,
+            autoAtmosphere: autoAtmosphereRef.current,
+            manualTargetPhaseRef,
+            lastAutoSyncedTodRef,
+            onAutoTimeSync: callbacksRef.current.onAutoTimeSync,
+            onAutoWeatherSync: callbacksRef.current.onAutoWeatherSync,
+            scene,
+            renderer,
+            sunLight,
+            hemiLight,
+            rimLight,
+            mats,
+            vehicleRig,
+          });
 
-        sampleSolarCurve(solarPhase, sampledSolar);
-
-        // 2. Gradual Multi-Second Weather Crossfade & Auto Weather Drift
-        if (autoAtmosphereRef.current && phaseRef.current === 'playing') {
-          autoWeatherTimer -= dt;
-          if (autoWeatherTimer <= 0) {
-            autoWeatherTimer = 36 + Math.random() * 24;
-            const candidate = pickAutoWeatherForCycle(solarPhase, seasonRef.current, Math.random());
-            if (candidate !== weatherRef.current) {
-              callbacksRef.current.onAutoWeatherSync?.(candidate);
-            }
-          }
-        }
-
-        const wType = weatherRef.current;
-        const wFadeRate = Math.min(1, dt * 0.28);
-        weatherWeights.clear = THREE.MathUtils.lerp(weatherWeights.clear, wType === 'clear' ? 1 : 0, wFadeRate);
-        weatherWeights.rain = THREE.MathUtils.lerp(weatherWeights.rain, wType === 'rain' ? 1 : 0, wFadeRate);
-        weatherWeights.snow = THREE.MathUtils.lerp(weatherWeights.snow, wType === 'snow' ? 1 : 0, wFadeRate);
-        weatherWeights.storm = THREE.MathUtils.lerp(weatherWeights.storm, wType === 'storm' ? 1 : 0, wFadeRate);
-
-        const targetFrost =
-          seasonRef.current === 'winter'
-            ? Math.max(0.76, weatherWeights.snow)
-            : weatherWeights.snow * 0.92;
-        frostFactor = THREE.MathUtils.damp(frostFactor, targetFrost, 0.35, dt);
-
-        const targetWet = Math.min(1, weatherWeights.rain + weatherWeights.storm * 1.15);
-        wetFactor = THREE.MathUtils.damp(wetFactor, targetWet, 0.45, dt);
-
-        const windStrength =
-          0.55 + weatherWeights.rain * 0.35 + weatherWeights.storm * 1.15 + weatherWeights.snow * 0.25;
-
-        if (weatherWeights.storm > 0.35) {
-          lightningTimer -= dt;
-          if (lightningTimer <= 0) {
-            lightningFlash = weatherWeights.storm;
-            lightningTimer = 4.5 + Math.random() * 6.5;
-          }
-          lightningFlash = Math.max(0, lightningFlash - dt * 3.8);
-        } else {
-          lightningFlash = 0;
-        }
-
-        _targetSky.set(sampledSolar.a.fogColor);
-        _targetSkyB.set(sampledSolar.b.fogColor);
-        _targetSky.lerp(_targetSkyB, sampledSolar.t);
-        _targetSky.lerp(_stormTint, weatherWeights.storm * 0.68);
-        _targetSky.lerp(_rainTint, weatherWeights.rain * 0.45);
-        _targetSky.lerp(_snowTint, weatherWeights.snow * 0.35);
-        if (lightningFlash > 0.02) {
-          _targetSky.lerp(_lightningTint, lightningFlash * 0.55);
-        }
-
-        if (scene.fog instanceof THREE.FogExp2) {
-          scene.fog.color.lerp(_targetSky, Math.min(1, dt * 2.6));
-          const targetFogDensity =
-            0.0026 +
-            weatherWeights.storm * 0.0056 +
-            weatherWeights.rain * 0.0032 +
-            weatherWeights.snow * 0.0024;
-          scene.fog.density = THREE.MathUtils.damp(scene.fog.density, targetFogDensity, 1.8, dt);
-        }
-
-        _targetSun.set(sampledSolar.a.sunColor);
-        _targetSunB.set(sampledSolar.b.sunColor);
-        _targetSun.lerp(_targetSunB, sampledSolar.t);
-        _targetSun.lerp(_stormTint, weatherWeights.storm * 0.55);
-        sunLight.color.lerp(_targetSun, Math.min(1, dt * 2.6));
-        const weatherSunScale =
-          1.0 -
-          weatherWeights.storm * 0.45 -
-          weatherWeights.rain * 0.28 -
-          weatherWeights.snow * 0.15;
-        sunLight.intensity = THREE.MathUtils.damp(
-          sunLight.intensity,
-          sampledSolar.sunIntensity * weatherSunScale + lightningFlash * 1.6,
-          2.6,
-          dt
-        );
-
-        _targetHemiSky.set(sampledSolar.a.hemiSky);
-        _targetHemiSkyB.set(sampledSolar.b.hemiSky);
-        _targetHemiSky.lerp(_targetHemiSkyB, sampledSolar.t);
-        _targetHemiGround.set(sampledSolar.a.hemiGround);
-        _targetHemiGroundB.set(sampledSolar.b.hemiGround);
-        _targetHemiGround.lerp(_targetHemiGroundB, sampledSolar.t);
-        hemiLight.color.lerp(_targetHemiSky, Math.min(1, dt * 2.6));
-        hemiLight.groundColor.lerp(_targetHemiGround, Math.min(1, dt * 2.6));
-        hemiLight.intensity = THREE.MathUtils.damp(
-          hemiLight.intensity,
-          sampledSolar.hemiIntensity,
-          2.6,
-          dt
-        );
-
-        const nightMix = THREE.MathUtils.clamp((sampledSolar.lampLevel - 0.35) / 0.65, 0, 1);
-        const goldenWarmth = Math.max(0, 1 - Math.abs(solarPhase - 0.58) / 0.18);
-        _targetRim
-          .copy(_dayRimColor)
-          .lerp(_goldenRimColor, goldenWarmth * 0.85)
-          .lerp(_nightRimColor, nightMix * 0.9);
-        rimLight.color.lerp(_targetRim, Math.min(1, dt * 2.6));
-        rimLight.intensity = THREE.MathUtils.damp(
-          rimLight.intensity,
-          0.32 + goldenWarmth * 0.16 - nightMix * 0.14,
-          2.6,
-          dt
-        );
-        renderer.toneMappingExposure = THREE.MathUtils.damp(
-          renderer.toneMappingExposure,
-          1.18 - nightMix * 0.12 + goldenWarmth * 0.05,
-          2.4,
-          dt
-        );
-
-        const lampActiveLevel = Math.max(
-          sampledSolar.lampLevel,
-          weatherWeights.storm * 0.85 + weatherWeights.rain * 0.55
-        );
-        mats.windowLit.emissiveIntensity = THREE.MathUtils.damp(
-          mats.windowLit.emissiveIntensity,
-          Math.max(sampledSolar.windowGlow, lampActiveLevel * 0.72),
-          3.0,
-          dt
-        );
-        mats.lampBulb.emissiveIntensity = THREE.MathUtils.damp(
-          mats.lampBulb.emissiveIntensity,
-          0.08 + lampActiveLevel * 1.77,
-          3.0,
-          dt
-        );
-        vehicleRig.headlightGlowMeshes.forEach((hm) => {
-          const mat = hm.material as THREE.MeshStandardMaterial;
-          mat.emissiveIntensity = 0.25 + lampActiveLevel * 1.45;
-        });
-
-        // Update Living World, Seasonal Trees, Diorama Roofs/Ground, Street Encounters & NPCs
         city.update(dt, elapsed, _lookCurrent.x, _lookCurrent.z);
         city.figTree.update(
           dt,
@@ -1337,7 +1021,6 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           cameraPresetRef.current === 'first_person' && phaseRef.current !== 'title';
         const slopesPre = getCachedSlopes(sim.x, sim.z, sim.heading);
 
-        // Mode switch synchronization (Vehicle/Walk <-> Sparrow)
         if (isSparrow && prevMode !== 'sparrow') {
           sparrowController.resetAt(sim.x, sim.z, sim.heading + Math.PI);
           sparrowChaseCam.snapTo(sparrowController.position, sparrowController.yaw);
@@ -1360,7 +1043,6 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         }
         prevCamPreset = cameraPresetRef.current;
 
-        // Held treat duration & rig sync
         if (sim.treatTimer > 0) {
           sim.treatTimer -= dt;
           if (sim.treatTimer <= 0) {
@@ -1373,8 +1055,13 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           cityAvatarRig.setTreat(sim.heldTreat);
         }
 
-        // Update Storybook Sparrow FX (clouds, crumb treats, rings, wing trails)
-        sparrowFx.update(dt, elapsed, goldenWarmth, nightMix, weatherWeights.storm);
+        sparrowFx.update(
+          dt,
+          elapsed,
+          goldenWarmth,
+          nightMix,
+          atmosState.weatherWeights.storm
+        );
 
         const touchFlapNow = Boolean(touchInputRef.current.flap);
         const touchFlapRising = touchFlapNow && !prevTouchFlap;
@@ -1504,7 +1191,6 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
             const isoAzimuth = Math.PI / 4 + sim.isoYawOffset;
 
             if (isIsoCam && joyMag > 0.08 && !hasKeyMove && !touchButtonsActive) {
-              // Smart 360-degree screen-relative isometric analog control for both walking and driving!
               const cosA = Math.cos(isoAzimuth);
               const sinA = Math.sin(isoAzimuth);
               const worldDirX = joyX * cosA - joyY * sinA;
@@ -1513,10 +1199,17 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
               let diff = targetHeading - sim.heading;
               while (diff > Math.PI) diff -= Math.PI * 2;
               while (diff < -Math.PI) diff += Math.PI * 2;
-              const steerResponsiveness = isWalking ? 12 : vType === 'bicycle' ? 8.5 : vType === 'motorcycle' ? 7.8 : 6.4;
+              const steerResponsiveness = isWalking
+                ? 12
+                : vType === 'bicycle'
+                  ? 8.5
+                  : vType === 'motorcycle'
+                    ? 7.8
+                    : 6.4;
               sim.heading += diff * Math.min(1, dt * steerResponsiveness);
-              // Ease forward speed cleanly on sharp 180° turns so vehicle pivots smoothly
-              const cornerFactor = isWalking ? 1.0 : Math.max(0.35, 1.0 - Math.abs(diff) / (Math.PI * 1.15));
+              const cornerFactor = isWalking
+                ? 1.0
+                : Math.max(0.35, 1.0 - Math.abs(diff) / (Math.PI * 1.15));
               const targetSpeed = maxSpeed * joyMag * cornerFactor;
               sim.speed = THREE.MathUtils.damp(sim.speed, targetSpeed, isWalking ? 14 : 6.5, dt);
               sim.steerAngle = THREE.MathUtils.damp(
@@ -1526,8 +1219,12 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
                 dt
               );
             } else {
-              // In chase/1P mode or when pedals/keys are held: never reverse accidentally when steering left/right on joystick
-              const joyFwd = joyY > 0.1 ? joyY : Math.abs(joyX) > 0.25 && joyY > -0.2 ? Math.abs(joyX) * 0.42 : 0;
+              const joyFwd =
+                joyY > 0.1
+                  ? joyY
+                  : Math.abs(joyX) > 0.25 && joyY > -0.2
+                    ? Math.abs(joyX) * 0.42
+                    : 0;
               const joyRev = joyY < -0.35 ? (-joyY - 0.35) / 0.65 : 0;
               const forwardStrength = Math.max(
                 keyForward || touchInputRef.current.forward ? 1 : 0,
@@ -1553,7 +1250,6 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
                 if (Math.abs(sim.speed) < 0.04) sim.speed = 0;
               }
 
-              // Balanced uphill feel & downhill coasting on real 1:100 Aytepe / Tralleis yokuşları
               if (!isWalking && Math.abs(slopesPre.pitch) > 0.008 && Math.abs(sim.speed) > 0.35) {
                 sim.speed -= Math.sin(slopesPre.pitch) * 2.5 * dt;
               }
@@ -1574,7 +1270,6 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
                 const speedTurnScale = THREE.MathUtils.clamp(Math.abs(sim.speed) / 4.5, 0.45, 1.0);
                 sim.heading += steerInput * turnRate * speedTurnScale * dirSign * dt;
               } else if (Math.abs(steerInput) > 0.15) {
-                // Allow gentle in-place steering aim on mobile when starting from standstill
                 sim.heading += steerInput * turnRate * 0.45 * dt;
               }
             }
@@ -1666,7 +1361,6 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           }
         }
 
-        // Collect floating sesame & fig crumbs (rooftops, bridges & Kent Meydanı)
         if (phaseRef.current === 'playing') {
           for (let i = 0; i < sparrowFx.pickups.length; i++) {
             const pk = sparrowFx.pickups[i];
@@ -1686,7 +1380,6 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           }
         }
 
-        // Companion NPC boulevard walk logic
         if (sim.companionDirty && sim.companionNpc) {
           sim.companionDirty = false;
           companionRig.configure(
@@ -1743,63 +1436,14 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           companionRig.root.visible = false;
         }
 
-        if (!isWalking && !isSparrow && Math.abs(sim.speed) > 4.5 && phaseRef.current === 'playing') {
-          particleSpawnAccum += dt;
-          if (particleSpawnAccum > 0.09) {
-            particleSpawnAccum = 0;
-            const p = particles[nextParticle];
-            nextParticle = (nextParticle + 1) % particleCount;
-            p.active = true;
-            p.life = 0;
-            p.x = sim.x + Math.sin(sim.heading) * 1.1 + (Math.random() - 0.5) * 0.5;
-            p.y = groundY + 0.18;
-            p.z = sim.z + Math.cos(sim.heading) * 1.1 + (Math.random() - 0.5) * 0.5;
-            p.vx = (Math.random() - 0.5) * 0.6;
-            p.vy = 0.65 + Math.random() * 0.4;
-            p.vz = (Math.random() - 0.5) * 0.6;
-          }
-        }
-        let anyParticleActive = false;
-        for (let i = 0; i < particleCount; i++) {
-          if (particles[i].active) {
-            anyParticleActive = true;
-            break;
-          }
-        }
-        if (!anyParticleActive) {
-          if (particleMesh.visible) {
-            particleMesh.visible = false;
-          }
-        } else {
-          if (!particleMesh.visible) {
-            particleMesh.visible = true;
-          }
-          for (let i = 0; i < particleCount; i++) {
-            const p = particles[i];
-            if (!p.active) {
-              pDummy.position.set(0, -10, 0);
-              pDummy.scale.setScalar(0.01);
-            } else {
-              p.life += dt;
-              if (p.life >= p.maxLife) {
-                p.active = false;
-                pDummy.position.set(0, -10, 0);
-                pDummy.scale.setScalar(0.01);
-              } else {
-                p.x += p.vx * dt;
-                p.y += p.vy * dt;
-                p.z += p.vz * dt;
-                const t = p.life / p.maxLife;
-                const s = (1 - t) * 0.85;
-                pDummy.position.set(p.x, p.y, p.z);
-                pDummy.scale.setScalar(Math.max(0.01, s));
-              }
-            }
-            pDummy.updateMatrix();
-            particleMesh.setMatrixAt(i, pDummy.matrix);
-          }
-          particleMesh.instanceMatrix.needsUpdate = true;
-        }
+        dustSystem.update(
+          dt,
+          !isWalking && !isSparrow && Math.abs(sim.speed) > 4.5 && phaseRef.current === 'playing',
+          sim.x,
+          groundY,
+          sim.z,
+          sim.heading
+        );
 
         let closestLm: LandmarkDef | null = null;
         let closestDist = Infinity;
@@ -1868,7 +1512,6 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         }
         sim.nearbyNpc = closestNpc;
 
-        // Check proximity to Interactive Street Encounters
         let streetInt: NearbyStreetInteraction | null = null;
         const dMusicians = Math.hypot(
           sim.x - city.musicians.center[0],
@@ -1934,197 +1577,31 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           );
         }
 
-        // Update 3D Weather Particles gradually with crossfaded precipitation strength
-        const precipStrength = Math.max(
-          weatherWeights.rain,
-          weatherWeights.snow,
-          weatherWeights.storm
-        );
-        const snowDom = weatherWeights.snow > Math.max(weatherWeights.rain, weatherWeights.storm);
-        const stormDom = weatherWeights.storm > Math.max(weatherWeights.rain, weatherWeights.snow);
-        if (precipStrength < 0.03) {
-          if (weatherMesh.visible) weatherMesh.visible = false;
-        } else {
-          if (!weatherMesh.visible) weatherMesh.visible = true;
-          if (snowDom) {
-            weatherMat.color.setHex(0xffffff);
-            weatherMat.opacity = 0.85 * precipStrength;
-          } else if (stormDom) {
-            weatherMat.color.setHex(0xb8cde4);
-            weatherMat.opacity = 0.68 * precipStrength;
-          } else {
-            weatherMat.color.setHex(0xd0e2f2);
-            weatherMat.opacity = 0.52 * precipStrength;
-          }
+        weatherSystem.update(dt, elapsed, atmosState.weatherWeights, _lookCurrent);
 
-          const activeDrops = Math.floor(weatherCount * precipStrength);
-          for (let i = 0; i < weatherCount; i++) {
-            if (i >= activeDrops) {
-              wDummy.position.set(0, -30, 0);
-              wDummy.scale.setScalar(0.01);
-              wDummy.updateMatrix();
-              weatherMesh.setMatrixAt(i, wDummy.matrix);
-              continue;
-            }
-            const drop = weatherDrops[i];
-            if (snowDom) {
-              drop.y -= 3.2 * drop.speed * dt;
-              drop.ox += Math.sin(elapsed * 1.4 + drop.phase) * 1.4 * dt;
-            } else if (stormDom) {
-              drop.y -= 28 * drop.speed * dt;
-              drop.ox -= 7.5 * dt;
-            } else {
-              drop.y -= 20 * drop.speed * dt;
-              drop.ox -= 2.0 * dt;
-            }
-
-            if (drop.y < 0.1) {
-              drop.y = 24 + Math.random() * 4;
-              drop.ox = (Math.random() - 0.5) * 68;
-              drop.oz = (Math.random() - 0.5) * 68;
-            }
-
-            wDummy.position.set(
-              _lookCurrent.x + drop.ox,
-              Math.max(0, _lookCurrent.y - 1.0) + drop.y,
-              _lookCurrent.z + drop.oz
-            );
-            if (snowDom) {
-              wDummy.rotation.set(elapsed + drop.phase, elapsed * 0.6, 0);
-              wDummy.scale.set(2.2, 0.22, 2.2);
-            } else if (stormDom) {
-              wDummy.rotation.set(0, 0, 0.28);
-              wDummy.scale.set(1.0, 1.35, 1.0);
-            } else {
-              wDummy.rotation.set(0, 0, 0.09);
-              wDummy.scale.set(0.85, 1.0, 0.85);
-            }
-            wDummy.updateMatrix();
-            weatherMesh.setMatrixAt(i, wDummy.matrix);
-          }
-          weatherMesh.instanceMatrix.needsUpdate = true;
-        }
-
-        const presetZoom =
-          cameraPresetRef.current === 'close'
-            ? 1.48
-            : cameraPresetRef.current === 'overview'
-              ? 0.65
-              : 1.0;
-
-        const useChaseCam =
-          phaseRef.current !== 'title' &&
-          !isFirstPerson &&
-          (isSparrow || cameraPresetRef.current === 'perspective');
-        const activeCam = isFirstPerson ? fpCamera : useChaseCam ? chaseCamera : camera;
-
-        if (phaseRef.current === 'title') {
-          const orbitAngle = elapsed * 0.11;
-          const focusX = Math.sin(orbitAngle) * 20;
-          const focusZ = 2 + Math.cos(orbitAngle) * 22;
-          const focusY = getWalkableSurfaceHeightAt(focusX, focusZ);
-          _lookGoal.set(focusX, focusY + 2, focusZ);
-          _camGoal.set(focusX + 42, focusY + 36, focusZ + 42);
-          camera.zoom = THREE.MathUtils.damp(camera.zoom, 0.9, 2.5, dt);
-          _lookCurrent.lerp(_lookGoal, 1 - Math.exp(-5.5 * dt));
-          camera.position.lerp(_camGoal, 1 - Math.exp(-5.5 * dt));
-          camera.lookAt(_lookCurrent);
-          if (Math.abs(camera.zoom - prevCamZoom) > 1e-4) {
-            prevCamZoom = camera.zoom;
-            camera.updateProjectionMatrix();
-          }
-        } else if (isFirstPerson) {
-          const eyeH = isSparrow ? 0.34 : isWalking ? 1.46 : 1.32;
-          const fwdOff = isSparrow ? 0.24 : isWalking ? 0.14 : 0.38;
-          const camX = sim.x - Math.sin(sim.heading) * fwdOff;
-          const camZ = sim.z - Math.cos(sim.heading) * fwdOff;
-          const camY = sim.y + eyeH;
-          const lookAngle = sim.heading + sim.fpYaw;
-          const totalPitch = THREE.MathUtils.clamp(sim.pitch * 0.6 + sim.fpPitch, -0.65, 0.52);
-
-          fpCamera.position.set(camX, camY, camZ);
-          _lookGoal.set(
-            camX - Math.sin(lookAngle) * Math.cos(totalPitch) * 16,
-            camY + Math.sin(totalPitch) * 16,
-            camZ - Math.cos(lookAngle) * Math.cos(totalPitch) * 16
-          );
-          fpCamera.lookAt(_lookGoal);
-          _lookCurrent.set(sim.x, sim.y + (isSparrow ? 0.4 : 1.0), sim.z);
-        } else if (useChaseCam) {
-          if (isSparrow) {
-            _chaseTarget.copy(sparrowController.position);
-            sparrowChaseCam.update(chaseCamera, {
-              targetPos: _chaseTarget,
-              targetYaw: sparrowController.yaw,
-              targetForwardX: Math.sin(sparrowController.yaw),
-              targetForwardZ: Math.cos(sparrowController.yaw),
-              airspeed: sim.speed,
-              maxAirspeed: 22,
-              bankAngle: sparrowMesh.bodyPivot.rotation.z,
-              verticalVel: sparrowController.velocity.y,
-              isFlying: sparrowController.mode === 'flying',
-              isVehicle: false,
-              zoomFactor: sim.zoomFactor,
-              colliders: city.colliders,
-              dt,
-            });
-            _lookCurrent.set(sim.x, sim.y + 0.4, sim.z);
-          } else {
-            _chaseTarget.set(sim.x, sim.y, sim.z);
-            sparrowChaseCam.update(chaseCamera, {
-              targetPos: _chaseTarget,
-              targetYaw: sim.heading + Math.PI,
-              targetForwardX: -Math.sin(sim.heading),
-              targetForwardZ: -Math.cos(sim.heading),
-              airspeed: Math.abs(sim.speed),
-              maxAirspeed: 20,
-              bankAngle: 0,
-              verticalVel: 0,
-              isFlying: false,
-              isVehicle: !isWalking,
-              zoomFactor: sim.zoomFactor,
-              colliders: city.colliders,
-              dt,
-            });
-            _lookCurrent.set(sim.x, sim.y + 1.0, sim.z);
-          }
-        } else {
-          const isoAzimuth = Math.PI / 4 + sim.isoYawOffset;
-          const isoDist = 53.74;
-          const speedLead = THREE.MathUtils.clamp(Math.abs(sim.speed) * 0.14, 0, 2.2);
-          const fwdSign = sim.speed >= -0.2 ? 1 : -1;
-          const leadX = -Math.sin(sim.heading) * speedLead * fwdSign;
-          const leadZ = -Math.cos(sim.heading) * speedLead * fwdSign;
-
-          _lookGoal.set(sim.x + leadX, sim.y + 1.0, sim.z + leadZ);
-          _camGoal.set(
-            _lookGoal.x + Math.sin(isoAzimuth) * isoDist,
-            sim.y + 34,
-            _lookGoal.z + Math.cos(isoAzimuth) * isoDist
-          );
-          camera.zoom = THREE.MathUtils.damp(
-            camera.zoom,
-            sim.zoomFactor * presetZoom,
-            5,
-            dt
-          );
-          _lookCurrent.lerp(_lookGoal, 1 - Math.exp(-6.5 * dt));
-          camera.position.lerp(_camGoal, 1 - Math.exp(-6.5 * dt));
-          camera.lookAt(_lookCurrent);
-          if (Math.abs(camera.zoom - prevCamZoom) > 1e-4) {
-            prevCamZoom = camera.zoom;
-            camera.updateProjectionMatrix();
-          }
-        }
-
-        const snapSunX = Math.round(_lookCurrent.x / shadowTexel) * shadowTexel;
-        const snapSunZ = Math.round(_lookCurrent.z / shadowTexel) * shadowTexel;
-        sunLight.target.position.set(snapSunX, _lookCurrent.y, snapSunZ);
-        sunLight.position.set(
-          snapSunX + sampledSolar.sunPos[0],
-          _lookCurrent.y + sampledSolar.sunPos[1],
-          snapSunZ + sampledSolar.sunPos[2]
-        );
+        const camRes = updateCanvasCamera({
+          dt,
+          elapsed,
+          phase: phaseRef.current,
+          cameraPreset: cameraPresetRef.current,
+          isFirstPerson,
+          isSparrow,
+          isWalking,
+          sim,
+          camera,
+          fpCamera,
+          chaseCamera,
+          sparrowChaseCam,
+          sparrowController,
+          sparrowMesh,
+          colliders: city.colliders,
+          lookCurrent: _lookCurrent,
+          prevCamZoom,
+          sunLight,
+          shadowTexel,
+          sunPos: atmosState.sampledSolar.sunPos,
+        });
+        prevCamZoom = camRes.prevCamZoom;
 
         hudAccum += dt;
         const hudInterval = city.libraryVendor.isBubbleVisible() ? 0.085 : 0.18;
@@ -2144,10 +1621,9 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
             }
           }
 
-          // Project Vendor Head Position for crisp DOM Speech Bubble
           let vendorBubble: PlayerHudSnapshot['vendorBubble'] = null;
           if (city.libraryVendor.isBubbleVisible() && container) {
-            _projVec.copy(city.libraryVendor.headWorldPos).project(activeCam);
+            _projVec.copy(city.libraryVendor.headWorldPos).project(camRes.activeCam);
             if (_projVec.z < 1 && Math.abs(_projVec.x) <= 1.05 && Math.abs(_projVec.y) <= 1.05) {
               vendorBubble = {
                 x: Math.round(((_projVec.x + 1) / 2) * container.clientWidth),
@@ -2173,7 +1649,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
             headingRad: sim.heading,
             companionName: sim.companionNpc ? sim.companionNpc.name : null,
             heldTreat: sim.heldTreat,
-            solarClock: getSolarClockLabel(solarPhase),
+            solarClock: getSolarClockLabel(atmosState.solarPhase),
             sparrowState: isSparrow ? sparrowController.mode : undefined,
             sparrowStamina: isSparrow ? sparrowController.flightStamina : undefined,
             isDancingZeybek: sim.zeybekTimer > 0,
@@ -2181,7 +1657,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           });
         }
 
-        renderer.render(scene, activeCam);
+        renderer.render(scene, camRes.activeCam);
 
         if (isSoftwareGl) {
           afterDraw(tick);
@@ -2224,10 +1700,8 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         vehicleRig.dispose();
         cityAvatarRig.dispose();
         companionRig.dispose();
-        particleGeo.dispose();
-        particleMat.dispose();
-        weatherGeo.dispose();
-        weatherMat.dispose();
+        dustSystem.dispose();
+        weatherSystem.dispose();
         city.dispose();
         mats.dispose();
         textures.dispose();
