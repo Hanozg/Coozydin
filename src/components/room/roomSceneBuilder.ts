@@ -296,7 +296,7 @@ export function mountCozyRoomScene(params: CozyRoomSceneParams): () => void {
   addFurnitureHitbox('rug', 3.4, 0.2, 2.4, 0.08);
   addFurnitureHitbox('plant', 0.9, 1.9, 0.9, 0.95);
   {
-    const hit = addFurnitureHitbox('turntable', 1.0, 1.25, 0.65, 0.65);
+    const hit = addFurnitureHitbox('turntable', 1.55, 1.6, 0.75, 0.8);
     hit.userData.roomAction = 'turntable';
     clickables.push(hit);
   }
@@ -800,7 +800,7 @@ export function mountCozyRoomScene(params: CozyRoomSceneParams): () => void {
           } else if (item.id === 'desk') {
             checks.push(['desk', tf.x, tf.z, 'Ajanda & Takvimi Aç', true]);
           } else if (item.id === 'turntable') {
-            checks.push(['turntable', tf.x, tf.z, 'Lo-Fi Plağı Değiştir', true]);
+            checks.push(['turntable', tf.x, tf.z, 'Ses Cihazı · Kanal Değiştir', true]);
           } else if (item.id === 'teatable') {
             checks.push(['teatable', tf.x, tf.z, 'Tavşan Kanı Çay İç', true]);
           } else if (item.id === 'bookshelf') {

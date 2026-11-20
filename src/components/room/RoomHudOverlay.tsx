@@ -656,6 +656,79 @@ export function RoomHudOverlay({
                     );
                   })}
                 </div>
+
+                {/* Quick Audio Device Selector */}
+                <div className="rounded-xl bg-[#FAF3E6] border border-[#B99464]/50 p-2.5 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-[#3A2618]">
+                      <Music className="w-3.5 h-3.5 text-[#C85A32]" aria-hidden="true" />
+                      <span>Oda Ses Cihazı (Pikap · Gramofon · Amfi · Ev Sistemi)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSetShopFilter('turntable');
+                        onSetDrawerTab('shop');
+                      }}
+                      className="text-[11px] font-bold text-[#B84C27] hover:underline cursor-pointer"
+                    >
+                      Mağazada Tümünü Gör →
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {FURNITURE_STYLE_SHOP.filter((s) => s.furnitureId === 'turntable').map((device) => {
+                      const isOwned =
+                        device.priceLokma === 0 || unlockedFurnitureStyles.includes(device.key);
+                      const curAudio = roomState.furniture.find((f) => f.id === 'turntable');
+                      const isEquipped = (curAudio?.styleId || 'classic') === device.styleId;
+                      return (
+                        <button
+                          key={device.key}
+                          type="button"
+                          onClick={() => {
+                            if (isEquipped) return;
+                            if (isOwned) {
+                              onChangeRoomState({
+                                ...roomState,
+                                furniture: roomState.furniture.map((f) =>
+                                  f.id === 'turntable'
+                                    ? { ...f, styleId: device.styleId, enabled: true }
+                                    : f
+                                ),
+                              });
+                              onShowToast(`${device.name} odaya kuruldu!`);
+                            } else {
+                              onSetShopFilter('turntable');
+                              onSetDrawerTab('shop');
+                              onShowToast(
+                                `${device.name} için ${device.priceLokma} Lokma gerekir — mağazadan açabilirsin.`
+                              );
+                            }
+                          }}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold transition-colors cursor-pointer ${
+                            isEquipped
+                              ? 'bg-[#5D8A48] border-[#4A7138] text-[#FAF2E2]'
+                              : isOwned
+                                ? 'bg-[#EFE0C3] hover:bg-[#E4D1AE] border-[#B99464]/55 text-[#3A2618]'
+                                : 'bg-[#EDE0C6]/70 border-[#B99464]/35 text-[#7A624B]'
+                          }`}
+                        >
+                          <span
+                            className="w-2.5 h-2.5 rounded-full border border-[#3A2618]/25 shrink-0"
+                            style={{ backgroundColor: device.accentHex }}
+                          />
+                          <span>{device.name}</span>
+                          {!isOwned && (
+                            <span className="text-[10px] font-mono-num text-[#8F5624]">
+                              ({device.priceLokma}L)
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             )}
 

@@ -141,7 +141,279 @@ export function buildFurnitureVariant(
     }
   } else if (id === 'turntable') {
     const vinylMat = new THREE.MeshStandardMaterial({ color: 0x161618, roughness: 0.3 });
-    if (styleId === 'retro_cream') {
+    if (styleId === 'gramophone_stand') {
+      const mahoganyMat = new THREE.MeshStandardMaterial({ color: 0x633322, roughness: 0.68 });
+      const antiqueBrassMat = new THREE.MeshStandardMaterial({
+        color: 0xd9ab52,
+        roughness: 0.26,
+        metalness: 0.78,
+        side: THREE.DoubleSide,
+      });
+      // Four carved pedestal legs
+      [
+        [-0.24, -0.22],
+        [0.24, -0.22],
+        [-0.24, 0.22],
+        [0.24, 0.22],
+      ].forEach(([lx, lz]) => {
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.028, 0.26, 8), mahoganyMat);
+        leg.position.set(lx, 0.13, lz);
+        leg.castShadow = true;
+        g.add(leg);
+      });
+      // Tall record-storage cabinet
+      const cabinet = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.74, 0.58), mahoganyMat);
+      cabinet.position.y = 0.63;
+      cabinet.castShadow = true;
+      const trimTop = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.07, 0.64), mahoganyMat);
+      trimTop.position.y = 1.02;
+      const doorPanel = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.54, 0.03), woodMat);
+      doorPanel.position.set(0, 0.62, 0.295);
+      const knob = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 8), brassMat);
+      knob.position.set(0.16, 0.62, 0.32);
+      // Side hand-crank
+      const crankShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.12, 8), brassMat);
+      crankShaft.rotation.z = Math.PI / 2;
+      crankShaft.position.set(0.36, 0.9, 0.04);
+      const crankHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.1, 8), woodMat);
+      crankHandle.rotation.x = Math.PI / 2;
+      crankHandle.position.set(0.42, 0.86, 0.08);
+      // Platter & spinning shellac disc
+      const platter = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.23, 0.04, 20), brassMat);
+      platter.position.set(-0.04, 1.07, 0.06);
+      const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.02, 20), vinylMat);
+      disc.position.set(-0.04, 1.1, 0.06);
+      const label = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.025, 14), creamMat);
+      label.position.set(0, 0.004, 0);
+      disc.add(label);
+      spinPart = disc;
+      // Brass tonearm + big flared gramophone horn
+      const armBase = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.16, 10), brassMat);
+      armBase.position.set(0.19, 1.13, -0.14);
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.042, 0.38, 10), antiqueBrassMat);
+      neck.position.set(0.16, 1.32, -0.17);
+      neck.rotation.x = 0.25;
+      const hornBell = new THREE.Mesh(
+        new THREE.ConeGeometry(0.32, 0.48, 18, 1, true),
+        antiqueBrassMat
+      );
+      hornBell.position.set(0.06, 1.56, 0.04);
+      hornBell.rotation.set(-0.88, -0.15, 0.12);
+      g.add(cabinet, trimTop, doorPanel, knob, crankShaft, crankHandle, platter, disc, armBase, neck, hornBell);
+    } else if (styleId === 'mega_amp_stack') {
+      const tolexMat = new THREE.MeshStandardMaterial({ color: 0x212329, roughness: 0.78 });
+      const grilleMat = new THREE.MeshStandardMaterial({ color: 0x3b352f, roughness: 0.94 });
+      const coneMat = new THREE.MeshStandardMaterial({ color: 0x141518, roughness: 0.65 });
+      const pilotGlowMat = new THREE.MeshStandardMaterial({
+        color: 0xffaa44,
+        emissive: 0xff7b1c,
+        emissiveIntensity: 1.8,
+        roughness: 0.2,
+      });
+      // Bottom 4x12 speaker cabinet on casters
+      [
+        [-0.44, -0.2],
+        [0.44, -0.2],
+        [-0.44, 0.2],
+        [0.44, 0.2],
+      ].forEach(([wx, wz]) => {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.04, 10), darkMetalMat);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(wx, 0.045, wz);
+        g.add(wheel);
+      });
+      const cab = new THREE.Mesh(new THREE.BoxGeometry(1.12, 1.02, 0.56), tolexMat);
+      cab.position.y = 0.6;
+      cab.castShadow = true;
+      const grille = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.9, 0.04), grilleMat);
+      grille.position.set(0, 0.6, 0.27);
+      const borderFrame = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.94, 0.02), brassMat);
+      borderFrame.position.set(0, 0.6, 0.262);
+      g.add(cab, borderFrame, grille);
+      // 4 visible speaker cones (2x2)
+      [-0.24, 0.24].forEach((cx) => {
+        [0.37, 0.83].forEach((cy) => {
+          const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.11, 0.04, 18), coneMat);
+          cone.rotation.x = Math.PI / 2;
+          cone.position.set(cx, cy, 0.295);
+          const dustCap = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), darkMetalMat);
+          dustCap.position.set(cx, cy, 0.31);
+          g.add(cone, dustCap);
+        });
+      });
+      // Top tube-amplifier head
+      const ampHead = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.36, 0.46), tolexMat);
+      ampHead.position.y = 1.3;
+      ampHead.castShadow = true;
+      const faceplate = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.14, 0.03), brassMat);
+      faceplate.position.set(0, 1.24, 0.225);
+      const ventPanel = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.12, 0.03), grilleMat);
+      ventPanel.position.set(0, 1.38, 0.225);
+      const pilotLamp = new THREE.Mesh(new THREE.SphereGeometry(0.028, 10, 8), pilotGlowMat);
+      pilotLamp.position.set(-0.38, 1.24, 0.245);
+      g.add(ampHead, faceplate, ventPanel, pilotLamp);
+      for (let k = 0; k < 6; k++) {
+        const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.035, 10), darkMetalMat);
+        knob.rotation.x = Math.PI / 2;
+        knob.position.set(-0.22 + k * 0.11, 1.24, 0.245);
+        g.add(knob);
+      }
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.04, 0.06), darkMetalMat);
+      handle.position.set(0, 1.5, 0);
+      g.add(handle);
+    } else if (styleId === 'home_cinema_hifi') {
+      const charcoalMat = new THREE.MeshStandardMaterial({ color: 0x232730, roughness: 0.55 });
+      const baffleMat = new THREE.MeshStandardMaterial({ color: 0x17191f, roughness: 0.72 });
+      const copperConeMat = new THREE.MeshStandardMaterial({
+        color: 0xc97b42,
+        roughness: 0.35,
+        metalness: 0.65,
+      });
+      const vfdGlowMat = new THREE.MeshStandardMaterial({
+        color: 0x6ce3ff,
+        emissive: 0x2f9bc9,
+        emissiveIntensity: 1.25,
+        roughness: 0.25,
+      });
+      // Center oak AV console + Hi-Fi receiver + Soundbar
+      const consoleBox = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.44, 0.48), lightOakMat);
+      consoleBox.position.y = 0.24;
+      consoleBox.castShadow = true;
+      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.16, 0.38), charcoalMat);
+      receiver.position.set(-0.14, 0.54, -0.02);
+      const receiverDisplay = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.06, 0.02), vfdGlowMat);
+      receiverDisplay.position.set(-0.18, 0.55, 0.175);
+      const volDial = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.038, 0.03, 14), brassMat);
+      volDial.rotation.x = Math.PI / 2;
+      volDial.position.set(0.1, 0.54, 0.175);
+      const soundbar = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.1, 0.12), baffleMat);
+      soundbar.position.set(0, 0.51, 0.17);
+      // Floor Subwoofer tucked front-right of receiver stand
+      const subBox = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.42, 0.38), charcoalMat);
+      subBox.position.set(0.38, 0.21, 0.12);
+      subBox.castShadow = true;
+      const subCone = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.08, 0.03, 16), copperConeMat);
+      subCone.rotation.x = Math.PI / 2;
+      subCone.position.set(0.38, 0.21, 0.315);
+      g.add(consoleBox, receiver, receiverDisplay, volDial, soundbar, subBox, subCone);
+      // Twin tall Floorstanding Tower Speakers
+      [-0.78, 0.78].forEach((tx) => {
+        const tower = new THREE.Mesh(new THREE.BoxGeometry(0.28, 1.44, 0.34), woodMat);
+        tower.position.set(tx, 0.74, -0.02);
+        tower.castShadow = true;
+        const baffle = new THREE.Mesh(new THREE.BoxGeometry(0.24, 1.34, 0.03), baffleMat);
+        baffle.position.set(tx, 0.74, 0.15);
+        const tweeter = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.02, 12), brassMat);
+        tweeter.rotation.x = Math.PI / 2;
+        tweeter.position.set(tx, 1.24, 0.17);
+        [0.98, 0.7, 0.42].forEach((wy) => {
+          const woofer = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.055, 0.03, 14), copperConeMat);
+          woofer.rotation.x = Math.PI / 2;
+          woofer.position.set(tx, wy, 0.17);
+          g.add(woofer);
+        });
+        g.add(tower, baffle, tweeter);
+      });
+    } else if (styleId === 'vintage_jukebox') {
+      const walnutJukeMat = new THREE.MeshStandardMaterial({ color: 0x6e3a24, roughness: 0.62 });
+      const chromeMat = new THREE.MeshStandardMaterial({ color: 0xd8dfe6, roughness: 0.22, metalness: 0.85 });
+      const neonAmberMat = new THREE.MeshStandardMaterial({
+        color: 0xffbf5e,
+        emissive: 0xff9124,
+        emissiveIntensity: 1.35,
+        roughness: 0.25,
+      });
+      const neonTealMat = new THREE.MeshStandardMaterial({
+        color: 0x6be0d6,
+        emissive: 0x2cb0a8,
+        emissiveIntensity: 1.0,
+        roughness: 0.3,
+      });
+      const base = new THREE.Mesh(new THREE.BoxGeometry(0.94, 0.96, 0.56), walnutJukeMat);
+      base.position.y = 0.48;
+      base.castShadow = true;
+      const archCrown = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.47, 0.47, 0.56, 20, 1, false, 0, Math.PI),
+        walnutJukeMat
+      );
+      archCrown.rotation.z = Math.PI / 2;
+      archCrown.rotation.y = Math.PI / 2;
+      archCrown.position.y = 0.96;
+      archCrown.castShadow = true;
+      // Glowing side neon tubes & upper arch ring
+      [-0.41, 0.41].forEach((nx) => {
+        const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.9, 10), neonAmberMat);
+        tube.position.set(nx, 0.52, 0.27);
+        g.add(tube);
+      });
+      const neonArch = new THREE.Mesh(
+        new THREE.TorusGeometry(0.42, 0.036, 10, 22, Math.PI),
+        neonTealMat
+      );
+      neonArch.position.set(0, 0.96, 0.275);
+      // Lower speaker grille with chrome ribs
+      const speakerFabric = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.52, 0.03), neonAmberMat);
+      speakerFabric.position.set(0, 0.38, 0.275);
+      for (let r = -2; r <= 2; r++) {
+        const rib = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.54, 0.045), chromeMat);
+        rib.position.set(r * 0.11, 0.38, 0.285);
+        g.add(rib);
+      }
+      // Illuminated song selector strip + visible horizontal spinning record stage
+      const selectorBar = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.12, 0.05), chromeMat);
+      selectorBar.position.set(0, 0.74, 0.28);
+      const recordStage = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.06, 0.36), darkMetalMat);
+      recordStage.position.set(0, 0.96, 0.08);
+      const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.02, 20), vinylMat);
+      disc.position.set(0, 1.0, 0.08);
+      const label = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.025, 14), neonAmberMat);
+      label.position.set(0, 0.004, 0);
+      disc.add(label);
+      spinPart = disc;
+      g.add(base, archCrown, neonArch, speakerFabric, selectorBar, recordStage, disc);
+    } else if (styleId === 'reel_to_reel') {
+      const aluminumMat = new THREE.MeshStandardMaterial({ color: 0xc9cfd6, roughness: 0.32, metalness: 0.72 });
+      const vuGlowMat = new THREE.MeshStandardMaterial({
+        color: 0xffd78a,
+        emissive: 0xffa83b,
+        emissiveIntensity: 1.05,
+        roughness: 0.3,
+      });
+      const rack = new THREE.Mesh(new THREE.BoxGeometry(1.08, 0.76, 0.52), woodMat);
+      rack.position.y = 0.38;
+      rack.castShadow = true;
+      const deckBody = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.44, 0.36), aluminumMat);
+      deckBody.position.set(0, 0.98, -0.02);
+      deckBody.castShadow = true;
+      // Twin horizontal open-reel tape platters on top deck (left spins)
+      const reelPlate = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.04, 0.32), darkMetalMat);
+      reelPlate.position.set(0, 1.21, -0.02);
+      const leftReel = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.025, 20), aluminumMat);
+      leftReel.position.set(-0.19, 1.24, -0.02);
+      const leftTape = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.03, 18), vinylMat);
+      leftReel.add(leftTape);
+      spinPart = leftReel;
+      const rightReel = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.025, 20), aluminumMat);
+      rightReel.position.set(0.19, 1.24, -0.02);
+      const rightTape = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.03, 18), vinylMat);
+      rightReel.add(rightTape);
+      // Twin warm amber VU meters on front panel
+      [-0.14, 0.14].forEach((vx) => {
+        const vu = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.09, 0.02), vuGlowMat);
+        vu.position.set(vx, 1.02, 0.165);
+        g.add(vu);
+      });
+      // Compact monitor speakers flanking the deck
+      [-0.5, 0.5].forEach((sx) => {
+        const mon = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.32, 0.24), darkMetalMat);
+        mon.position.set(sx, 0.92, 0.02);
+        const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.045, 0.02, 12), brassMat);
+        cone.rotation.x = Math.PI / 2;
+        cone.position.set(sx, 0.91, 0.145);
+        g.add(mon, cone);
+      });
+      g.add(rack, deckBody, reelPlate, leftReel, rightReel);
+    } else if (styleId === 'retro_cream') {
       const creamCabMat = new THREE.MeshStandardMaterial({ color: 0xefe3ce, roughness: 0.7 });
       const cabinet = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.82, 0.54), creamCabMat);
       cabinet.position.y = 0.44;
@@ -151,7 +423,7 @@ export function buildFurnitureVariant(
       const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.02, 20), vinylMat);
       disc.position.set(-0.08, 0.96, 0);
       const label = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.025, 14), brassMat);
-      label.position.set(-0.08, 0.965, 0);
+      label.position.set(0, 0.005, 0);
       disc.add(label);
       spinPart = disc;
 
@@ -194,7 +466,7 @@ export function buildFurnitureVariant(
       const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.02, 20), vinylMat);
       disc.position.set(0, 0.97, 0);
       const label = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.025, 14), terracottaMat);
-      label.position.set(0, 0.975, 0);
+      label.position.set(0, 0.005, 0);
       disc.add(label);
       spinPart = disc;
       g.add(cabinet, deck, disc);
@@ -216,7 +488,7 @@ export function buildFurnitureVariant(
       const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.02, 20), vinylMat);
       disc.position.set(-0.12, 0.96, 0);
       const label = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.025, 14), glowMat);
-      label.position.set(-0.12, 0.965, 0);
+      label.position.set(0, 0.005, 0);
       disc.add(label);
       spinPart = disc;
       // Studio amp + headphones
@@ -236,7 +508,7 @@ export function buildFurnitureVariant(
       const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.02, 20), vinylMat);
       disc.position.set(-0.06, 0.98, 0);
       const label = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.025, 14), brassMat);
-      label.position.set(-0.06, 0.985, 0);
+      label.position.set(0, 0.005, 0);
       disc.add(label);
       spinPart = disc;
       g.add(cabinet, deck, disc);
@@ -322,13 +594,14 @@ export function buildFurnitureVariant(
       g.add(table, leg, tray, teaGlass, teapot);
     }
   } else if (id === 'bookshelf') {
-    const bookColors = [0xb64b36, 0x3b6e8c, 0x586f4e, 0xd4a857, 0x7b4c65];
+    const bookColors = [0xe6d4b5, 0x3b6e8c, 0x586f4e, 0xd4a857, 0x7b4c65];
+    const redBookshelfMat = new THREE.MeshStandardMaterial({ color: 0xb83229, roughness: 0.76 });
     const bodyMat =
       styleId === 'library_arch'
         ? new THREE.MeshStandardMaterial({ color: 0xe6dac4, roughness: 0.8 })
         : styleId === 'plant_shelf'
           ? lightOakMat
-          : woodMat;
+          : redBookshelfMat;
     const frame = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.35, 0.44), bodyMat);
     frame.position.y = 1.175;
     frame.castShadow = true;

@@ -5,7 +5,7 @@ interface AboutModalProps {
   onClose: () => void;
 }
 
-const DEVELOPER_NAME = 'Oğuz Han ÖZGÜR';
+const DEVELOPERS = ['Oğuz Han ÖZGÜR', 'Atakan Avsever'];
 const DEVELOPER_EMAIL = 'oguzhanozgur09@gmail.com';
 
 export function AboutModal({ onClose }: AboutModalProps) {
@@ -59,18 +59,20 @@ export function AboutModal({ onClose }: AboutModalProps) {
         {/* Developer & Contact Section */}
         <section className="pb-5 mb-5 border-b border-[#B99464]/35">
           <h3 className="text-xs font-bold text-[#6B5038] tracking-wide mb-3">
-            Geliştirici ve İletişim
+            Geliştiriciler ve İletişim
           </h3>
 
           <div className="space-y-3 rounded-xl bg-[#FAF2E2] border border-[#B99464]/50 p-3.5 sm:p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-[#EFE0C3] border border-[#B99464]/60 flex items-center justify-center text-[#B84C27] shrink-0">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl bg-[#EFE0C3] border border-[#B99464]/60 flex items-center justify-center text-[#B84C27] shrink-0 mt-0.5">
                 <User className="w-4 h-4" aria-hidden="true" />
               </div>
               <div className="min-w-0">
-                <div className="text-[11px] font-medium text-[#6B5038]">Geliştiren</div>
-                <div className="font-display text-base font-bold text-[#3A2618]">
-                  {DEVELOPER_NAME}
+                <div className="text-[11px] font-medium text-[#6B5038]">Geliştirenler</div>
+                <div className="font-display text-base font-bold text-[#3A2618] leading-snug">
+                  {DEVELOPERS.map((name) => (
+                    <div key={name}>{name}</div>
+                  ))}
                 </div>
               </div>
             </div>
