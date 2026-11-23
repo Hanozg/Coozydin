@@ -110,6 +110,7 @@ service cloud.firestore {
           'coins',
           'lokmaPower',
           'discoveredIds',
+          'discoveredMuseumIds',
           'completedErrandIds',
           'chattedNpcIds',
           'unlockedFurnitureStyles',
@@ -127,6 +128,11 @@ service cloud.firestore {
         data.lokmaPower is int && data.lokmaPower >= 0 && data.lokmaPower <= 100000 &&
         data.discoveredIds is list && data.discoveredIds.size() <= 30 &&
         (data.discoveredIds.size() == 0 || (data.discoveredIds[0] is string && data.discoveredIds[0].size() >= 1 && data.discoveredIds[0].size() <= 40)) &&
+        (!('discoveredMuseumIds' in data) || (
+          data.discoveredMuseumIds is list &&
+          data.discoveredMuseumIds.size() <= 30 &&
+          (data.discoveredMuseumIds.size() == 0 || (data.discoveredMuseumIds[0] is string && data.discoveredMuseumIds[0].size() >= 1 && data.discoveredMuseumIds[0].size() <= 48))
+        )) &&
         (!('completedErrandIds' in data) || (
           data.completedErrandIds is list &&
           data.completedErrandIds.size() <= 40 &&
@@ -169,6 +175,7 @@ service cloud.firestore {
           'coins',
           'lokmaPower',
           'discoveredIds',
+          'discoveredMuseumIds',
           'completedErrandIds',
           'chattedNpcIds',
           'unlockedFurnitureStyles',

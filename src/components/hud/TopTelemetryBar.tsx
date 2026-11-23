@@ -5,6 +5,7 @@ import {
   Headphones,
   Home,
   Info,
+  Landmark,
   MapPin,
   Pause,
   Play,
@@ -55,6 +56,7 @@ interface TopTelemetryBarProps {
   onToggleMusic: () => void;
   onOpenProfile: () => void;
   onEnterHome: () => void;
+  onEnterAncientMuseum: () => void;
   onOpenRealMap: () => void;
   onOpenJournal: () => void;
   onToggleVoiceGuide: () => void;
@@ -95,6 +97,7 @@ export function TopTelemetryBar({
   onToggleMusic,
   onOpenProfile,
   onEnterHome,
+  onEnterAncientMuseum,
   onOpenRealMap,
   onOpenJournal,
   onToggleVoiceGuide,
@@ -327,6 +330,19 @@ export function TopTelemetryBar({
             >
               <Home className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-[#4B743B]" aria-hidden="true" />
               {!isCompactLandscape && <span className="hidden sm:inline">Evim</span>}
+            </button>
+
+            <button
+              type="button"
+              onClick={onEnterAncientMuseum}
+              title="Tralleis Antik Kenti & Açık Hava Müzesi"
+              aria-label="Antik Kent Müzesi"
+              className={`inline-flex items-center gap-1.5 rounded-xl bg-[#EFE0C3] hover:bg-[#E4D1AE] border border-[#8F5624]/45 text-xs font-semibold text-[#3A2618] transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                isCompactLandscape ? 'p-1.5' : 'px-2.5 sm:px-3 py-1.5'
+              }`}
+            >
+              <Landmark className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-[#8F5624]" aria-hidden="true" />
+              {!isCompactLandscape && <span className="hidden sm:inline">Antik Kent</span>}
             </button>
 
             <button

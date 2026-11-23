@@ -291,9 +291,179 @@ export async function narrateLandmark(
     if ((err as { name?: string })?.name === 'AbortError' || token !== activeToken) {
       return false;
     }
+      if (isWebSpeechSupported()) {
+        callbacks?.onFallbackNotice?.('Bağlantı nedeniyle cihaz sesiyle devam ediliyor.');
+        return speakWithWebSpeechFallback(landmark, token, callbacks);
+      }
+      callbacks?.onError?.('failed');
+      return false;
+    } finally {
+      if (activeAbortController === controller) {
+        activeAbortController = null;
+      }
+    }
+  }
+
+function speakTextWithWebSpeechFallback(
+  text: string,
+  token: number,
+  callbacks?: NarrateLandmarkCallbacks
+): boolean {
+  if (!isWebSpeechSupported()) {
+    if (token === activeToken) {
+      callbacks?.onError?.('unsupported');
+    }
+    return false;
+  }
+
+  try {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'tr-TR';
+    utterance.rate = 0.95;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+
+    const voice = pickBestTurkishVoice();
+    if (voice) {
+      utterance.voice = voice;
+    }
+
+    let settled = false;
+    const settleEnd = () => {
+      if (settled || token !== activeToken) return;
+      settled = true;
+      callbacks?.onEnd?.();
+    };
+
+    utterance.onstart = () => {
+      if (token !== activeToken) return;
+      callbacks?.onStart?.();
+    };
+    utterance.onend = settleEnd;
+    utterance.onerror = (event) => {
+      if (settled || token !== activeToken) return;
+      settled = true;
+      const errType = (event as SpeechSynthesisErrorEvent | undefined)?.error;
+      if (errType === 'canceled' || errType === 'interrupted') {
+        callbacks?.onEnd?.();
+      } else {
+        callbacks?.onError?.('failed');
+      }
+    };
+
+    callbacks?.onStart?.();
+    window.speechSynthesis.speak(utterance);
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+    }
+    return true;
+  } catch {
+    if (token === activeToken) {
+      callbacks?.onError?.('failed');
+    }
+    return false;
+  }
+}
+
+export async function narrateMuseumExhibit(
+  exhibitId: string,
+  text: string,
+  callbacks?: NarrateLandmarkCallbacks
+): Promise<boolean> {
+  if (!isVoiceGuideSupported()) {
+    callbacks?.onError?.('unsupported');
+    return false;
+  }
+
+  stopVoiceGuide();
+  const token = ++activeToken;
+  const cacheKey = `museum_${exhibitId}::${text}`;
+
+  const playUrl = async (objectUrl: string) => {
+    if (token !== activeToken) return false;
+    const audio = new Audio(objectUrl);
+    audio.volume = 0.96;
+    activeAudio = audio;
+
+    audio.onended = () => {
+      if (token !== activeToken) return;
+      activeAudio = null;
+      callbacks?.onEnd?.();
+    };
+    audio.onerror = () => {
+      if (token !== activeToken) return;
+      activeAudio = null;
+      callbacks?.onError?.('failed');
+    };
+
+    try {
+      await audio.play();
+      if (token !== activeToken) {
+        audio.pause();
+        return false;
+      }
+      callbacks?.onStart?.();
+      return true;
+    } catch {
+      if (token === activeToken) {
+        activeAudio = null;
+        callbacks?.onError?.('failed');
+      }
+      return false;
+    }
+  };
+
+  const cachedUrl = audioBlobUrlCache.get(cacheKey);
+  if (cachedUrl) {
+    return playUrl(cachedUrl);
+  }
+
+  callbacks?.onLoading?.();
+
+  const controller = new AbortController();
+  activeAbortController = controller;
+
+  try {
+    const res = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ landmarkId: `museum_${exhibitId}`, text }),
+      signal: controller.signal,
+    });
+
+    if (token !== activeToken) return false;
+
+    if (!res.ok) {
+      if (isWebSpeechSupported()) {
+        callbacks?.onFallbackNotice?.('Sesli Rehber cihaz sesiyle çalınıyor.');
+        return speakTextWithWebSpeechFallback(text, token, callbacks);
+      }
+      callbacks?.onError?.('failed');
+      return false;
+    }
+
+    const data = (await res.json()) as { audioBase64?: string; mimeType?: string };
+    if (token !== activeToken) return false;
+
+    if (!data.audioBase64) {
+      if (isWebSpeechSupported()) {
+        return speakTextWithWebSpeechFallback(text, token, callbacks);
+      }
+      callbacks?.onError?.('failed');
+      return false;
+    }
+
+    const objectUrl = base64ToBlobUrl(data.audioBase64, data.mimeType || 'audio/wav');
+    audioBlobUrlCache.set(cacheKey, objectUrl);
+    return playUrl(objectUrl);
+  } catch (err: unknown) {
+    if ((err as { name?: string })?.name === 'AbortError' || token !== activeToken) {
+      return false;
+    }
     if (isWebSpeechSupported()) {
       callbacks?.onFallbackNotice?.('Bağlantı nedeniyle cihaz sesiyle devam ediliyor.');
-      return speakWithWebSpeechFallback(landmark, token, callbacks);
+      return speakTextWithWebSpeechFallback(text, token, callbacks);
     }
     callbacks?.onError?.('failed');
     return false;

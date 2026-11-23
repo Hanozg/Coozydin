@@ -54,6 +54,7 @@ export function loadInitialPlayerSave(): UserSavePayload {
     coins: 0,
     lokmaPower: 2,
     discoveredIds: [],
+    discoveredMuseumIds: [],
     completedErrandIds: [],
     chattedNpcIds: [],
     unlockedFurnitureStyles: DEFAULT_UNLOCKED_FURNITURE_STYLES,
@@ -84,6 +85,9 @@ export function useGamePersistence() {
   const [avatarEmoji, setAvatarEmoji] = useState<string>(initialSave.avatarEmoji);
   const [chattedNpcIds, setChattedNpcIds] = useState<string[]>(initialSave.chattedNpcIds);
   const [discoveredIds, setDiscoveredIds] = useState<string[]>(initialSave.discoveredIds);
+  const [discoveredMuseumIds, setDiscoveredMuseumIds] = useState<string[]>(
+    initialSave.discoveredMuseumIds
+  );
   const [completedErrandIds, setCompletedErrandIds] = useState<string[]>(
     initialSave.completedErrandIds
   );
@@ -114,6 +118,7 @@ export function useGamePersistence() {
         coins,
         lokmaPower,
         discoveredIds,
+        discoveredMuseumIds,
         completedErrandIds,
         chattedNpcIds,
         unlockedFurnitureStyles,
@@ -130,6 +135,7 @@ export function useGamePersistence() {
       completedErrandIds,
       cozyRoomState,
       discoveredIds,
+      discoveredMuseumIds,
       displayName,
       houseExterior,
       lokmaPower,
@@ -147,6 +153,7 @@ export function useGamePersistence() {
     setCoins(data.coins);
     setLokmaPower(data.lokmaPower);
     setDiscoveredIds(data.discoveredIds);
+    setDiscoveredMuseumIds(data.discoveredMuseumIds);
     setCompletedErrandIds(data.completedErrandIds);
     setChattedNpcIds(data.chattedNpcIds);
     setUnlockedFurnitureStyles(data.unlockedFurnitureStyles);
@@ -209,6 +216,9 @@ export function useGamePersistence() {
             lokmaPower: Math.max(cloudData.lokmaPower, local.lokmaPower),
             discoveredIds: Array.from(
               new Set([...cloudData.discoveredIds, ...local.discoveredIds])
+            ),
+            discoveredMuseumIds: Array.from(
+              new Set([...(cloudData.discoveredMuseumIds || []), ...local.discoveredMuseumIds])
             ),
             completedErrandIds: Array.from(
               new Set([...(cloudData.completedErrandIds || []), ...local.completedErrandIds])
@@ -311,6 +321,8 @@ export function useGamePersistence() {
     setChattedNpcIds,
     discoveredIds,
     setDiscoveredIds,
+    discoveredMuseumIds,
+    setDiscoveredMuseumIds,
     completedErrandIds,
     setCompletedErrandIds,
     coins,

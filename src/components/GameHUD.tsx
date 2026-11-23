@@ -58,6 +58,7 @@ export const GameHUD = memo(function GameHUD({
   onOpenProfile,
   onOpenAbout,
   onEnterHome,
+  onEnterAncientMuseum,
   onPause,
   onDiscoverNearby,
   onHorn,
@@ -221,6 +222,7 @@ export const GameHUD = memo(function GameHUD({
         onToggleMusic={onToggleMusic}
         onOpenProfile={onOpenProfile}
         onEnterHome={onEnterHome}
+        onEnterAncientMuseum={onEnterAncientMuseum}
         onOpenRealMap={onOpenRealMap}
         onOpenJournal={onOpenJournal}
         onToggleVoiceGuide={onToggleVoiceGuide}
@@ -243,6 +245,7 @@ export const GameHUD = memo(function GameHUD({
           onDiscoverNearby={onDiscoverNearby}
           onInteractNpc={onInteractNpc}
           onEnterHome={onEnterHome}
+          onEnterAncientMuseum={onEnterAncientMuseum}
           onOpenHouseDrawer={() => {
             setDockCollapsed(false);
             toggleDrawer('house');

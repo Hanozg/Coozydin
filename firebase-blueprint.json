@@ -36,6 +36,10 @@
           "type": "array",
           "description": "Keşfedilen tarihi yapıların kimlik listesi."
         },
+        "discoveredMuseumIds": {
+          "type": "array",
+          "description": "Tralleis Açık Hava Müzesi'nde keşfedilen eserlerin kimlik listesi."
+        },
         "completedErrandIds": {
           "type": "array",
           "description": "Tamamlanan sakin görevlerin kimlik listesi."

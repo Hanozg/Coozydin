@@ -123,6 +123,7 @@ export interface UserSavePayload {
   coins: number;
   lokmaPower: number;
   discoveredIds: string[];
+  discoveredMuseumIds: string[];
   completedErrandIds: string[];
   chattedNpcIds: string[];
   unlockedFurnitureStyles: string[];
@@ -130,6 +131,45 @@ export interface UserSavePayload {
   houseExterior: HouseExteriorConfig;
   cozyRoomState: CozyRoomState;
   agendaNotes: AgendaNote[];
+}
+
+export type MuseumSurfaceType = 'marble' | 'stone' | 'mosaic' | 'dirt' | 'crypt_stone';
+
+export type CryptLightMode = 'torch' | 'flashlight';
+
+export interface MuseumExhibitDef {
+  id: string;
+  catalogCode: string;
+  title: string;
+  subtitle: string;
+  period: string;
+  zone: string;
+  material: string;
+  dimensions: string;
+  position: [number, number, number];
+  standPosition: [number, number, number];
+  standRotationY: number;
+  focusCameraPos: [number, number, number];
+  focusLookAt: [number, number, number];
+  shortDescription: string;
+  historicalStory: string;
+  architecturalNote: string;
+  voiceNarrationText: string;
+  rewardCoins: number;
+}
+
+export interface AncientMuseumHudSnapshot {
+  zoneName: string;
+  surfaceType: MuseumSurfaceType;
+  inCrypt: boolean;
+  cryptFactor: number;
+  lightActive: boolean;
+  lightMode: CryptLightMode;
+  focusZoomActive: boolean;
+  pointerLocked: boolean;
+  nearbyExhibit: MuseumExhibitDef | null;
+  activeExhibit: MuseumExhibitDef | null;
+  playerElevation: number;
 }
 
 export interface AgendaNote {

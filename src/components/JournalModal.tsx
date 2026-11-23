@@ -1,29 +1,36 @@
 import { useState } from 'react';
-import { Check, Compass, MapPin, Package, Sparkles, X } from 'lucide-react';
+import { Check, Compass, Landmark, MapPin, Package, Sparkles, X } from 'lucide-react';
+import { MUSEUM_EXHIBITS } from '../data/ancientMuseumData';
 import { COZY_ERRANDS, LANDMARKS } from '../data/efelerData';
 import { DAILY_EVOLUTION_LOG, UPCOMING_EVOLUTION_IDEAS } from '../data/evolutionLog';
 import { ErrandDef, LandmarkDef } from '../types/game';
 
 interface JournalModalProps {
   discoveredIds: string[];
+  discoveredMuseumIds?: string[];
   completedErrandIds?: string[];
   activeErrand: ErrandDef | null;
   errandPickedUp: boolean;
+  initialTab?: 'landmarks' | 'museum' | 'errands' | 'evolution';
   onSelectErrand: (errand: ErrandDef | null) => void;
   onNavigateToLandmark: (landmark: LandmarkDef) => void;
+  onEnterAncientMuseum?: () => void;
   onClose: () => void;
 }
 
 export function JournalModal({
   discoveredIds,
+  discoveredMuseumIds = [],
   completedErrandIds = [],
   activeErrand,
   errandPickedUp,
+  initialTab = 'landmarks',
   onSelectErrand,
   onNavigateToLandmark,
+  onEnterAncientMuseum,
   onClose,
 }: JournalModalProps) {
-  const [tab, setTab] = useState<'landmarks' | 'errands' | 'evolution'>('landmarks');
+  const [tab, setTab] = useState<'landmarks' | 'museum' | 'errands' | 'evolution'>(initialTab);
 
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#2E1E12]/65 p-3 sm:p-4 md:p-8">
@@ -35,7 +42,8 @@ export function JournalModal({
               Efeler Keşif Defteri
             </h2>
             <p className="text-xs text-[#6B5038] mt-0.5 font-medium">
-              {discoveredIds.length} / {LANDMARKS.length} tarihi yapı keşfedildi
+              {discoveredIds.length} / {LANDMARKS.length} tarihi yapı · {discoveredMuseumIds.length} /{' '}
+              {MUSEUM_EXHIBITS.length} antik müze eseri
             </p>
           </div>
 
@@ -44,13 +52,25 @@ export function JournalModal({
               <button
                 type="button"
                 onClick={() => setTab('landmarks')}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                   tab === 'landmarks'
                     ? 'bg-[#C85A32] text-[#FAF2E2]'
                     : 'text-[#5B432F] hover:text-[#3A2618]'
                 }`}
               >
                 Tarihi Yapılar
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab('museum')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  tab === 'museum'
+                    ? 'bg-[#8F5624] text-[#FAF2E2]'
+                    : 'text-[#5B432F] hover:text-[#3A2618]'
+                }`}
+              >
+                <Landmark className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Antik Müze</span>
               </button>
               <button
                 type="button"
@@ -164,6 +184,88 @@ export function JournalModal({
                     Nysa, Alabanda, Alinda, Priene, Milet, Afrodisias ve Didyma eklenecek.
                   </p>
                 </div>
+              </div>
+            </div>
+          ) : tab === 'museum' ? (
+            <div className="space-y-4">
+              <div className="rounded-xl p-4 bg-[#EFE0C3] border border-[#8F5624]/45 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-semibold text-[#8F5624]">
+                    Tralleis Açık Hava Müzesi Koleksiyonu · {discoveredMuseumIds.length} /{' '}
+                    {MUSEUM_EXHIBITS.length} Eser
+                  </div>
+                  <div className="font-display text-sm md:text-base font-bold text-[#3A2618] mt-0.5">
+                    Üç Gözler, Sütunlu Agora, Antik Tiyatro ve Tonozlu Mahzen
+                  </div>
+                  <p className="text-xs text-[#5E4530] mt-0.5">
+                    Girilebilir 1:1 antik kentte cam bilgi noktalarına yaklaşıp [E] ile eserleri
+                    inceleyin ve Sesli Rehber’i dinleyin.
+                  </p>
+                </div>
+                {onEnterAncientMuseum && (
+                  <button
+                    type="button"
+                    onClick={onEnterAncientMuseum}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#8F5624] hover:bg-[#7A471D] text-[#FAF2E2] text-xs font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer"
+                  >
+                    <Landmark className="w-4 h-4" aria-hidden="true" />
+                    <span>Antik Kente Gir</span>
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {MUSEUM_EXHIBITS.map((ex) => {
+                  const isFound = discoveredMuseumIds.includes(ex.id);
+                  return (
+                    <div
+                      key={ex.id}
+                      className="flex flex-col justify-between rounded-xl p-4 bg-[#FAF3E6] border border-[#B99464]/50 shadow-sm"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2 text-xs text-[#6B5038] mb-1.5 font-medium">
+                          <span className="font-mono-num">
+                            {ex.catalogCode} · {ex.zone}
+                          </span>
+                          <span
+                            className={`inline-flex items-center gap-1 font-semibold ${
+                              isFound ? 'text-[#4B743B]' : 'text-[#B84C27]'
+                            }`}
+                          >
+                            {isFound ? (
+                              <>
+                                <Check className="w-3.5 h-3.5" aria-hidden="true" />
+                                <span>İncelendi</span>
+                              </>
+                            ) : (
+                              <>
+                                <Compass className="w-3.5 h-3.5" aria-hidden="true" />
+                                <span>Keşfedilmedi</span>
+                              </>
+                            )}
+                          </span>
+                        </div>
+
+                        <h3 className="font-display text-base font-bold text-[#3A2618]">
+                          {ex.title}
+                        </h3>
+                        <p className="text-[11px] text-[#8F5624] font-semibold mt-0.5 mb-2">
+                          {ex.period}
+                        </p>
+                        <p className="text-xs text-[#543E2B] leading-relaxed">
+                          {isFound ? ex.historicalStory : ex.shortDescription}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-3 mt-3 border-t border-[#B99464]/30 text-xs">
+                        <span className="text-[#6B5038] truncate max-w-[68%]">{ex.material}</span>
+                        <span className="text-[#B84C27] font-semibold font-mono-num shrink-0">
+                          +{ex.rewardCoins} İncir
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ) : tab === 'errands' ? (

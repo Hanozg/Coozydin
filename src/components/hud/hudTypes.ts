@@ -74,6 +74,7 @@ export interface GameHUDProps {
   onOpenProfile: () => void;
   onOpenAbout: () => void;
   onEnterHome: () => void;
+  onEnterAncientMuseum: () => void;
   onPause: () => void;
   onDiscoverNearby: () => void;
   onHorn: () => void;

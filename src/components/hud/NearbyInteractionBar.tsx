@@ -2,6 +2,7 @@ import {
   Compass,
   Headphones,
   Home,
+  Landmark,
   MessageCircle,
   Paintbrush,
   Sparkles,
@@ -24,6 +25,7 @@ interface NearbyInteractionBarProps {
   onDiscoverNearby: () => void;
   onInteractNpc: (npc: BuildingNpcDef) => void;
   onEnterHome: () => void;
+  onEnterAncientMuseum: () => void;
   onOpenHouseDrawer: () => void;
   onToggleVoiceGuide: () => void;
 }
@@ -39,6 +41,7 @@ export function NearbyInteractionBar({
   onDiscoverNearby,
   onInteractNpc,
   onEnterHome,
+  onEnterAncientMuseum,
   onOpenHouseDrawer,
   onToggleVoiceGuide,
 }: NearbyInteractionBarProps) {
@@ -133,6 +136,17 @@ export function NearbyInteractionBar({
             </span>
           </button>
         )
+      )}
+
+      {hud.nearbyLandmark?.id === 'tralleis' && (
+        <button
+          type="button"
+          onClick={onEnterAncientMuseum}
+          className="pointer-events-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#8F5624] hover:bg-[#7A471D] border-2 border-[#F5D79E]/85 text-[#FAF2E2] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
+        >
+          <Landmark className="w-4 h-4 text-[#F8DFAA] shrink-0" aria-hidden="true" />
+          <span>Antik Kente Gir · Tralleis Açık Hava Müzesi</span>
+        </button>
       )}
 
       {hud.nearbyLandmark && (

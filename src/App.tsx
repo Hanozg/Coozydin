@@ -6,6 +6,7 @@ import { EfelerCanvas, EfelerCanvasHandle, TouchDriveInput } from './components/
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { GameHUD } from './components/GameHUD';
 import { JournalModal } from './components/JournalModal';
+import { AncientMuseumView } from './components/museum/AncientMuseumView';
 import { NpcDialogueModal } from './components/NpcDialogueModal';
 import { PauseModal } from './components/PauseModal';
 import { ProfileModal } from './components/ProfileModal';
@@ -29,6 +30,7 @@ import {
   GamePhase,
   LandmarkDef,
   LofiTrackId,
+  MuseumExhibitDef,
   NpcActionOption,
   PlayerHudSnapshot,
   SeasonType,
@@ -65,6 +67,8 @@ export default function App() {
     setChattedNpcIds,
     discoveredIds,
     setDiscoveredIds,
+    discoveredMuseumIds,
+    setDiscoveredMuseumIds,
     completedErrandIds,
     setCompletedErrandIds,
     coins,
@@ -98,7 +102,11 @@ export default function App() {
 
   const [phase, setPhase] = useState<GamePhase>('title');
   const [inHome, setInHome] = useState(false);
+  const [inAncientMuseum, setInAncientMuseum] = useState(false);
   const [journalOpen, setJournalOpen] = useState(false);
+  const [journalInitialTab, setJournalInitialTab] = useState<
+    'landmarks' | 'museum' | 'errands' | 'evolution'
+  >('landmarks');
   const [realMapOpen, setRealMapOpen] = useState(false);
   const [agendaOpen, setAgendaOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -222,13 +230,13 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!autoDistrictRadio || phase !== 'playing' || inHome) return;
+    if (!autoDistrictRadio || phase !== 'playing' || inHome || inAncientMuseum) return;
     const matched = getRadioStationForDistrict(hud.currentDistrict);
     if (matched.id !== lofiTrack) {
       setLofiTrack(matched.id);
       audioEngine.setLofiTrack(matched.id, true);
     }
-  }, [autoDistrictRadio, hud.currentDistrict, inHome, lofiTrack, phase]);
+  }, [autoDistrictRadio, hud.currentDistrict, inAncientMuseum, inHome, lofiTrack, phase]);
 
   const handleDiscoverLandmark = useCallback(
     (lm: LandmarkDef) => {
@@ -241,6 +249,17 @@ export default function App() {
       });
     },
     [setCoins, setDiscoveredIds, setLokmaPower, showDiscoveryToast]
+  );
+
+  const handleDiscoverMuseumExhibit = useCallback(
+    (exhibit: MuseumExhibitDef) => {
+      setDiscoveredMuseumIds((prev) => {
+        if (prev.includes(exhibit.id)) return prev;
+        setCoins((c) => c + exhibit.rewardCoins);
+        return [...prev, exhibit.id];
+      });
+    },
+    [setCoins, setDiscoveredMuseumIds]
   );
 
   const handleErrandAction = useCallback(
@@ -465,6 +484,7 @@ export default function App() {
     setRealMapOpen(false);
     setProfileOpen(false);
     setInHome(false);
+    setInAncientMuseum(false);
     setPhase('playing');
   }, []);
 
@@ -563,6 +583,7 @@ export default function App() {
     setRealMapOpen(false);
     setProfileOpen(false);
     setAboutOpen(false);
+    setInAncientMuseum(false);
     setInHome(true);
   }, [vehicleConfig.type]);
 
@@ -570,6 +591,36 @@ export default function App() {
     setAgendaOpen(false);
     setInHome(false);
   }, []);
+
+  const handleEnterAncientMuseum = useCallback(() => {
+    stopVoiceGuide();
+    audioEngine.updateEngineSound(0, vehicleConfig.type, false);
+    audioEngine.setMusicEnabled(false);
+    canvasRef.current?.setTouchInput({
+      forward: false,
+      backward: false,
+      left: false,
+      right: false,
+      flap: false,
+      dive: false,
+    });
+    setJournalOpen(false);
+    setRealMapOpen(false);
+    setProfileOpen(false);
+    setAboutOpen(false);
+    setActiveNpc(null);
+    setInHome(false);
+    setInAncientMuseum(true);
+    setPhase('playing');
+  }, [vehicleConfig.type]);
+
+  const handleExitAncientMuseum = useCallback(() => {
+    stopVoiceGuide();
+    setInAncientMuseum(false);
+    if (musicEnabled && !isMuted) {
+      audioEngine.setMusicEnabled(true);
+    }
+  }, [isMuted, musicEnabled]);
 
   const handleAddAgendaNote = useCallback(
     (dateKey: string, text: string) => {
@@ -614,26 +665,51 @@ export default function App() {
           setJournalOpen(false);
         } else if (inHome) {
           setInHome(false);
+        } else if (inAncientMuseum) {
+          return;
         } else if (phase === 'playing') {
           setPhase('paused');
         } else if (phase === 'paused') {
           setPhase('playing');
         }
       } else if (
+        e.code === 'KeyE' &&
+        !e.repeat &&
+        phase === 'playing' &&
+        !inHome &&
+        !inAncientMuseum &&
+        !journalOpen &&
+        !realMapOpen &&
+        !profileOpen &&
+        !aboutOpen &&
+        !activeNpc &&
+        !typing &&
+        hud.nearbyLandmark?.id === 'tralleis' &&
+        discoveredIds.includes('tralleis') &&
+        (!activeErrand ||
+          (errandPickedUp
+            ? activeErrand.toLandmarkId !== 'tralleis'
+            : activeErrand.fromLandmarkId !== 'tralleis'))
+      ) {
+        handleEnterAncientMuseum();
+      } else if (
         e.code === 'KeyJ' &&
         phase === 'playing' &&
         !inHome &&
+        !inAncientMuseum &&
         !realMapOpen &&
         !profileOpen &&
         !aboutOpen &&
         !activeNpc &&
         !typing
       ) {
+        setJournalInitialTab('landmarks');
         setJournalOpen((o) => !o);
       } else if (
         e.code === 'KeyM' &&
         phase === 'playing' &&
         !inHome &&
+        !inAncientMuseum &&
         !journalOpen &&
         !agendaOpen &&
         !profileOpen &&
@@ -646,6 +722,7 @@ export default function App() {
         e.code === 'KeyV' &&
         phase === 'playing' &&
         !inHome &&
+        !inAncientMuseum &&
         !journalOpen &&
         !realMapOpen &&
         !agendaOpen &&
@@ -661,6 +738,7 @@ export default function App() {
         e.code === 'KeyC' &&
         phase === 'playing' &&
         !inHome &&
+        !inAncientMuseum &&
         !journalOpen &&
         !realMapOpen &&
         !agendaOpen &&
@@ -676,15 +754,38 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [aboutOpen, activeNpc, agendaOpen, inHome, journalOpen, phase, profileOpen, realMapOpen]);
+  }, [
+    aboutOpen,
+    activeErrand,
+    activeNpc,
+    agendaOpen,
+    discoveredIds,
+    errandPickedUp,
+    handleEnterAncientMuseum,
+    hud.nearbyLandmark?.id,
+    inAncientMuseum,
+    inHome,
+    journalOpen,
+    phase,
+    profileOpen,
+    realMapOpen,
+  ]);
 
   useEffect(() => {
-    if (phase !== 'playing' || inHome || isMuted) {
+    if (phase !== 'playing' || inHome || inAncientMuseum || isMuted) {
       if (voiceGuideLandmark || voiceGuideLoading) {
         handleStopVoiceGuide();
       }
     }
-  }, [handleStopVoiceGuide, inHome, isMuted, phase, voiceGuideLandmark, voiceGuideLoading]);
+  }, [
+    handleStopVoiceGuide,
+    inAncientMuseum,
+    inHome,
+    isMuted,
+    phase,
+    voiceGuideLandmark,
+    voiceGuideLoading,
+  ]);
 
   useEffect(() => {
     audioEngine.bindGlobalUnlock();
@@ -739,7 +840,26 @@ export default function App() {
           </span>
         </div>
       )}
-      {!inHome ? (
+      {inAncientMuseum ? (
+        <ErrorBoundary
+          key="museum-boundary"
+          fallbackTitle="Tralleis Antik Kenti Yenileniyor"
+          onReset={handleExitAncientMuseum}
+        >
+          <AncientMuseumView
+            avatarConfig={cozyRoomState.avatarConfig || DEFAULT_AVATAR_CONFIG}
+            discoveredMuseumIds={discoveredMuseumIds}
+            isMuted={isMuted}
+            onDiscoverExhibit={handleDiscoverMuseumExhibit}
+            onToggleMute={handleToggleMute}
+            onOpenJournal={() => {
+              setJournalInitialTab('museum');
+              setJournalOpen(true);
+            }}
+            onExitMuseum={handleExitAncientMuseum}
+          />
+        </ErrorBoundary>
+      ) : !inHome ? (
         <ErrorBoundary
           key="city-boundary"
           fallbackTitle="Efeler Sahnesi Yenileniyor"
@@ -804,7 +924,7 @@ export default function App() {
         </ErrorBoundary>
       )}
 
-      {phase === 'title' && !inHome && (
+      {phase === 'title' && !inHome && !inAncientMuseum && (
         <TitleScreen
           profileName={displayName}
           profileEmoji={avatarEmoji}
@@ -822,7 +942,8 @@ export default function App() {
         !profileOpen &&
         !aboutOpen &&
         !activeNpc &&
-        !inHome && (
+        !inHome &&
+        !inAncientMuseum && (
         <GameHUD
           hud={hud}
           explorationMode={explorationMode}
@@ -883,7 +1004,10 @@ export default function App() {
           onToggleMusic={handleToggleMusic}
           onToggleVoiceGuide={handleToggleVoiceGuide}
           onStopVoiceGuide={handleStopVoiceGuide}
-          onOpenJournal={() => setJournalOpen(true)}
+          onOpenJournal={() => {
+            setJournalInitialTab('landmarks');
+            setJournalOpen(true);
+          }}
           onOpenRealMap={() => setRealMapOpen(true)}
           onJumpToLandmark={handleNavigateToLandmark}
           onOpenProfile={() => setProfileOpen(true)}
@@ -899,6 +1023,7 @@ export default function App() {
             setAboutOpen(true);
           }}
           onEnterHome={handleEnterHome}
+          onEnterAncientMuseum={handleEnterAncientMuseum}
           onPause={() => {
             canvasRef.current?.setTouchInput({
               forward: false,
@@ -955,14 +1080,17 @@ export default function App() {
       {journalOpen && !inHome && (
         <JournalModal
           discoveredIds={discoveredIds}
+          discoveredMuseumIds={discoveredMuseumIds}
           completedErrandIds={completedErrandIds}
           activeErrand={activeErrand}
           errandPickedUp={errandPickedUp}
+          initialTab={journalInitialTab}
           onSelectErrand={(err) => {
             setActiveErrand(err);
             setErrandPickedUp(false);
           }}
           onNavigateToLandmark={handleNavigateToLandmark}
+          onEnterAncientMuseum={handleEnterAncientMuseum}
           onClose={() => setJournalOpen(false)}
         />
       )}
@@ -1022,7 +1150,8 @@ export default function App() {
         !profileOpen &&
         !aboutOpen &&
         !activeNpc &&
-        !inHome && (
+        !inHome &&
+        !inAncientMuseum && (
           <PauseModal
             discoveredCount={discoveredIds.length}
             totalLandmarks={LANDMARKS.length}
