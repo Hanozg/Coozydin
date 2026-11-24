@@ -137,8 +137,52 @@ export type MuseumSurfaceType = 'marble' | 'stone' | 'mosaic' | 'dirt' | 'crypt_
 
 export type CryptLightMode = 'torch' | 'flashlight';
 
+export type AncientCityId =
+  | 'tralleis'
+  | 'magnesia'
+  | 'nysa'
+  | 'aphrodisias'
+  | 'priene'
+  | 'milet_didyma'
+  | 'alinda_alabanda';
+
+export interface AncientCitySkyTheme {
+  zenithHex: number;
+  horizonHex: number;
+  groundHex: number;
+  fogHex: number;
+  fogDensity: number;
+  sunColorHex: number;
+  sunIntensity: number;
+  sunPos: [number, number, number];
+  hemiSkyHex: number;
+  hemiGroundHex: number;
+  godRayHex: number;
+}
+
+export interface AncientCityDef {
+  id: AncientCityId;
+  name: string;
+  shortName: string;
+  district: string;
+  era: string;
+  tagline: string;
+  description: string;
+  landmarkId?: string;
+  spawnPos: [number, number, number];
+  spawnYaw: number;
+  defaultZoneName: string;
+  plazaZoneName: string;
+  westZoneName: string;
+  eastZoneName: string;
+  northZoneName: string;
+  cryptZoneName: string;
+  skyTheme: AncientCitySkyTheme;
+}
+
 export interface MuseumExhibitDef {
   id: string;
+  cityId: AncientCityId;
   catalogCode: string;
   title: string;
   subtitle: string;

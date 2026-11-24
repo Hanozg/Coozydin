@@ -38,7 +38,7 @@
         },
         "discoveredMuseumIds": {
           "type": "array",
-          "description": "Tralleis Açık Hava Müzesi'nde keşfedilen eserlerin kimlik listesi."
+          "description": "Aydın Antik Kentleri Açık Hava Müzelerinde keşfedilen eserlerin kimlik listesi (en fazla 80 kayıt)."
         },
         "completedErrandIds": {
           "type": "array",

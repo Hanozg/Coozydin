@@ -1,5 +1,6 @@
 import { TouchDriveInput } from '../EfelerCanvas';
 import {
+  AncientCityId,
   BuildingNpcDef,
   CameraPreset,
   ErrandDef,
@@ -74,7 +75,7 @@ export interface GameHUDProps {
   onOpenProfile: () => void;
   onOpenAbout: () => void;
   onEnterHome: () => void;
-  onEnterAncientMuseum: () => void;
+  onEnterAncientMuseum: (cityId?: AncientCityId) => void;
   onPause: () => void;
   onDiscoverNearby: () => void;
   onHorn: () => void;

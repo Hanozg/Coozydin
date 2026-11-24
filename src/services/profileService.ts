@@ -183,7 +183,7 @@ export function sanitizeUserSavePayload(raw: Partial<UserSavePayload>): UserSave
     coins: clampInt(raw.coins, 0, 1000000, 0),
     lokmaPower: clampInt(raw.lokmaPower, 0, 100000, 2),
     discoveredIds: sanitizeStringList(raw.discoveredIds, 30, 40),
-    discoveredMuseumIds: sanitizeStringList(raw.discoveredMuseumIds, 30, 48),
+    discoveredMuseumIds: sanitizeStringList(raw.discoveredMuseumIds, 80, 48),
     completedErrandIds: sanitizeStringList(raw.completedErrandIds, 40, 48),
     chattedNpcIds: sanitizeStringList(raw.chattedNpcIds, 40, 40),
     unlockedFurnitureStyles: Array.from(unlockedSet).slice(0, 80),

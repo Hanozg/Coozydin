@@ -130,7 +130,7 @@ service cloud.firestore {
         (data.discoveredIds.size() == 0 || (data.discoveredIds[0] is string && data.discoveredIds[0].size() >= 1 && data.discoveredIds[0].size() <= 40)) &&
         (!('discoveredMuseumIds' in data) || (
           data.discoveredMuseumIds is list &&
-          data.discoveredMuseumIds.size() <= 30 &&
+          data.discoveredMuseumIds.size() <= 80 &&
           (data.discoveredMuseumIds.size() == 0 || (data.discoveredMuseumIds[0] is string && data.discoveredMuseumIds[0].size() >= 1 && data.discoveredMuseumIds[0].size() <= 48))
         )) &&
         (!('completedErrandIds' in data) || (

@@ -3,6 +3,7 @@ import { MuseumExhibitDef } from '../../types/game';
 
 interface MuseumExhibitCardProps {
   exhibit: MuseumExhibitDef;
+  cityName?: string;
   isDiscovered: boolean;
   isNewlyDiscovered: boolean;
   voicePlaying: boolean;
@@ -14,6 +15,7 @@ interface MuseumExhibitCardProps {
 
 export function MuseumExhibitCard({
   exhibit,
+  cityName,
   isDiscovered,
   isNewlyDiscovered,
   voicePlaying,
@@ -35,7 +37,13 @@ export function MuseumExhibitCard({
       <div className="px-5 pt-5 pb-4 border-b border-[#E6C58D]/20 bg-gradient-to-b from-[#E6C58D]/10 to-transparent">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#E6C58D]">
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#E6C58D]">
+              {cityName && (
+                <>
+                  <span>{cityName}</span>
+                  <span aria-hidden="true">·</span>
+                </>
+              )}
               <span className="font-mono-num">{exhibit.catalogCode}</span>
               <span aria-hidden="true">·</span>
               <span className="truncate">{exhibit.zone}</span>

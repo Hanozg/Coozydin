@@ -4,19 +4,26 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import {
   ArrowLeft,
   BookOpen,
+  Check,
   ChevronDown,
   ChevronUp,
   Compass,
   Eye,
   Flame,
   Flashlight,
+  Landmark,
   Lock,
   MapPin,
   Unlock,
   Volume2,
   VolumeX,
 } from 'lucide-react';
-import { MUSEUM_EXHIBITS } from '../../data/ancientMuseumData';
+import {
+  ANCIENT_CITIES,
+  ANCIENT_CITY_MAP,
+  getExhibitsForCity,
+  MUSEUM_EXHIBITS,
+} from '../../data/ancientMuseumData';
 import {
   buildAncientCity,
   resolveMuseumPlayerCollision,
@@ -27,6 +34,8 @@ import { createMuseumPbrMaterials } from '../../game/museum/pbrTextures';
 import { avatarConfigToAppearance, createSculptedHumanRig } from '../../game/sculptedHumans';
 import { narrateMuseumExhibit, stopVoiceGuide } from '../../game/voiceGuide';
 import {
+  AncientCityId,
+  AncientCitySkyTheme,
   AncientMuseumHudSnapshot,
   AvatarConfig,
   CryptLightMode,
@@ -36,9 +45,11 @@ import {
 import { MuseumExhibitCard } from './MuseumExhibitCard';
 
 interface AncientMuseumViewProps {
+  cityId: AncientCityId;
   avatarConfig: AvatarConfig;
   discoveredMuseumIds: string[];
   isMuted: boolean;
+  onSelectCity: (nextCityId: AncientCityId) => void;
   onDiscoverExhibit: (exhibit: MuseumExhibitDef) => void;
   onToggleMute: () => void;
   onOpenJournal: () => void;
@@ -68,14 +79,18 @@ function detectSoftwareWebGL(): boolean {
   }
 }
 
-function createGoldenHourSkyDome(): { mesh: THREE.Mesh; mat: THREE.ShaderMaterial; geo: THREE.SphereGeometry } {
+function createGoldenHourSkyDome(skyTheme: AncientCitySkyTheme): {
+  mesh: THREE.Mesh;
+  mat: THREE.ShaderMaterial;
+  geo: THREE.SphereGeometry;
+} {
   const geo = new THREE.SphereGeometry(175, 28, 18);
   const mat = new THREE.ShaderMaterial({
     uniforms: {
-      uSunDir: { value: new THREE.Vector3(-0.62, 0.36, 0.44).normalize() },
-      uZenith: { value: new THREE.Color(0x4b6e98) },
-      uHorizon: { value: new THREE.Color(0xf0b574) },
-      uGround: { value: new THREE.Color(0xa67c52) },
+      uSunDir: { value: new THREE.Vector3(...skyTheme.sunPos).normalize() },
+      uZenith: { value: new THREE.Color(skyTheme.zenithHex) },
+      uHorizon: { value: new THREE.Color(skyTheme.horizonHex) },
+      uGround: { value: new THREE.Color(skyTheme.groundHex) },
     },
     vertexShader: `
       varying vec3 vWorldDir;
@@ -113,9 +128,11 @@ function createGoldenHourSkyDome(): { mesh: THREE.Mesh; mat: THREE.ShaderMateria
 }
 
 export function AncientMuseumView({
+  cityId,
   avatarConfig,
   discoveredMuseumIds,
   isMuted,
+  onSelectCity,
   onDiscoverExhibit,
   onToggleMute,
   onOpenJournal,
@@ -124,9 +141,20 @@ export function AncientMuseumView({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<MuseumAudioEngine | null>(null);
 
+  const cityDef = useMemo(
+    () => ANCIENT_CITY_MAP.get(cityId) ?? ANCIENT_CITIES[0],
+    [cityId]
+  );
+  const cityExhibits = useMemo(() => getExhibitsForCity(cityId), [cityId]);
+
   const discoveredSet = useMemo(() => new Set(discoveredMuseumIds), [discoveredMuseumIds]);
   const discoveredSetRef = useRef<ReadonlySet<string>>(discoveredSet);
   discoveredSetRef.current = discoveredSet;
+
+  const cityDiscoveredCount = useMemo(
+    () => cityExhibits.filter((ex) => discoveredSet.has(ex.id)).length,
+    [cityExhibits, discoveredSet]
+  );
 
   const isMutedRef = useRef(isMuted);
   isMutedRef.current = isMuted;
@@ -135,13 +163,14 @@ export function AncientMuseumView({
   const [contextLost, setContextLost] = useState(false);
   const [dockCollapsed, setDockCollapsed] = useState(false);
   const [teleportOpen, setTeleportOpen] = useState(false);
+  const [citySwitcherOpen, setCitySwitcherOpen] = useState(false);
   const [voicePlaying, setVoicePlaying] = useState(false);
   const [voiceLoading, setVoiceLoading] = useState(false);
   const [noticeToast, setNoticeToast] = useState<string | null>(null);
   const [newlyDiscoveredId, setNewlyDiscoveredId] = useState<string | null>(null);
 
   const [hud, setHud] = useState<AncientMuseumHudSnapshot>({
-    zoneName: 'Üç Gözler Anıtsal Meydanı',
+    zoneName: cityDef.plazaZoneName,
     surfaceType: 'stone',
     inCrypt: false,
     cryptFactor: 0,
@@ -201,6 +230,7 @@ export function AncientMuseumView({
         onDiscoverExhibit(exhibit);
       }
       setTeleportOpen(false);
+      setCitySwitcherOpen(false);
       setHud((prev) => ({ ...prev, activeExhibit: exhibit, pointerLocked: false }));
     },
     [onDiscoverExhibit, stopExhibitVoice]
@@ -351,9 +381,34 @@ export function AncientMuseumView({
     canvas.addEventListener('webglcontextlost', onContextLost);
     canvas.addEventListener('webglcontextrestored', onContextRestored);
 
+    // Reset transient UI & imperative state when entering/switching ancient cities
+    stopExhibitVoice();
+    activeExhibitRef.current = null;
+    nearbyExhibitRef.current = null;
+    teleportRequestRef.current = null;
+    zoomToggleRef.current = false;
+    rightMouseZoomRef.current = false;
+    setTeleportOpen(false);
+    setCitySwitcherOpen(false);
+    setNewlyDiscoveredId(null);
+    setHud((prev) => ({
+      ...prev,
+      zoneName: cityDef.plazaZoneName,
+      surfaceType: 'stone',
+      inCrypt: false,
+      cryptFactor: 0,
+      focusZoomActive: false,
+      pointerLocked: false,
+      nearbyExhibit: null,
+      activeExhibit: null,
+      playerElevation: 0,
+    }));
+    showToast(`${cityDef.name} — ${cityDef.tagline}`);
+
+    const skyTheme = cityDef.skyTheme;
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xdcb486);
-    scene.fog = new THREE.FogExp2(0xd9b388, 0.0082);
+    scene.background = new THREE.Color(skyTheme.fogHex);
+    scene.fog = new THREE.FogExp2(skyTheme.fogHex, skyTheme.fogDensity);
 
     // PMREM IBL for realistic antique marble & bronze specular response
     const pmrem = new THREE.PMREMGenerator(renderer);
@@ -370,16 +425,16 @@ export function AncientMuseumView({
       260
     );
 
-    // Golden Hour Sky Dome
-    const sky = createGoldenHourSkyDome();
+    // Golden Hour Sky Dome tailored per ancient city
+    const sky = createGoldenHourSkyDome(skyTheme);
     scene.add(sky.mesh);
 
     // Golden Hour Lighting Rig
-    const hemiLight = new THREE.HemisphereLight(0xffe4be, 0x6f543b, 0.88);
+    const hemiLight = new THREE.HemisphereLight(skyTheme.hemiSkyHex, skyTheme.hemiGroundHex, 0.88);
     scene.add(hemiLight);
 
-    const sunLight = new THREE.DirectionalLight(0xffbd72, 2.85);
-    sunLight.position.set(-44, 28, 30);
+    const sunLight = new THREE.DirectionalLight(skyTheme.sunColorHex, skyTheme.sunIntensity);
+    sunLight.position.set(...skyTheme.sunPos);
     if (!swGl) {
       sunLight.castShadow = true;
       sunLight.shadow.mapSize.width = 2048;
@@ -402,10 +457,10 @@ export function AncientMuseumView({
     fillLight.position.set(36, 18, -28);
     scene.add(fillLight);
 
-    // Build Procedural PBR Materials & Enterable Tralleis Ancient City
+    // Build Procedural PBR Materials & Enterable Ancient City
     const maxAniso = renderer.capabilities.getMaxAnisotropy();
     const pbrMats = createMuseumPbrMaterials(maxAniso, swGl);
-    const city = buildAncientCity(pbrMats, swGl);
+    const city = buildAncientCity(cityId, pbrMats, swGl);
     scene.add(city.root);
 
     // Build Player Sculpted Explorer Character (1:1 Human Scale ~1.74m tall)
@@ -501,17 +556,30 @@ export function AncientMuseumView({
     // ============================================================================
     // PLAYER & OVER-THE-SHOULDER CAMERA STATE
     // ============================================================================
-    const playerPos = new THREE.Vector3(0, 0, 14.5);
-    let playerYaw = Math.PI; // Facing North (-Z) toward Üç Gözler!
-    let camYaw = 0; // Camera azimuth: 0 means camera sits behind (+Z) looking North (-Z)
-    let camPitch = 0.14; // Slightly elevated over-the-shoulder look angle
+    const spawnSurf = sampleMuseumSurface(cityDef.spawnPos[0], cityDef.spawnPos[2], cityId);
+    const playerPos = new THREE.Vector3(
+      cityDef.spawnPos[0],
+      spawnSurf.height,
+      cityDef.spawnPos[2]
+    );
+    let playerYaw = cityDef.spawnYaw;
+    let camYaw = cityDef.spawnYaw - Math.PI;
+    let camPitch = 0.14;
     let currentArmDist = 3.15;
     let timeScale = 1.0;
     let strideAccumulator = 0;
     let hudEmitTimer = 0;
 
-    const currentCamPos = new THREE.Vector3(0.56, 2.0, 17.6);
-    const currentLookAt = new THREE.Vector3(0.3, 1.45, 10.0);
+    const currentCamPos = new THREE.Vector3(
+      playerPos.x + Math.cos(camYaw) * 0.58 + Math.sin(camYaw) * 3.15,
+      playerPos.y + 2.0,
+      playerPos.z - Math.sin(camYaw) * 0.58 + Math.cos(camYaw) * 3.15
+    );
+    const currentLookAt = new THREE.Vector3(
+      playerPos.x - Math.sin(camYaw) * 5.0,
+      playerPos.y + 1.45,
+      playerPos.z - Math.cos(camYaw) * 5.0
+    );
 
     // Pre-allocated scratch vectors (zero per-frame GC allocations)
     const raycaster = new THREE.Raycaster();
@@ -549,7 +617,7 @@ export function AncientMuseumView({
       } else if (e.code === 'KeyF' && !e.repeat) {
         const next: CryptLightMode = lightModeRef.current === 'torch' ? 'flashlight' : 'torch';
         lightModeRef.current = next;
-        const surf = sampleMuseumSurface(playerPos.x, playerPos.z);
+        const surf = sampleMuseumSurface(playerPos.x, playerPos.z, cityId);
         if (surf.cryptFactor < 0.32 && !manualLightOnRef.current) {
           manualLightOnRef.current = true;
         }
@@ -668,7 +736,7 @@ export function AncientMuseumView({
         teleportRequestRef.current = null;
         playerPos.x = tp.x;
         playerPos.z = tp.z;
-        const tpSurf = sampleMuseumSurface(tp.x, tp.z);
+        const tpSurf = sampleMuseumSurface(tp.x, tp.z, cityId);
         playerPos.y = tpSurf.height;
         if (typeof tp.yaw === 'number') {
           playerYaw = tp.yaw;
@@ -739,7 +807,7 @@ export function AncientMuseumView({
         }
       }
 
-      const surf = sampleMuseumSurface(playerPos.x, playerPos.z);
+      const surf = sampleMuseumSurface(playerPos.x, playerPos.z, cityId);
       playerPos.y = THREE.MathUtils.damp(playerPos.y, surf.height, 14, rawDt);
 
       // Update Explorer Mesh Pose & Fluid Walk/Run/Step Animation
@@ -767,7 +835,12 @@ export function AncientMuseumView({
 
       // 2. Dynamic Golden Hour -> Vaulted Crypt Lighting & Dual-Mode Auto-Light
       const outdoorVisibility = 1 - surf.cryptFactor * 0.84;
-      sunLight.intensity = THREE.MathUtils.damp(sunLight.intensity, 2.85 * outdoorVisibility, 6, rawDt);
+      sunLight.intensity = THREE.MathUtils.damp(
+        sunLight.intensity,
+        skyTheme.sunIntensity * outdoorVisibility,
+        6,
+        rawDt
+      );
       hemiLight.intensity = THREE.MathUtils.damp(hemiLight.intensity, 0.88 * outdoorVisibility + 0.08, 6, rawDt);
       fillLight.intensity = THREE.MathUtils.damp(fillLight.intensity, 0.42 * outdoorVisibility, 6, rawDt);
 
@@ -775,7 +848,7 @@ export function AncientMuseumView({
       const fog = scene.fog as THREE.FogExp2;
       fog.density = THREE.MathUtils.damp(
         fog.density,
-        0.0082 + surf.cryptFactor * 0.018,
+        skyTheme.fogDensity + surf.cryptFactor * 0.018,
         5,
         rawDt
       );
@@ -890,7 +963,7 @@ export function AncientMuseumView({
 
         tmpDesiredCam.copy(tmpShoulderPivot).addScaledVector(tmpRayDir, currentArmDist);
         // Never allow camera below current floor surface
-        const camGround = sampleMuseumSurface(tmpDesiredCam.x, tmpDesiredCam.z).height;
+        const camGround = sampleMuseumSurface(tmpDesiredCam.x, tmpDesiredCam.z, cityId).height;
         if (tmpDesiredCam.y < camGround + 0.38) {
           tmpDesiredCam.y = camGround + 0.38;
         }
@@ -1031,15 +1104,22 @@ export function AncientMuseumView({
     };
   }, [
     avatarConfig,
+    cityDef,
+    cityId,
     closeExhibitInspection,
     handleTogglePointerLock,
     openExhibitInspection,
     showToast,
+    stopExhibitVoice,
   ]);
 
   const glassPill = !isSoftwareGl
     ? 'bg-[#17120E]/68 backdrop-blur-md border border-[#E6C58D]/30'
     : 'bg-[#18130F]/90 border border-[#E6C58D]/35';
+
+  const popoverSurface = !isSoftwareGl
+    ? 'bg-[#171310]/88 backdrop-blur-md border border-[#E6C58D]/35'
+    : 'bg-[#171310]/96 border border-[#E6C58D]/40';
 
   return (
     <div className="relative w-full h-[100dvh] overflow-hidden bg-[#1D1610] select-none">
@@ -1082,7 +1162,7 @@ export function AncientMuseumView({
 
             <div className={`px-3.5 py-2 rounded-xl ${glassPill} text-[#FAF2E2] shadow-lg`}>
               <div className="text-[10px] uppercase tracking-[0.14em] text-[#E6C58D] font-semibold leading-none">
-                Tralleis Açık Hava Müzesi
+                {cityDef.shortName} Açık Hava Müzesi · {cityDef.district}
               </div>
               <div className="flex items-center gap-2 mt-1 text-xs sm:text-sm font-display font-bold leading-tight">
                 <span>{hud.zoneName}</span>
@@ -1094,17 +1174,38 @@ export function AncientMuseumView({
             </div>
           </div>
 
-          {/* Top-Right Compact Discovery Counter & Quick Collection Actions */}
-          <div className="flex items-center gap-2 pointer-events-auto">
+          {/* Top-Right Compact City Switcher, Discovery Counter & Quick Collection Actions */}
+          <div className="flex flex-wrap items-center justify-end gap-2 pointer-events-auto">
             <button
               type="button"
-              onClick={() => setTeleportOpen((o) => !o)}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl ${glassPill} hover:bg-[#2A2018]/85 text-[#FAF2E2] text-xs font-semibold shadow-lg transition-colors cursor-pointer`}
-              title="Antik Kent Bölgeleri ve Eserler"
+              onClick={() => {
+                setCitySwitcherOpen((o) => !o);
+                setTeleportOpen(false);
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl ${glassPill} ${
+                citySwitcherOpen ? 'border-[#E6C58D]/75 bg-[#2A2018]/90' : 'hover:bg-[#2A2018]/85'
+              } text-[#FAF2E2] text-xs font-semibold shadow-lg transition-colors cursor-pointer`}
+              title="Aydın’ın 7 Antik Kenti Arasında Geçiş Yap"
+            >
+              <Landmark className="w-4 h-4 text-[#E6C58D]" aria-hidden="true" />
+              <span className="hidden sm:inline">Antik Kentler</span>
+              <span className="font-mono-num text-[#E6C58D]">({ANCIENT_CITIES.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setTeleportOpen((o) => !o);
+                setCitySwitcherOpen(false);
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl ${glassPill} ${
+                teleportOpen ? 'border-[#E6C58D]/75 bg-[#2A2018]/90' : 'hover:bg-[#2A2018]/85'
+              } text-[#FAF2E2] text-xs font-semibold shadow-lg transition-colors cursor-pointer`}
+              title={`${cityDef.shortName} Bölgeleri ve Eserleri`}
             >
               <Compass className="w-4 h-4 text-[#E6C58D]" aria-hidden="true" />
               <span className="font-mono-num">
-                {discoveredMuseumIds.length} / {MUSEUM_EXHIBITS.length} Eser
+                {cityDiscoveredCount} / {cityExhibits.length} Eser
               </span>
             </button>
 
@@ -1115,7 +1216,7 @@ export function AncientMuseumView({
                 onOpenJournal();
               }}
               className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl ${glassPill} hover:bg-[#2A2018]/85 text-[#FAF2E2] text-xs font-semibold shadow-lg transition-colors cursor-pointer`}
-              title="Keşif Defteri — Antik Müze Koleksiyonu"
+              title="Keşif Defteri — Tüm Antik Müze Koleksiyonu"
             >
               <BookOpen className="w-4 h-4 text-[#E6C58D]" aria-hidden="true" />
               <span className="hidden sm:inline">Koleksiyon</span>
@@ -1134,19 +1235,86 @@ export function AncientMuseumView({
           </div>
         )}
 
-        {/* Quick Archaeological Area & Exhibit Jump Popover (Top-Right) */}
-        {teleportOpen && !hud.activeExhibit && (
-          <div className="self-end pointer-events-auto w-full max-w-xs sm:max-w-sm rounded-2xl bg-[#171310]/88 backdrop-blur-md border border-[#E6C58D]/35 text-[#F6EFE2] shadow-2xl overflow-hidden">
+        {/* 7 Ancient Cities Switcher Popover (Top-Right) */}
+        {citySwitcherOpen && !hud.activeExhibit && (
+          <div
+            className={`self-end pointer-events-auto w-full max-w-xs sm:max-w-sm rounded-2xl ${popoverSurface} text-[#F6EFE2] shadow-2xl overflow-hidden`}
+          >
             <div className="px-4 py-3 border-b border-[#E6C58D]/20 flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#E6C58D]">
-                Antik Kent Durakları (Hızlı Geçiş)
+                Aydın Antik Kentleri (7 Müze)
               </span>
               <span className="text-[11px] font-mono-num text-[#D5C7B2]">
-                {discoveredMuseumIds.length}/{MUSEUM_EXHIBITS.length}
+                {discoveredMuseumIds.length}/{MUSEUM_EXHIBITS.length} Toplam
+              </span>
+            </div>
+            <div className="max-h-72 overflow-y-auto efeler-scroll divide-y divide-white/[0.06]">
+              {ANCIENT_CITIES.map((c) => {
+                const exhibitsForC = getExhibitsForCity(c.id);
+                const foundForC = exhibitsForC.filter((e) => discoveredSet.has(e.id)).length;
+                const isCurrent = c.id === cityId;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => {
+                      setCitySwitcherOpen(false);
+                      if (!isCurrent) {
+                        onSelectCity(c.id);
+                      }
+                    }}
+                    className={`w-full px-4 py-2.5 flex items-center justify-between gap-2 text-left transition-colors cursor-pointer ${
+                      isCurrent ? 'bg-[#E6C58D]/16' : 'hover:bg-white/[0.07]'
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 text-[10px] text-[#E6C58D] font-medium">
+                        <span>{c.district}</span>
+                        <span>·</span>
+                        <span className="truncate text-[#C6B7A0]">{c.era}</span>
+                      </div>
+                      <div className="text-xs font-semibold text-[#FCF7EE] truncate mt-0.5">
+                        {c.name}
+                      </div>
+                      <div className="text-[11px] text-[#C6B7A0] truncate">{c.tagline}</div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span
+                        className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md ${
+                          isCurrent
+                            ? 'bg-[#E6C58D] text-[#1D150F]'
+                            : 'bg-white/10 text-[#F0D39E]'
+                        }`}
+                      >
+                        {isCurrent && <Check className="w-3 h-3" aria-hidden="true" />}
+                        <span>{isCurrent ? 'Buradasınız' : 'Ziyaret Et'}</span>
+                      </span>
+                      <span className="text-[10px] font-mono-num text-[#D5C7B2]">
+                        {foundForC}/{exhibitsForC.length} Eser
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Quick Archaeological Area & Exhibit Jump Popover (Top-Right) */}
+        {teleportOpen && !hud.activeExhibit && (
+          <div
+            className={`self-end pointer-events-auto w-full max-w-xs sm:max-w-sm rounded-2xl ${popoverSurface} text-[#F6EFE2] shadow-2xl overflow-hidden`}
+          >
+            <div className="px-4 py-3 border-b border-[#E6C58D]/20 flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#E6C58D] truncate">
+                {cityDef.shortName} Durakları (Hızlı Geçiş)
+              </span>
+              <span className="text-[11px] font-mono-num text-[#D5C7B2] shrink-0">
+                {cityDiscoveredCount}/{cityExhibits.length}
               </span>
             </div>
             <div className="max-h-64 overflow-y-auto efeler-scroll divide-y divide-white/[0.06]">
-              {MUSEUM_EXHIBITS.map((ex) => {
+              {cityExhibits.map((ex) => {
                 const done = discoveredSet.has(ex.id);
                 return (
                   <button
@@ -1186,6 +1354,7 @@ export function AncientMuseumView({
           <div className="self-end my-auto w-full flex justify-end">
             <MuseumExhibitCard
               exhibit={hud.activeExhibit}
+              cityName={cityDef.shortName}
               isDiscovered={discoveredSet.has(hud.activeExhibit.id)}
               isNewlyDiscovered={newlyDiscoveredId === hud.activeExhibit.id}
               voicePlaying={voicePlaying}

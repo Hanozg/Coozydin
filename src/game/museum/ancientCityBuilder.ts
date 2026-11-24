@@ -1,6 +1,15 @@
 import * as THREE from 'three';
-import { MUSEUM_EXHIBITS } from '../../data/ancientMuseumData';
-import { MuseumExhibitDef, MuseumSurfaceType } from '../../types/game';
+import { ANCIENT_CITY_MAP, getExhibitsForCity } from '../../data/ancientMuseumData';
+import { AncientCityId, MuseumExhibitDef, MuseumSurfaceType } from '../../types/game';
+import {
+  buildAlindaAlabandaStructures,
+  buildAphrodisiasStructures,
+  buildMagnesiaStructures,
+  buildMiletDidymaStructures,
+  buildNysaStructures,
+  buildPrieneStructures,
+  CityBuildContext,
+} from './cityStructures';
 import { MuseumPbrMaterials } from './pbrTextures';
 
 export interface MuseumBoxCollider {
@@ -59,13 +68,24 @@ const THEATER_TIER_RISE = 0.56;
 
 /**
  * Computes exact walkable floor height, ground surface material, indoor crypt enclosure factor,
- * and active archaeological zone name at any (x, z) coordinate in Tralleis.
+ * and active archaeological zone name at any (x, z) coordinate in the selected Aydın ancient city.
  */
-export function sampleMuseumSurface(x: number, z: number): MuseumSurfaceSample {
-  // 1. Vaulted Underground Crypt (Cryptoporticus) & descending stone staircase
+export function sampleMuseumSurface(
+  x: number,
+  z: number,
+  cityId: AncientCityId = 'tralleis'
+): MuseumSurfaceSample {
+  const city = ANCIENT_CITY_MAP.get(cityId);
+  const cryptZone = city?.cryptZoneName ?? 'Tonozlu Yeraltı Mahzeni (Cryptoporticus)';
+  const northZone = city?.northZoneName ?? 'Antik Tiyatro Basamakları (Cavea)';
+  const westZone = city?.westZoneName ?? 'Sütunlu Agora & Stoa';
+  const eastZone = city?.eastZoneName ?? 'Roma Mozaik Avlusu';
+  const plazaZone = city?.plazaZoneName ?? 'Üç Gözler Anıtsal Meydanı';
+  const defaultZone = city?.defaultZoneName ?? 'Tralleis Antik Kenti';
+
+  // 1. Vaulted Underground Crypt / Oracle Tunnel / Cistern & descending stone staircase
   if (x >= -18.5 && x <= -9.5 && z >= 13.6 && z <= 36.4) {
     if (z <= 22.0) {
-      // Stair descent ramp: z=14.0 -> y=0, z=22.0 -> y=-3.6 (12 carved stone steps)
       const t = Math.max(0, Math.min(1, (z - 14.0) / 8.0));
       const height = -t * 3.6;
       const cryptFactor = Math.max(0, Math.min(1, (z - 17.5) / 5.2));
@@ -73,20 +93,19 @@ export function sampleMuseumSurface(x: number, z: number): MuseumSurfaceSample {
         height,
         surfaceType: cryptFactor > 0.35 ? 'crypt_stone' : 'stone',
         cryptFactor,
-        zoneName: cryptFactor > 0.35 ? 'Tonozlu Yeraltı Mahzeni' : 'Mahzen Giriş Basamakları',
+        zoneName: cryptFactor > 0.35 ? cryptZone : 'Yeraltı Geçit Basamakları',
       };
     }
-    // Inside barrel-vaulted crypt chamber
     const cryptFactor = Math.max(0.78, Math.min(1.0, 0.78 + (z - 22.0) * 0.1));
     return {
       height: -3.6,
       surfaceType: 'crypt_stone',
       cryptFactor,
-      zoneName: 'Tonozlu Yeraltı Mahzeni (Cryptoporticus)',
+      zoneName: cryptZone,
     };
   }
 
-  // 2. Ancient Amphitheater (Cavea) semicircular marble steps (North of z = -24)
+  // 2. Ancient Amphitheater / Stadium / Hillside Theater (Cavea) semicircular marble steps
   if (z <= THEATER_CZ + 1.5) {
     const dx = x - THEATER_CX;
     const dz = z - THEATER_CZ;
@@ -96,7 +115,7 @@ export function sampleMuseumSurface(x: number, z: number): MuseumSurfaceSample {
         height: 0.08,
         surfaceType: 'marble',
         cryptFactor: 0,
-        zoneName: 'Antik Tiyatro Orkestrası',
+        zoneName: northZone,
       };
     }
     const maxCaveaR = THEATER_ORCHESTRA_R + THEATER_TIER_COUNT * THEATER_TIER_DEPTH;
@@ -104,7 +123,6 @@ export function sampleMuseumSurface(x: number, z: number): MuseumSurfaceSample {
       const radialOffset = dist - THEATER_ORCHESTRA_R;
       const tierFloat = radialOffset / THEATER_TIER_DEPTH;
       const tierIdx = Math.min(THEATER_TIER_COUNT, Math.floor(tierFloat) + 1);
-      // Slight bevel transition at the front 18% of each tier for smooth climb feel
       const frac = tierFloat - Math.floor(tierFloat);
       const prevH = 0.08 + Math.max(0, tierIdx - 1) * THEATER_TIER_RISE;
       const nextH = 0.08 + tierIdx * THEATER_TIER_RISE;
@@ -118,12 +136,12 @@ export function sampleMuseumSurface(x: number, z: number): MuseumSurfaceSample {
         height,
         surfaceType: 'marble',
         cryptFactor: 0,
-        zoneName: 'Antik Tiyatro Basamakları (Cavea)',
+        zoneName: northZone,
       };
     }
   }
 
-  // 3. West Colonnaded Agora & Stoa raised marble stylobate
+  // 3. West Archaeological Sanctuary / Agora / Council raised marble stylobate
   if (x >= -34.5 && x <= -13.5 && z >= -14.5 && z <= 10.5) {
     const edgeX = Math.min(x - -34.5, -13.5 - x);
     const edgeZ = Math.min(z - -14.5, 10.5 - z);
@@ -133,37 +151,63 @@ export function sampleMuseumSurface(x: number, z: number): MuseumSurfaceSample {
       height,
       surfaceType: 'marble',
       cryptFactor: 0,
-      zoneName: 'Sütunlu Agora & Stoa',
+      zoneName: westZone,
     };
   }
 
-  // 4. East Roman Mosaic Courtyard & Seikilos Pavilion
+  // 4. East Roman Mosaic Courtyard / Bath / Aqueduct / Harbor Gate
   if (x >= 13.5 && x <= 34.5 && z >= -13.2 && z <= 10.2) {
     const onMosaicCarpet = x >= 16.0 && x <= 28.0 && z >= -9.5 && z <= 0.5;
     return {
       height: 0.15,
       surfaceType: onMosaicCarpet ? 'mosaic' : 'marble',
       cryptFactor: 0,
-      zoneName: 'Roma Mozaik Avlusu',
+      zoneName: eastZone,
     };
   }
 
-  // 5. Central Monumental Üç Gözler Plaza & Stone Processional Way
+  // 5. Centerpiece Elevated Temple Krepidoma / Library / Tetrapylon / Agora Floor
+  if (cityId === 'magnesia' && Math.abs(x) <= 8.7 && Math.abs(z) <= 7.7) {
+    const edge = Math.min(8.7 - Math.abs(x), 7.7 - Math.abs(z));
+    const height = edge < 0.6 ? 0.18 : edge < 1.2 ? 0.34 : 0.5;
+    return { height, surfaceType: 'marble', cryptFactor: 0, zoneName: plazaZone };
+  }
+  if (cityId === 'priene' && Math.abs(x) <= 8.0 && Math.abs(z) <= 7.0) {
+    const edge = Math.min(8.0 - Math.abs(x), 7.0 - Math.abs(z));
+    const height = edge < 0.6 ? 0.2 : edge < 1.2 ? 0.4 : 0.56;
+    return { height, surfaceType: 'marble', cryptFactor: 0, zoneName: plazaZone };
+  }
+  if (cityId === 'milet_didyma' && Math.abs(x) <= 9.2 && Math.abs(z) <= 8.2) {
+    const edge = Math.min(9.2 - Math.abs(x), 8.2 - Math.abs(z));
+    const height = edge < 0.7 ? 0.22 : 0.44;
+    return { height, surfaceType: 'marble', cryptFactor: 0, zoneName: plazaZone };
+  }
+  if (cityId === 'nysa' && Math.abs(x) <= 8.0 && Math.abs(z) <= 5.9) {
+    return { height: 0.24, surfaceType: 'marble', cryptFactor: 0, zoneName: plazaZone };
+  }
+  if (cityId === 'aphrodisias' && Math.abs(x) <= 7.4 && Math.abs(z) <= 5.7) {
+    return { height: 0.24, surfaceType: 'marble', cryptFactor: 0, zoneName: plazaZone };
+  }
+  if (cityId === 'alinda_alabanda' && Math.abs(x) <= 11.5 && Math.abs(z) <= 4.7) {
+    return { height: 0.24, surfaceType: 'stone', cryptFactor: 0, zoneName: plazaZone };
+  }
+
+  // 6. Central Monumental Plaza & Stone Processional Way
   if (Math.abs(x) <= 13.5 && z >= -24 && z <= 27) {
     return {
       height: 0,
       surfaceType: 'stone',
       cryptFactor: 0,
-      zoneName: Math.abs(z) <= 8.5 ? 'Üç Gözler Anıtsal Meydanı' : 'Tralleis Tören Yolu',
+      zoneName: Math.abs(z) <= 9.5 ? plazaZone : `${city?.shortName ?? 'Antik'} Tören Yolu`,
     };
   }
 
-  // 6. Outer Anatolian dirt & stone sanctuary trails
+  // 7. Outer Anatolian dirt & stone sanctuary trails
   return {
     height: 0,
     surfaceType: 'dirt',
     cryptFactor: 0,
-    zoneName: 'Tralleis Antik Kenti',
+    zoneName: defaultZone,
   };
 }
 
@@ -253,11 +297,11 @@ export function resolveMuseumPlayerCollision(
  * Custom GLSL volumetric light shaft shader for Golden Hour God Rays streaming through Üç Gözler
  * and the Agora colonnade. Uses Fresnel-like view-angle attenuation and soft dust shimmer.
  */
-function createGodRayMaterial(): THREE.ShaderMaterial {
+function createGodRayMaterial(colorHex: number): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: {
       uTime: { value: 0 },
-      uColor: { value: new THREE.Color(0xffd28c) },
+      uColor: { value: new THREE.Color(colorHex) },
       uOpacity: { value: 0.24 },
     },
     vertexShader: `
@@ -296,7 +340,10 @@ function createGodRayMaterial(): THREE.ShaderMaterial {
   });
 }
 
-function createExhibitPlaqueTexture(exhibit: MuseumExhibitDef): THREE.CanvasTexture {
+function createExhibitPlaqueTexture(
+  exhibit: MuseumExhibitDef,
+  cityUpperName: string
+): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 320;
@@ -311,11 +358,11 @@ function createExhibitPlaqueTexture(exhibit: MuseumExhibitDef): THREE.CanvasText
     ctx.strokeRect(12, 12, 488, 296);
 
     ctx.fillStyle = '#E5B362';
-    ctx.font = '600 22px system-ui, sans-serif';
-    ctx.fillText(`${exhibit.catalogCode}  ·  TRALLEIS AÇIK HAVA MÜZESİ`, 34, 62);
+    ctx.font = '600 20px system-ui, sans-serif';
+    ctx.fillText(`${exhibit.catalogCode}  ·  ${cityUpperName} AÇIK HAVA MÜZESİ`, 34, 62);
 
     ctx.fillStyle = '#F7F0E4';
-    ctx.font = '700 34px Georgia, serif';
+    ctx.font = '700 32px Georgia, serif';
     const titleWords = exhibit.title.split(' ');
     let line1 = '';
     let line2 = '';
@@ -333,7 +380,7 @@ function createExhibitPlaqueTexture(exhibit: MuseumExhibitDef): THREE.CanvasText
     ctx.fillRect(34, 188, 444, 2);
 
     ctx.fillStyle = '#D5C7B2';
-    ctx.font = '500 21px system-ui, sans-serif';
+    ctx.font = '500 20px system-ui, sans-serif';
     ctx.fillText(exhibit.period, 34, 226);
 
     ctx.fillStyle = '#F0C87A';
@@ -347,12 +394,16 @@ function createExhibitPlaqueTexture(exhibit: MuseumExhibitDef): THREE.CanvasText
 }
 
 /**
- * Builds the complete 1:1 photorealistic Tralleis Ancient City & Open-Air Museum 3D environment.
+ * Builds the complete 1:1 photorealistic Aydın Ancient City & Open-Air Museum 3D environment
+ * for any of the 7 Aydın ancient cities.
  */
 export function buildAncientCity(
+  cityId: AncientCityId,
   mats: MuseumPbrMaterials,
   isSoftwareGl: boolean
 ): BuiltAncientCity {
+  const cityDef = ANCIENT_CITY_MAP.get(cityId) ?? ANCIENT_CITY_MAP.get('tralleis')!;
+  const cityExhibits = getExhibitsForCity(cityId);
   const root = new THREE.Group();
   const boxColliders: MuseumBoxCollider[] = [];
   const cylinderColliders: MuseumCylinderCollider[] = [];
@@ -463,9 +514,193 @@ export function buildAncientCity(
     root.add(hill);
   }
 
+  // Shared architectural primitive helpers available to all 7 Aydın ancient cities
+  const buildFlutedColumn = (
+    cx: number,
+    baseY: number,
+    cz: number,
+    height: number,
+    broken = false,
+    radiusScale = 1.0,
+    spiral = false
+  ) => {
+    const g = new THREE.Group();
+    g.position.set(cx, baseY, cz);
+
+    const plinth = new THREE.Mesh(
+      trackGeo(new THREE.BoxGeometry(1.18 * radiusScale, 0.26, 1.18 * radiusScale)),
+      mats.crackedMarble
+    );
+    plinth.position.y = 0.13;
+    plinth.receiveShadow = true;
+    plinth.castShadow = !isSoftwareGl;
+    g.add(plinth);
+
+    const torus = new THREE.Mesh(
+      trackGeo(new THREE.CylinderGeometry(0.49 * radiusScale, 0.55 * radiusScale, 0.24, 16)),
+      mats.crackedMarble
+    );
+    torus.position.y = 0.38;
+    g.add(torus);
+
+    const shaftH = Math.max(1.2, height - 0.9);
+    const shaftGeo = trackGeo(
+      new THREE.CylinderGeometry(
+        (broken ? 0.42 : 0.39) * radiusScale,
+        0.46 * radiusScale,
+        shaftH,
+        16,
+        spiral ? 14 : 1
+      )
+    );
+    if (spiral) {
+      // Twist vertices helically for Afrodisias Tetrapylon spiral-fluted marble shafts
+      const posAttr = shaftGeo.attributes.position as THREE.BufferAttribute;
+      for (let i = 0; i < posAttr.count; i++) {
+        const vx = posAttr.getX(i);
+        const vy = posAttr.getY(i);
+        const vz = posAttr.getZ(i);
+        const r = Math.hypot(vx, vz);
+        if (r > 0.01) {
+          const theta = Math.atan2(vz, vx);
+          const wave = 1 + Math.sin(theta * 8 + vy * 2.8) * 0.045;
+          posAttr.setX(i, vx * wave);
+          posAttr.setZ(i, vz * wave);
+        }
+      }
+      shaftGeo.computeVertexNormals();
+    }
+
+    const shaft = new THREE.Mesh(shaftGeo, mats.crackedMarble);
+    shaft.position.y = 0.5 + shaftH * 0.5;
+    shaft.castShadow = !isSoftwareGl;
+    shaft.receiveShadow = true;
+    g.add(shaft);
+    cameraCollisionMeshes.push(shaft);
+
+    if (!broken) {
+      const cap = new THREE.Mesh(
+        trackGeo(new THREE.CylinderGeometry(0.56 * radiusScale, 0.4 * radiusScale, 0.34, 16)),
+        mats.carvedFrieze
+      );
+      cap.position.y = 0.5 + shaftH + 0.17;
+      g.add(cap);
+
+      const abacus = new THREE.Mesh(
+        trackGeo(new THREE.BoxGeometry(1.18 * radiusScale, 0.18, 1.18 * radiusScale)),
+        mats.carvedFrieze
+      );
+      abacus.position.y = 0.5 + shaftH + 0.42;
+      g.add(abacus);
+    }
+
+    root.add(g);
+    cylinderColliders.push({
+      x: cx,
+      z: cz,
+      radius: 0.58 * radiusScale,
+      minY: baseY,
+      maxY: baseY + height,
+    });
+  };
+
+  const addFallenDrum = (x: number, y: number, z: number, len: number, rotY: number) => {
+    const drum = new THREE.Mesh(
+      trackGeo(new THREE.CylinderGeometry(0.42, 0.44, len, 14)),
+      mats.crackedMarble
+    );
+    drum.position.set(x, y + 0.42, z);
+    drum.rotation.z = Math.PI * 0.5;
+    drum.rotation.y = rotY;
+    drum.castShadow = !isSoftwareGl;
+    drum.receiveShadow = true;
+    root.add(drum);
+    cameraCollisionMeshes.push(drum);
+    cylinderColliders.push({
+      x,
+      z,
+      radius: Math.max(0.55, len * 0.42),
+      minY: y,
+      maxY: y + 0.9,
+    });
+  };
+
+  const addWalkthroughArch = (
+    cx: number,
+    springY: number,
+    cz: number,
+    halfSpan: number,
+    openingR: number,
+    spandrelH: number,
+    depth: number,
+    rotY = 0,
+    mat: THREE.Material = mats.travertineArch
+  ) => {
+    const shape = new THREE.Shape();
+    shape.moveTo(-halfSpan, 0);
+    shape.lineTo(-openingR, 0);
+    shape.absarc(0, 0, openingR, Math.PI, 0, true);
+    shape.lineTo(halfSpan, 0);
+    shape.lineTo(halfSpan, spandrelH);
+    shape.lineTo(-halfSpan, spandrelH);
+    shape.closePath();
+
+    const geo = trackGeo(
+      new THREE.ExtrudeGeometry(shape, {
+        depth,
+        bevelEnabled: true,
+        bevelSegments: 2,
+        steps: 1,
+        bevelSize: 0.07,
+        bevelThickness: 0.07,
+        curveSegments: 18,
+      })
+    );
+    geo.translate(0, 0, -depth * 0.5);
+    const pos = geo.attributes.position;
+    const uv = geo.attributes.uv;
+    for (let i = 0; i < pos.count; i++) {
+      uv.setXY(i, pos.getX(i) * 0.22, pos.getY(i) * 0.22);
+    }
+
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(cx, springY, cz);
+    mesh.rotation.y = rotY;
+    mesh.castShadow = !isSoftwareGl;
+    mesh.receiveShadow = true;
+    root.add(mesh);
+    cameraCollisionMeshes.push(mesh);
+  };
+
   // ============================================================================
-  // 2. ÜÇ GÖZLER (TRALLEIS MONUMENTAL TRIPLE ARCHES) — ENTERABLE CENTERPIECE
+  // 2–4. CITY-SPECIFIC CENTERPIECE, WEST SANCTUARY & EAST ARCHAEOLOGICAL WING
   // ============================================================================
+  let rayPlacements: [number, number, number, number][] = [
+    [-7.0, 5.2, -1.8, 1.0],
+    [0.0, 5.4, -1.8, 1.12],
+    [7.0, 5.2, -1.8, 1.0],
+    [-25.5, 4.4, -5.5, 0.82],
+    [-20.5, 4.4, 1.5, 0.76],
+    [22.5, 4.2, -3.5, 0.85],
+  ];
+
+  const cityCtx: CityBuildContext = {
+    root,
+    mats,
+    isSoftwareGl,
+    boxColliders,
+    cylinderColliders,
+    cameraCollisionMeshes,
+    trackGeo,
+    trackMat,
+    addSolidBox,
+    buildFlutedColumn,
+    addFallenDrum,
+    addWalkthroughArch,
+  };
+
+  if (cityId === 'tralleis') {
+  // ÜÇ GÖZLER (TRALLEIS MONUMENTAL TRIPLE ARCHES) — ENTERABLE CENTERPIECE
   const pierXs = [-10.5, -3.5, 3.5, 10.5];
   const pierW = 2.4;
   const pierD = 3.4;
@@ -560,66 +795,6 @@ export function buildAncientCity(
   addSolidBox(21.4, 0.24, 25.4, -24.0, 0.12, -2.0, mats.crackedMarble, false, true);
   addSolidBox(20.0, 0.23, 24.0, -24.0, 0.34, -2.0, mats.crackedMarble, false, true);
 
-  const buildFlutedColumn = (
-    cx: number,
-    baseY: number,
-    cz: number,
-    height: number,
-    broken = false
-  ) => {
-    const g = new THREE.Group();
-    g.position.set(cx, baseY, cz);
-
-    // Attic molded square plinth + torus base
-    const plinth = new THREE.Mesh(trackGeo(new THREE.BoxGeometry(1.18, 0.26, 1.18)), mats.crackedMarble);
-    plinth.position.y = 0.13;
-    plinth.receiveShadow = true;
-    plinth.castShadow = !isSoftwareGl;
-    g.add(plinth);
-
-    const torus = new THREE.Mesh(trackGeo(new THREE.CylinderGeometry(0.49, 0.55, 0.24, 16)), mats.crackedMarble);
-    torus.position.y = 0.38;
-    g.add(torus);
-
-    // Fluted shaft (16-sided cylinder catching sharp golden hour highlights)
-    const shaftH = Math.max(1.2, height - 0.9);
-    const shaft = new THREE.Mesh(
-      trackGeo(new THREE.CylinderGeometry(broken ? 0.42 : 0.39, 0.46, shaftH, 16)),
-      mats.crackedMarble
-    );
-    shaft.position.y = 0.5 + shaftH * 0.5;
-    shaft.castShadow = !isSoftwareGl;
-    shaft.receiveShadow = true;
-    g.add(shaft);
-    cameraCollisionMeshes.push(shaft);
-
-    if (!broken) {
-      // Ionic volute capital + abacus
-      const cap = new THREE.Mesh(
-        trackGeo(new THREE.CylinderGeometry(0.56, 0.4, 0.34, 16)),
-        mats.carvedFrieze
-      );
-      cap.position.y = 0.5 + shaftH + 0.17;
-      g.add(cap);
-
-      const abacus = new THREE.Mesh(
-        trackGeo(new THREE.BoxGeometry(1.18, 0.18, 1.18)),
-        mats.carvedFrieze
-      );
-      abacus.position.y = 0.5 + shaftH + 0.42;
-      g.add(abacus);
-    }
-
-    root.add(g);
-    cylinderColliders.push({
-      x: cx,
-      z: cz,
-      radius: 0.58,
-      minY: baseY,
-      maxY: baseY + height,
-    });
-  };
-
   // West Stoa back colonnade row (x = -31.5)
   const stoaZs = [-11.5, -7.0, -2.5, 2.0, 6.5];
   for (let i = 0; i < stoaZs.length; i++) {
@@ -639,26 +814,6 @@ export function buildAncientCity(
   buildFlutedColumn(-25.5, 0.45, 7.2, 2.9, true);
 
   // Fallen broken fluted column drums scattered naturally around the Agora edge
-  const addFallenDrum = (x: number, y: number, z: number, len: number, rotY: number) => {
-    const drum = new THREE.Mesh(
-      trackGeo(new THREE.CylinderGeometry(0.42, 0.44, len, 14)),
-      mats.crackedMarble
-    );
-    drum.position.set(x, y + 0.42, z);
-    drum.rotation.z = Math.PI * 0.5;
-    drum.rotation.y = rotY;
-    drum.castShadow = !isSoftwareGl;
-    drum.receiveShadow = true;
-    root.add(drum);
-    cameraCollisionMeshes.push(drum);
-    cylinderColliders.push({
-      x,
-      z,
-      radius: Math.max(0.55, len * 0.42),
-      minY: y,
-      maxY: y + 0.9,
-    });
-  };
   addFallenDrum(-24.2, 0.45, -4.2, 1.65, 0.45);
   addFallenDrum(-14.6, 0.0, 11.4, 1.8, -0.35);
   addFallenDrum(12.2, 0.0, -14.2, 1.9, 0.72);
@@ -797,6 +952,19 @@ export function buildAncientCity(
     addSolidBox(0.24, 0.26, 0.24, ax + 0.56, ay + 1.66, az - 0.46, mats.statueMarble, false, false);
     addSolidBox(0.24, 0.26, 0.24, ax - 0.56, ay + 1.66, az + 0.46, mats.statueMarble, false, false);
     addSolidBox(0.24, 0.26, 0.24, ax + 0.56, ay + 1.66, az + 0.46, mats.statueMarble, false, false);
+  }
+  } else if (cityId === 'magnesia') {
+    rayPlacements = buildMagnesiaStructures(cityCtx);
+  } else if (cityId === 'nysa') {
+    rayPlacements = buildNysaStructures(cityCtx);
+  } else if (cityId === 'aphrodisias') {
+    rayPlacements = buildAphrodisiasStructures(cityCtx);
+  } else if (cityId === 'priene') {
+    rayPlacements = buildPrieneStructures(cityCtx);
+  } else if (cityId === 'milet_didyma') {
+    rayPlacements = buildMiletDidymaStructures(cityCtx);
+  } else if (cityId === 'alinda_alabanda') {
+    rayPlacements = buildAlindaAlabandaStructures(cityCtx);
   }
 
   // ============================================================================
@@ -1102,14 +1270,15 @@ export function buildAncientCity(
   });
 
   // ============================================================================
-  // 8. INTERACTIVE GLASS-STYLED MUSEUM INFORMATION PLINTHS (8 EXHIBITS)
+  // 8. INTERACTIVE GLASS-STYLED MUSEUM INFORMATION PLINTHS (PER-CITY EXHIBITS)
   // ============================================================================
   const haloGeo = trackGeo(new THREE.RingGeometry(0.55, 0.78, 28));
   haloGeo.rotateX(-Math.PI / 2);
+  const cityUpperName = cityDef.shortName.toLocaleUpperCase('tr-TR');
 
-  for (const exhibit of MUSEUM_EXHIBITS) {
+  for (const exhibit of cityExhibits) {
     const [sx, , sz] = exhibit.standPosition;
-    const surf = sampleMuseumSurface(sx, sz);
+    const surf = sampleMuseumSurface(sx, sz, cityId);
     const sy = surf.height;
 
     const stand = new THREE.Group();
@@ -1152,7 +1321,7 @@ export function buildAncientCity(
     glassPlate.position.z = -0.012;
     panelPivot.add(glassPlate);
 
-    const plaqueTex = createExhibitPlaqueTexture(exhibit);
+    const plaqueTex = createExhibitPlaqueTexture(exhibit, cityUpperName);
     ownedTex.push(plaqueTex);
     const plaqueMat = trackMat(
       new THREE.MeshStandardMaterial({
@@ -1191,18 +1360,8 @@ export function buildAncientCity(
   // ============================================================================
   // 9. VOLUMETRIC GOLDEN HOUR GOD RAYS & FLOATING DUST MOTES
   // ============================================================================
-  const godRayMat = trackMat(createGodRayMaterial());
+  const godRayMat = trackMat(createGodRayMaterial(cityDef.skyTheme.godRayHex));
   const godRayGeo = trackGeo(new THREE.CylinderGeometry(1.4, 3.2, 16.5, 14, 1, true));
-
-  // Sun shines from West-South-West late afternoon sky toward East-North-East
-  const rayPlacements: [number, number, number, number][] = [
-    [-7.0, 5.2, -1.8, 1.0], // Üç Gözler West Arch shaft
-    [0.0, 5.4, -1.8, 1.12], // Üç Gözler Center Arch shaft
-    [7.0, 5.2, -1.8, 1.0], // Üç Gözler East Arch shaft
-    [-25.5, 4.4, -5.5, 0.82], // Agora Stoa colonnade shaft
-    [-20.5, 4.4, 1.5, 0.76], // Ephebos statue shaft
-    [22.5, 4.2, -3.5, 0.85], // Mosaic Courtyard & Seikilos shaft
-  ];
 
   for (const [rx, ry, rz, scale] of rayPlacements) {
     const ray = new THREE.Mesh(godRayGeo, godRayMat);

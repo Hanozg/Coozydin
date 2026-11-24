@@ -13,6 +13,10 @@ import { ProfileModal } from './components/ProfileModal';
 import { RealAydinMapModal } from './components/RealAydinMapModal';
 import { TitleScreen } from './components/TitleScreen';
 import {
+  ANCIENT_CITY_MAP,
+  getAncientCityByLandmarkId,
+} from './data/ancientMuseumData';
+import {
   COZY_ERRANDS,
   DEFAULT_AVATAR_CONFIG,
   getRadioStationForDistrict,
@@ -22,6 +26,7 @@ import { audioEngine } from './game/audioEngine';
 import { narrateLandmark, stopVoiceGuide } from './game/voiceGuide';
 import { useGamePersistence } from './hooks/useGamePersistence';
 import {
+  AncientCityId,
   BuildingNpcDef,
   CameraPreset,
   ErrandDef,
@@ -103,6 +108,7 @@ export default function App() {
   const [phase, setPhase] = useState<GamePhase>('title');
   const [inHome, setInHome] = useState(false);
   const [inAncientMuseum, setInAncientMuseum] = useState(false);
+  const [activeAncientCityId, setActiveAncientCityId] = useState<AncientCityId>('tralleis');
   const [journalOpen, setJournalOpen] = useState(false);
   const [journalInitialTab, setJournalInitialTab] = useState<
     'landmarks' | 'museum' | 'errands' | 'evolution'
@@ -298,8 +304,10 @@ export default function App() {
   );
 
   const handleInspectSignpost = useCallback(() => {
+    setJournalInitialTab('museum');
+    setJournalOpen(true);
     showErrandToast(
-      'Aydın Antik Kentleri Çok Yakında: Nysa · Aphrodisias · Magnesia · Miletos · Priene rotaları hazırlanıyor!'
+      'Aydın’ın 7 Antik Kenti açık! Tralleis, Magnesia, Nysa, Afrodisias, Priene, Milet & Didyma, Alinda & Alabanda’yı seçip girebilirsiniz.'
     );
   }, [showErrandToast]);
 
@@ -592,27 +600,38 @@ export default function App() {
     setInHome(false);
   }, []);
 
-  const handleEnterAncientMuseum = useCallback(() => {
-    stopVoiceGuide();
-    audioEngine.updateEngineSound(0, vehicleConfig.type, false);
-    audioEngine.setMusicEnabled(false);
-    canvasRef.current?.setTouchInput({
-      forward: false,
-      backward: false,
-      left: false,
-      right: false,
-      flap: false,
-      dive: false,
-    });
-    setJournalOpen(false);
-    setRealMapOpen(false);
-    setProfileOpen(false);
-    setAboutOpen(false);
-    setActiveNpc(null);
-    setInHome(false);
-    setInAncientMuseum(true);
-    setPhase('playing');
-  }, [vehicleConfig.type]);
+  const handleEnterAncientMuseum = useCallback(
+    (cityId?: AncientCityId) => {
+      stopVoiceGuide();
+      audioEngine.updateEngineSound(0, vehicleConfig.type, false);
+      audioEngine.setMusicEnabled(false);
+      canvasRef.current?.setTouchInput({
+        forward: false,
+        backward: false,
+        left: false,
+        right: false,
+        flap: false,
+        dive: false,
+      });
+      if (cityId) {
+        setActiveAncientCityId(cityId);
+      } else {
+        const nearbyCity = getAncientCityByLandmarkId(hud.nearbyLandmark?.id);
+        if (nearbyCity) {
+          setActiveAncientCityId(nearbyCity.id);
+        }
+      }
+      setJournalOpen(false);
+      setRealMapOpen(false);
+      setProfileOpen(false);
+      setAboutOpen(false);
+      setActiveNpc(null);
+      setInHome(false);
+      setInAncientMuseum(true);
+      setPhase('playing');
+    },
+    [hud.nearbyLandmark?.id, vehicleConfig.type]
+  );
 
   const handleExitAncientMuseum = useCallback(() => {
     stopVoiceGuide();
@@ -683,15 +702,20 @@ export default function App() {
         !profileOpen &&
         !aboutOpen &&
         !activeNpc &&
-        !typing &&
-        hud.nearbyLandmark?.id === 'tralleis' &&
-        discoveredIds.includes('tralleis') &&
-        (!activeErrand ||
-          (errandPickedUp
-            ? activeErrand.toLandmarkId !== 'tralleis'
-            : activeErrand.fromLandmarkId !== 'tralleis'))
+        !typing
       ) {
-        handleEnterAncientMuseum();
+        const matchedAncientCity = getAncientCityByLandmarkId(hud.nearbyLandmark?.id);
+        if (
+          matchedAncientCity &&
+          hud.nearbyLandmark &&
+          discoveredIds.includes(hud.nearbyLandmark.id) &&
+          (!activeErrand ||
+            (errandPickedUp
+              ? activeErrand.toLandmarkId !== hud.nearbyLandmark.id
+              : activeErrand.fromLandmarkId !== hud.nearbyLandmark.id))
+        ) {
+          handleEnterAncientMuseum(matchedAncientCity.id);
+        }
       } else if (
         e.code === 'KeyJ' &&
         phase === 'playing' &&
@@ -842,14 +866,16 @@ export default function App() {
       )}
       {inAncientMuseum ? (
         <ErrorBoundary
-          key="museum-boundary"
-          fallbackTitle="Tralleis Antik Kenti Yenileniyor"
+          key={`museum-boundary-${activeAncientCityId}`}
+          fallbackTitle={`${ANCIENT_CITY_MAP.get(activeAncientCityId)?.name ?? 'Antik Kent'} Yenileniyor`}
           onReset={handleExitAncientMuseum}
         >
           <AncientMuseumView
+            cityId={activeAncientCityId}
             avatarConfig={cozyRoomState.avatarConfig || DEFAULT_AVATAR_CONFIG}
             discoveredMuseumIds={discoveredMuseumIds}
             isMuted={isMuted}
+            onSelectCity={setActiveAncientCityId}
             onDiscoverExhibit={handleDiscoverMuseumExhibit}
             onToggleMute={handleToggleMute}
             onOpenJournal={() => {
