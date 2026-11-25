@@ -114,8 +114,9 @@ export function createStorybookMaterial(opts?: {
   return new THREE.MeshStandardMaterial({
     color: opts?.vertexColors ? 0xffffff : (opts?.color ?? 0xffffff),
     vertexColors: opts?.vertexColors ?? true,
-    roughness: opts?.roughness ?? 0.85,
-    metalness: opts?.metalness ?? 0.02,
+    roughness: opts?.roughness ?? 0.7,
+    metalness: opts?.metalness ?? 0.03,
+    flatShading: false,
     emissive: opts?.emissiveHex !== undefined ? new THREE.Color(opts.emissiveHex) : new THREE.Color(0x000000),
     emissiveIntensity: opts?.emissiveIntensity ?? 0,
   });
@@ -474,10 +475,38 @@ export function rcyl(
   rBottom: number,
   height: number,
   hex: number,
-  radialSegments = 16,
+  radialSegments = 20,
   paintOpts?: PaintOptions
 ): THREE.BufferGeometry {
   const raw = new THREE.CylinderGeometry(rTop, rBottom, height, radialSegments, 1);
+  const painted = paintGeometry(raw, hex, paintOpts);
+  raw.dispose();
+  return painted;
+}
+
+export function capsule(
+  radius: number,
+  length: number,
+  hex: number,
+  capSegments = 8,
+  radialSegments = 18,
+  paintOpts?: PaintOptions
+): THREE.BufferGeometry {
+  const raw = new THREE.CapsuleGeometry(radius, length, capSegments, radialSegments);
+  const painted = paintGeometry(raw, hex, paintOpts);
+  raw.dispose();
+  return painted;
+}
+
+export function lathe(
+  profile: Array<[number, number]>,
+  hex: number,
+  segments = 24,
+  paintOpts?: PaintOptions
+): THREE.BufferGeometry {
+  const pts = profile.map(([r, y]) => new THREE.Vector2(Math.max(0.0005, r), y));
+  const raw = new THREE.LatheGeometry(pts, segments);
+  raw.computeVertexNormals();
   const painted = paintGeometry(raw, hex, paintOpts);
   raw.dispose();
   return painted;

@@ -5,7 +5,6 @@ import {
   ANCIENT_SIGNPOST_POSITIONS,
   getSolarClockLabel,
   LANDMARKS,
-  PLAYER_HOME_DOOR_POS,
   TIME_MOODS,
   TIME_PHASE_ANCHORS,
 } from '../data/efelerData';
@@ -21,6 +20,7 @@ import {
 import { createCityMaterials } from '../game/materials';
 import {
   getRealElevationMeters,
+  getTerrainHeightAt,
   getWalkableSlopeAngles,
   getWalkableSurfaceHeightAt,
 } from '../game/terrain';
@@ -42,6 +42,12 @@ import {
   LandmarkDef,
   NearbyStreetInteraction,
   PlayerHudSnapshot,
+  SandboxCustomHouseSpec,
+  SandboxHudState,
+  SandboxNewRoadSpec,
+  SandboxRoadSurface,
+  SandboxToolMode,
+  SandboxTreeKind,
   SeasonType,
   StreetInteractionType,
   TimeOfDay,
@@ -81,10 +87,44 @@ export interface EfelerCanvasHandle {
   adjustZoom: (delta: number) => void;
   startCompanionWalk: (npc: BuildingNpcDef, treat: HeldTreatType) => void;
   giveTreat: (treat: HeldTreatType) => void;
+  sandboxSetToolMode: (mode: SandboxToolMode) => void;
+  sandboxSelectBuilding: (id: string | null) => void;
+  sandboxFocusBuilding: (id: string) => void;
+  sandboxRotateSelected: (deltaRad: number) => void;
+  sandboxNudgeSelected: (dx: number, dz: number) => void;
+  sandboxSpawnHouse: (spec: SandboxCustomHouseSpec) => void;
+  sandboxDeleteSelected: () => void;
+  sandboxResetSelected: () => void;
+  sandboxSelectTree: (id: string | null) => void;
+  sandboxRotateSelectedTree: (deltaRad: number) => void;
+  sandboxScaleSelectedTree: (deltaScale: number) => void;
+  sandboxNudgeSelectedTree: (dx: number, dz: number) => void;
+  sandboxSpawnTree: (kind: SandboxTreeKind) => void;
+  sandboxDeleteSelectedTree: () => void;
+  sandboxResetSelectedTree: () => void;
+  sandboxSelectRoad: (id: string | null) => void;
+  sandboxFocusRoad: (id: string) => void;
+  sandboxAdjustRoadWidth: (delta: number) => void;
+  sandboxSetRoadSurface: (surface: SandboxRoadSurface) => void;
+  sandboxToggleRoadSurface: () => void;
+  sandboxToggleRoadCenterLine: () => void;
+  sandboxToggleRoadSidewalk: () => void;
+  sandboxSetRoadCornerRadius: (radius: number) => void;
+  sandboxToggleAutoRoundCorners: () => void;
+  sandboxAppendRoadNode: () => void;
+  sandboxDeleteRoadNode: () => void;
+  sandboxSpawnRoad: (spec: SandboxNewRoadSpec) => void;
+  sandboxDeleteSelectedRoad: () => void;
+  sandboxResetSelectedRoad: () => void;
+  sandboxResetAll: () => void;
+  sandboxUndo: () => void;
+  sandboxToggleGridSnap: () => void;
+  getLandmarkPosition: (landmarkId: string) => [number, number] | null;
 }
 
 interface EfelerCanvasProps {
   phase: GamePhase;
+  sandboxMode: boolean;
   explorationMode: ExplorationMode;
   avatarConfig: AvatarConfig;
   vehicleConfig: VehicleConfig;
@@ -101,6 +141,7 @@ interface EfelerCanvasProps {
   errandPickedUp: boolean;
   initialTransform?: { x: number; z: number; heading: number };
   onHudUpdate: (snapshot: PlayerHudSnapshot) => void;
+  onSandboxStateChange?: (state: SandboxHudState) => void;
   onDiscoverLandmark: (landmark: LandmarkDef) => void;
   onErrandAction: (landmarkId: string) => void;
   onInspectSignpost: () => void;
@@ -117,11 +158,15 @@ const _lookCurrent = new THREE.Vector3();
 const _projVec = new THREE.Vector3();
 const _pointerVec = new THREE.Vector2();
 const _chaseTarget = new THREE.Vector3();
+const _sbGroundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const _sbPlaneHit = new THREE.Vector3();
+const _sbDragOffset = new THREE.Vector2();
 
 export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
   function EfelerCanvas(
     {
       phase,
+      sandboxMode,
       explorationMode,
       avatarConfig,
       vehicleConfig,
@@ -138,6 +183,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       errandPickedUp,
       initialTransform,
       onHudUpdate,
+      onSandboxStateChange,
       onDiscoverLandmark,
       onErrandAction,
       onInspectSignpost,
@@ -155,6 +201,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
     const [contextLost, setContextLost] = useState(false);
 
     const phaseRef = useRef(phase);
+    const sandboxModeRef = useRef(sandboxMode);
     const explorationModeRef = useRef(explorationMode);
     const avatarConfigRef = useRef(avatarConfig);
     const vehicleConfigRef = useRef(vehicleConfig);
@@ -171,6 +218,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
     const errandPickedUpRef = useRef(errandPickedUp);
     const callbacksRef = useRef({
       onHudUpdate,
+      onSandboxStateChange,
       onDiscoverLandmark,
       onErrandAction,
       onInspectSignpost,
@@ -184,6 +232,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
     });
 
     phaseRef.current = phase;
+    sandboxModeRef.current = sandboxMode;
     explorationModeRef.current = explorationMode;
     avatarConfigRef.current = avatarConfig;
     vehicleConfigRef.current = vehicleConfig;
@@ -200,6 +249,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
     errandPickedUpRef.current = errandPickedUp;
     callbacksRef.current = {
       onHudUpdate,
+      onSandboxStateChange,
       onDiscoverLandmark,
       onErrandAction,
       onInspectSignpost,
@@ -211,6 +261,49 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       onCollectCrumb,
       onEnterHome,
     };
+
+    const sandboxCamRef = useRef({
+      x: initialTransform?.x ?? -19,
+      z: initialTransform?.z ?? 24,
+      yaw: 0,
+      zoom: 0.85,
+    });
+
+    const sandboxBridgeRef = useRef<{
+      setToolMode: (mode: SandboxToolMode) => void;
+      selectBuilding: (id: string | null) => void;
+      focusBuilding: (id: string) => void;
+      rotateSelected: (deltaRad: number) => void;
+      nudgeSelected: (dx: number, dz: number) => void;
+      spawnHouse: (spec: SandboxCustomHouseSpec) => void;
+      deleteSelected: () => void;
+      resetSelected: () => void;
+      selectTree: (id: string | null) => void;
+      rotateSelectedTree: (deltaRad: number) => void;
+      scaleSelectedTree: (deltaScale: number) => void;
+      nudgeSelectedTree: (dx: number, dz: number) => void;
+      spawnTree: (kind: SandboxTreeKind) => void;
+      deleteSelectedTree: () => void;
+      resetSelectedTree: () => void;
+      selectRoad: (id: string | null) => void;
+      focusRoad: (id: string) => void;
+      adjustRoadWidth: (delta: number) => void;
+      setRoadSurface: (surface: SandboxRoadSurface) => void;
+      toggleRoadSurface: () => void;
+      toggleRoadCenterLine: () => void;
+      toggleRoadSidewalk: () => void;
+      setRoadCornerRadius: (radius: number) => void;
+      toggleAutoRoundCorners: () => void;
+      appendRoadNode: () => void;
+      deleteRoadNode: () => void;
+      spawnRoad: (spec: SandboxNewRoadSpec) => void;
+      deleteSelectedRoad: () => void;
+      resetSelectedRoad: () => void;
+      resetAll: () => void;
+      undo: () => void;
+      toggleGridSnap: () => void;
+      getLandmarkPosition: (landmarkId: string) => [number, number] | null;
+    } | null>(null);
 
     const lastAutoSyncedTodRef = useRef<TimeOfDay>(timeOfDay);
     const manualTargetPhaseRef = useRef<number | null>(null);
@@ -367,6 +460,14 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         Object.assign(touchInputRef.current, next);
       },
       adjustZoom: (delta: number) => {
+        if (sandboxModeRef.current) {
+          sandboxCamRef.current.zoom = THREE.MathUtils.clamp(
+            sandboxCamRef.current.zoom + delta,
+            0.38,
+            2.2
+          );
+          return;
+        }
         simRef.current.zoomFactor = THREE.MathUtils.clamp(
           simRef.current.zoomFactor + delta,
           0.68,
@@ -391,6 +492,105 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         s.heldTreat = treat;
         s.treatTimer = 30;
         s.treatDirty = true;
+      },
+      sandboxSetToolMode: (mode: SandboxToolMode) => {
+        sandboxBridgeRef.current?.setToolMode(mode);
+      },
+      sandboxSelectBuilding: (id: string | null) => {
+        sandboxBridgeRef.current?.selectBuilding(id);
+      },
+      sandboxFocusBuilding: (id: string) => {
+        sandboxBridgeRef.current?.focusBuilding(id);
+      },
+      sandboxRotateSelected: (deltaRad: number) => {
+        sandboxBridgeRef.current?.rotateSelected(deltaRad);
+      },
+      sandboxNudgeSelected: (dx: number, dz: number) => {
+        sandboxBridgeRef.current?.nudgeSelected(dx, dz);
+      },
+      sandboxSpawnHouse: (spec: SandboxCustomHouseSpec) => {
+        sandboxBridgeRef.current?.spawnHouse(spec);
+      },
+      sandboxDeleteSelected: () => {
+        sandboxBridgeRef.current?.deleteSelected();
+      },
+      sandboxResetSelected: () => {
+        sandboxBridgeRef.current?.resetSelected();
+      },
+      sandboxSelectTree: (id: string | null) => {
+        sandboxBridgeRef.current?.selectTree(id);
+      },
+      sandboxRotateSelectedTree: (deltaRad: number) => {
+        sandboxBridgeRef.current?.rotateSelectedTree(deltaRad);
+      },
+      sandboxScaleSelectedTree: (deltaScale: number) => {
+        sandboxBridgeRef.current?.scaleSelectedTree(deltaScale);
+      },
+      sandboxNudgeSelectedTree: (dx: number, dz: number) => {
+        sandboxBridgeRef.current?.nudgeSelectedTree(dx, dz);
+      },
+      sandboxSpawnTree: (kind: SandboxTreeKind) => {
+        sandboxBridgeRef.current?.spawnTree(kind);
+      },
+      sandboxDeleteSelectedTree: () => {
+        sandboxBridgeRef.current?.deleteSelectedTree();
+      },
+      sandboxResetSelectedTree: () => {
+        sandboxBridgeRef.current?.resetSelectedTree();
+      },
+      sandboxSelectRoad: (id: string | null) => {
+        sandboxBridgeRef.current?.selectRoad(id);
+      },
+      sandboxFocusRoad: (id: string) => {
+        sandboxBridgeRef.current?.focusRoad(id);
+      },
+      sandboxAdjustRoadWidth: (delta: number) => {
+        sandboxBridgeRef.current?.adjustRoadWidth(delta);
+      },
+      sandboxSetRoadSurface: (surface: SandboxRoadSurface) => {
+        sandboxBridgeRef.current?.setRoadSurface(surface);
+      },
+      sandboxToggleRoadSurface: () => {
+        sandboxBridgeRef.current?.toggleRoadSurface();
+      },
+      sandboxToggleRoadCenterLine: () => {
+        sandboxBridgeRef.current?.toggleRoadCenterLine();
+      },
+      sandboxToggleRoadSidewalk: () => {
+        sandboxBridgeRef.current?.toggleRoadSidewalk();
+      },
+      sandboxSetRoadCornerRadius: (radius: number) => {
+        sandboxBridgeRef.current?.setRoadCornerRadius(radius);
+      },
+      sandboxToggleAutoRoundCorners: () => {
+        sandboxBridgeRef.current?.toggleAutoRoundCorners();
+      },
+      sandboxAppendRoadNode: () => {
+        sandboxBridgeRef.current?.appendRoadNode();
+      },
+      sandboxDeleteRoadNode: () => {
+        sandboxBridgeRef.current?.deleteRoadNode();
+      },
+      sandboxSpawnRoad: (spec: SandboxNewRoadSpec) => {
+        sandboxBridgeRef.current?.spawnRoad(spec);
+      },
+      sandboxDeleteSelectedRoad: () => {
+        sandboxBridgeRef.current?.deleteSelectedRoad();
+      },
+      sandboxResetSelectedRoad: () => {
+        sandboxBridgeRef.current?.resetSelectedRoad();
+      },
+      sandboxResetAll: () => {
+        sandboxBridgeRef.current?.resetAll();
+      },
+      sandboxUndo: () => {
+        sandboxBridgeRef.current?.undo();
+      },
+      sandboxToggleGridSnap: () => {
+        sandboxBridgeRef.current?.toggleGridSnap();
+      },
+      getLandmarkPosition: (landmarkId: string) => {
+        return sandboxBridgeRef.current?.getLandmarkPosition(landmarkId) ?? null;
       },
     }));
 
@@ -500,6 +700,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         renderer.domElement,
         () =>
           phaseRef.current === 'playing' &&
+          !sandboxModeRef.current &&
           (explorationModeRef.current === 'sparrow' || cameraPresetRef.current === 'perspective')
       );
 
@@ -541,6 +742,180 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       const mats = createCityMaterials(textures, isSoftwareGl);
       const city = buildEfelerCity(mats, houseExteriorRef.current);
       scene.add(city.group);
+
+      const emitSandboxState = () => {
+        callbacksRef.current.onSandboxStateChange?.(city.sandbox.getSnapshot());
+      };
+
+      sandboxBridgeRef.current = {
+        setToolMode: (mode) => {
+          city.sandbox.setToolMode(mode);
+          emitSandboxState();
+        },
+        selectBuilding: (id) => {
+          city.sandbox.selectBuilding(id);
+          emitSandboxState();
+        },
+        focusBuilding: (id) => {
+          city.sandbox.setToolMode('buildings');
+          city.sandbox.selectBuilding(id);
+          const t = city.sandbox.getBuildingTransform(id);
+          if (t) {
+            sandboxCamRef.current.x = t.x;
+            sandboxCamRef.current.z = t.z;
+          }
+          emitSandboxState();
+        },
+        rotateSelected: (deltaRad) => {
+          city.sandbox.rotateSelected(deltaRad);
+          emitSandboxState();
+        },
+        nudgeSelected: (dx, dz) => {
+          city.sandbox.nudgeSelected(dx, dz);
+          emitSandboxState();
+        },
+        spawnHouse: (spec) => {
+          city.sandbox.setToolMode('buildings');
+          const cam = sandboxCamRef.current;
+          const id = city.sandbox.spawnCustomHouse(spec, cam.x, cam.z, 0);
+          if (id) {
+            audioEngine.playDiscoveryChime();
+            emitSandboxState();
+          }
+        },
+        deleteSelected: () => {
+          const selId = city.sandbox.getSelectedId();
+          if (selId && city.sandbox.deleteCustomHouse(selId)) {
+            emitSandboxState();
+          }
+        },
+        resetSelected: () => {
+          const selId = city.sandbox.getSelectedId();
+          if (selId) {
+            city.sandbox.resetBuilding(selId);
+            emitSandboxState();
+          }
+        },
+        selectTree: (id) => {
+          city.sandbox.selectTree(id);
+          emitSandboxState();
+        },
+        rotateSelectedTree: (deltaRad) => {
+          city.sandbox.rotateSelectedTree(deltaRad);
+          emitSandboxState();
+        },
+        scaleSelectedTree: (deltaScale) => {
+          city.sandbox.scaleSelectedTree(deltaScale);
+          emitSandboxState();
+        },
+        nudgeSelectedTree: (dx, dz) => {
+          city.sandbox.nudgeSelectedTree(dx, dz);
+          emitSandboxState();
+        },
+        spawnTree: (kind) => {
+          city.sandbox.setToolMode('trees');
+          const cam = sandboxCamRef.current;
+          const id = city.sandbox.spawnCustomTree(kind, cam.x, cam.z);
+          if (id) {
+            audioEngine.playDiscoveryChime();
+            emitSandboxState();
+          }
+        },
+        deleteSelectedTree: () => {
+          if (city.sandbox.deleteSelectedTree()) {
+            emitSandboxState();
+          }
+        },
+        resetSelectedTree: () => {
+          city.sandbox.resetSelectedTree();
+          emitSandboxState();
+        },
+        selectRoad: (id) => {
+          city.sandbox.selectRoad(id);
+          emitSandboxState();
+        },
+        focusRoad: (id) => {
+          city.sandbox.setToolMode('roads');
+          city.sandbox.selectRoad(id, 0);
+          const center = city.sandbox.getRoadCenter(id);
+          if (center) {
+            sandboxCamRef.current.x = center[0];
+            sandboxCamRef.current.z = center[1];
+          }
+          emitSandboxState();
+        },
+        adjustRoadWidth: (delta) => {
+          city.sandbox.adjustSelectedRoadWidth(delta);
+          emitSandboxState();
+        },
+        setRoadSurface: (surface) => {
+          city.sandbox.setSelectedRoadSurface(surface);
+          emitSandboxState();
+        },
+        toggleRoadSurface: () => {
+          city.sandbox.toggleSelectedRoadSurface();
+          emitSandboxState();
+        },
+        toggleRoadCenterLine: () => {
+          city.sandbox.toggleSelectedRoadCenterLine();
+          emitSandboxState();
+        },
+        toggleRoadSidewalk: () => {
+          city.sandbox.toggleSelectedRoadSidewalk();
+          emitSandboxState();
+        },
+        setRoadCornerRadius: (radius) => {
+          city.sandbox.setSelectedRoadCornerRadius(radius);
+          emitSandboxState();
+        },
+        toggleAutoRoundCorners: () => {
+          city.sandbox.setAutoRoundCorners(!city.sandbox.isAutoRoundCorners());
+          emitSandboxState();
+        },
+        appendRoadNode: () => {
+          if (city.sandbox.appendRoadNode()) {
+            emitSandboxState();
+          }
+        },
+        deleteRoadNode: () => {
+          if (city.sandbox.deleteSelectedRoadNode()) {
+            emitSandboxState();
+          }
+        },
+        spawnRoad: (spec) => {
+          city.sandbox.setToolMode('roads');
+          const cam = sandboxCamRef.current;
+          const id = city.sandbox.spawnCustomRoad(spec, cam.x, cam.z);
+          if (id) {
+            audioEngine.playDiscoveryChime();
+            emitSandboxState();
+          }
+        },
+        deleteSelectedRoad: () => {
+          if (city.sandbox.deleteSelectedRoad()) {
+            emitSandboxState();
+          }
+        },
+        resetSelectedRoad: () => {
+          city.sandbox.resetSelectedRoad();
+          emitSandboxState();
+        },
+        resetAll: () => {
+          city.sandbox.resetAll();
+          emitSandboxState();
+        },
+        undo: () => {
+          if (city.sandbox.undo()) {
+            emitSandboxState();
+          }
+        },
+        toggleGridSnap: () => {
+          city.sandbox.setGridSnap(!city.sandbox.isGridSnap());
+          emitSandboxState();
+        },
+        getLandmarkPosition: (landmarkId) => city.sandbox.getLandmarkPosition(landmarkId),
+      };
+      emitSandboxState();
 
       let lastLokmaTime = -20;
       let prevVendorBubble = false;
@@ -638,7 +1013,15 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
 
       const raycaster = new THREE.Raycaster();
       let lastMoveRaycast = 0;
+      let lastSandboxEmit = 0;
+      let lastSandboxRoadWarn = false;
       let activeDragPointerId: number | null = null;
+      let sandboxDragPointerId: number | null = null;
+      let sandboxDragBuildingId: string | null = null;
+      let sandboxDragTreeId: string | null = null;
+      let sandboxDragRoad: { roadId: string; nodeIndex: number } | null = null;
+      let sandboxPanPointerId: number | null = null;
+      let sandboxRotatePointerId: number | null = null;
       let lastDragX = 0;
       let lastDragY = 0;
       let pointerDragDist = 0;
@@ -651,8 +1034,163 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         _pointerVec.y = -((clientY - rect.top) / rect.height) * 2 + 1;
       };
 
+      const raycastTerrainPoint = (clientX: number, clientY: number): THREE.Vector3 | null => {
+        updatePointer(clientX, clientY);
+        raycaster.setFromCamera(_pointerVec, camera);
+        _sbGroundPlane.constant = 0;
+        if (!raycaster.ray.intersectPlane(_sbGroundPlane, _sbPlaneHit)) return null;
+        // Refine once against terrain elevation so picking on hills (Tralleis / Aytepe) is exact
+        const gy = getTerrainHeightAt(_sbPlaneHit.x, _sbPlaneHit.z);
+        if (Math.abs(gy) > 0.15) {
+          _sbGroundPlane.constant = -gy;
+          raycaster.ray.intersectPlane(_sbGroundPlane, _sbPlaneHit);
+        }
+        return _sbPlaneHit;
+      };
+
+      const pickHoveredTreeSlot = () => {
+        const targets = city.sandbox.getTreeRaycastTargets();
+        if (targets.length === 0) return null;
+        const hits = raycaster.intersectObjects(targets, false);
+        for (let i = 0; i < hits.length; i++) {
+          const h = hits[i];
+          if (!h.object.visible || typeof h.instanceId !== 'number') continue;
+          const kind = h.object.userData.sandboxTreeKind as SandboxTreeKind | undefined;
+          if (!kind) continue;
+          const slot = city.sandbox.getTreeByInstance(kind, h.instanceId);
+          if (slot && !slot.deleted) return slot;
+        }
+        return null;
+      };
+
+      const onContextMenu = (e: MouseEvent) => {
+        if (sandboxModeRef.current && phaseRef.current === 'playing') {
+          e.preventDefault();
+        }
+      };
+
       const onPointerDown = (e: PointerEvent) => {
-        if (phaseRef.current !== 'playing' || activeDragPointerId !== null || pinchStartDist > 0) return;
+        if (phaseRef.current !== 'playing' || pinchStartDist > 0) return;
+
+        if (sandboxModeRef.current) {
+          lastDragX = e.clientX;
+          lastDragY = e.clientY;
+          pointerDragDist = 0;
+
+          if (e.button === 2) {
+            sandboxRotatePointerId = e.pointerId;
+            renderer.domElement.style.cursor = 'ew-resize';
+            return;
+          }
+
+          if (sandboxDragPointerId !== null || sandboxPanPointerId !== null) return;
+
+          const activeTool = city.sandbox.getToolMode();
+          updatePointer(e.clientX, e.clientY);
+          raycaster.setFromCamera(_pointerVec, camera);
+
+          if (activeTool === 'buildings') {
+            const hits = raycaster.intersectObjects(city.sandbox.hitProxies, false);
+            if (hits.length > 0) {
+              const bId = hits[0].object.userData.sandboxBuildingId as string | undefined;
+              if (bId) {
+                const tr = city.sandbox.getBuildingTransform(bId);
+                city.sandbox.beginDrag(bId);
+                sandboxDragBuildingId = bId;
+                sandboxDragPointerId = e.pointerId;
+                if (tr) {
+                  _sbGroundPlane.constant = -getTerrainHeightAt(tr.x, tr.z);
+                  if (raycaster.ray.intersectPlane(_sbGroundPlane, _sbPlaneHit)) {
+                    _sbDragOffset.set(tr.x - _sbPlaneHit.x, tr.z - _sbPlaneHit.z);
+                  } else {
+                    _sbDragOffset.set(0, 0);
+                  }
+                } else {
+                  _sbDragOffset.set(0, 0);
+                }
+                try {
+                  renderer.domElement.setPointerCapture(e.pointerId);
+                } catch {
+                  // Ignore synthetic pointer events
+                }
+                renderer.domElement.style.cursor = 'grabbing';
+                lastSandboxRoadWarn = false;
+                emitSandboxState();
+                return;
+              }
+            }
+          } else if (activeTool === 'trees') {
+            const treeSlot = pickHoveredTreeSlot();
+            if (treeSlot) {
+              city.sandbox.beginTreeDrag(treeSlot.id);
+              sandboxDragTreeId = treeSlot.id;
+              sandboxDragPointerId = e.pointerId;
+              _sbGroundPlane.constant = -getTerrainHeightAt(treeSlot.x, treeSlot.z);
+              if (raycaster.ray.intersectPlane(_sbGroundPlane, _sbPlaneHit)) {
+                _sbDragOffset.set(treeSlot.x - _sbPlaneHit.x, treeSlot.z - _sbPlaneHit.z);
+              } else {
+                _sbDragOffset.set(0, 0);
+              }
+              try {
+                renderer.domElement.setPointerCapture(e.pointerId);
+              } catch {
+                // Ignore synthetic pointer events
+              }
+              renderer.domElement.style.cursor = 'grabbing';
+              lastSandboxRoadWarn = false;
+              emitSandboxState();
+              return;
+            }
+          } else if (activeTool === 'roads') {
+            const handleHits = raycaster.intersectObjects(city.sandbox.getRoadHandleTargets(), false);
+            if (handleHits.length > 0) {
+              const ud = handleHits[0].object.userData as {
+                sandboxRoadHandleType?: 'vertex' | 'midpoint';
+                roadId?: string;
+                nodeIndex?: number;
+              };
+              if (ud.roadId && typeof ud.nodeIndex === 'number') {
+                let targetIdx: number | null = null;
+                if (ud.sandboxRoadHandleType === 'vertex') {
+                  if (city.sandbox.beginRoadNodeDrag(ud.roadId, ud.nodeIndex)) {
+                    targetIdx = ud.nodeIndex;
+                  }
+                } else if (ud.sandboxRoadHandleType === 'midpoint') {
+                  targetIdx = city.sandbox.insertRoadNodeAndBeginDrag(ud.roadId, ud.nodeIndex);
+                }
+                if (targetIdx !== null) {
+                  const nodePos = city.sandbox.getRoadNodePosition(ud.roadId, targetIdx);
+                  sandboxDragRoad = { roadId: ud.roadId, nodeIndex: targetIdx };
+                  sandboxDragPointerId = e.pointerId;
+                  if (nodePos) {
+                    _sbGroundPlane.constant = -getTerrainHeightAt(nodePos[0], nodePos[1]);
+                    if (raycaster.ray.intersectPlane(_sbGroundPlane, _sbPlaneHit)) {
+                      _sbDragOffset.set(nodePos[0] - _sbPlaneHit.x, nodePos[1] - _sbPlaneHit.z);
+                    } else {
+                      _sbDragOffset.set(0, 0);
+                    }
+                  } else {
+                    _sbDragOffset.set(0, 0);
+                  }
+                  try {
+                    renderer.domElement.setPointerCapture(e.pointerId);
+                  } catch {
+                    // Ignore synthetic pointer events
+                  }
+                  renderer.domElement.style.cursor = 'grabbing';
+                  emitSandboxState();
+                  return;
+                }
+              }
+            }
+          }
+
+          sandboxPanPointerId = e.pointerId;
+          renderer.domElement.style.cursor = 'move';
+          return;
+        }
+
+        if (activeDragPointerId !== null) return;
         activeDragPointerId = e.pointerId;
         lastDragX = e.clientX;
         lastDragY = e.clientY;
@@ -661,6 +1199,137 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
 
       const onPointerMove = (e: PointerEvent) => {
         if (phaseRef.current !== 'playing') return;
+
+        if (sandboxModeRef.current) {
+          if (sandboxDragBuildingId && sandboxDragPointerId === e.pointerId && pinchStartDist === 0) {
+            updatePointer(e.clientX, e.clientY);
+            raycaster.setFromCamera(_pointerVec, camera);
+            if (raycaster.ray.intersectPlane(_sbGroundPlane, _sbPlaneHit)) {
+              const tr = city.sandbox.getBuildingTransform(sandboxDragBuildingId);
+              const roadWarn = city.sandbox.moveBuildingLive(
+                sandboxDragBuildingId,
+                _sbPlaneHit.x + _sbDragOffset.x,
+                _sbPlaneHit.z + _sbDragOffset.y,
+                tr ? tr.rotY : 0,
+                0.48
+              );
+              const now = performance.now();
+              if (roadWarn !== lastSandboxRoadWarn || now - lastSandboxEmit > 80) {
+                lastSandboxRoadWarn = roadWarn;
+                lastSandboxEmit = now;
+                emitSandboxState();
+              }
+            }
+            return;
+          }
+
+          if (sandboxDragTreeId && sandboxDragPointerId === e.pointerId && pinchStartDist === 0) {
+            updatePointer(e.clientX, e.clientY);
+            raycaster.setFromCamera(_pointerVec, camera);
+            if (raycaster.ray.intersectPlane(_sbGroundPlane, _sbPlaneHit)) {
+              const roadWarn = city.sandbox.moveTreeLive(
+                sandboxDragTreeId,
+                _sbPlaneHit.x + _sbDragOffset.x,
+                _sbPlaneHit.z + _sbDragOffset.y,
+                0.42
+              );
+              const now = performance.now();
+              if (roadWarn !== lastSandboxRoadWarn || now - lastSandboxEmit > 80) {
+                lastSandboxRoadWarn = roadWarn;
+                lastSandboxEmit = now;
+                emitSandboxState();
+              }
+            }
+            return;
+          }
+
+          if (sandboxDragRoad && sandboxDragPointerId === e.pointerId && pinchStartDist === 0) {
+            updatePointer(e.clientX, e.clientY);
+            raycaster.setFromCamera(_pointerVec, camera);
+            if (raycaster.ray.intersectPlane(_sbGroundPlane, _sbPlaneHit)) {
+              city.sandbox.moveRoadNodeLive(
+                sandboxDragRoad.roadId,
+                sandboxDragRoad.nodeIndex,
+                _sbPlaneHit.x + _sbDragOffset.x,
+                _sbPlaneHit.z + _sbDragOffset.y
+              );
+              const now = performance.now();
+              if (now - lastSandboxEmit > 90) {
+                lastSandboxEmit = now;
+                emitSandboxState();
+              }
+            }
+            return;
+          }
+
+          if (sandboxRotatePointerId === e.pointerId && pinchStartDist === 0) {
+            const dx = e.clientX - lastDragX;
+            lastDragX = e.clientX;
+            lastDragY = e.clientY;
+            sandboxCamRef.current.yaw -= dx * 0.006;
+            return;
+          }
+
+          if (sandboxPanPointerId === e.pointerId && pinchStartDist === 0) {
+            const dx = e.clientX - lastDragX;
+            const dy = e.clientY - lastDragY;
+            lastDragX = e.clientX;
+            lastDragY = e.clientY;
+            pointerDragDist += Math.hypot(dx, dy);
+
+            const hPx = Math.max(1, container.clientHeight);
+            const worldPerPx = (camera.top - camera.bottom) / (hPx * Math.max(0.25, camera.zoom));
+            const isoAzimuth = Math.PI / 4 + sandboxCamRef.current.yaw;
+            const rightX = Math.cos(isoAzimuth);
+            const rightZ = -Math.sin(isoAzimuth);
+            const upX = -Math.sin(isoAzimuth);
+            const upZ = -Math.cos(isoAzimuth);
+
+            sandboxCamRef.current.x = THREE.MathUtils.clamp(
+              sandboxCamRef.current.x + (-dx * rightX + dy * 1.35 * upX) * worldPerPx,
+              -216,
+              190
+            );
+            sandboxCamRef.current.z = THREE.MathUtils.clamp(
+              sandboxCamRef.current.z + (-dx * rightZ + dy * 1.35 * upZ) * worldPerPx,
+              -134,
+              106
+            );
+            return;
+          }
+
+          if (e.pointerType === 'touch') return;
+          const now = performance.now();
+          if (now - lastMoveRaycast < 55) return;
+          lastMoveRaycast = now;
+          updatePointer(e.clientX, e.clientY);
+          raycaster.setFromCamera(_pointerVec, camera);
+
+          const activeTool = city.sandbox.getToolMode();
+          if (activeTool === 'buildings') {
+            const hits = raycaster.intersectObjects(city.sandbox.hitProxies, false);
+            const hitId =
+              hits.length > 0
+                ? ((hits[0].object.userData.sandboxBuildingId as string | undefined) ?? null)
+                : null;
+            city.sandbox.setHoveredBuilding(hitId);
+            renderer.domElement.style.cursor = hitId ? 'grab' : 'default';
+          } else if (activeTool === 'trees') {
+            const slot = pickHoveredTreeSlot();
+            city.sandbox.setHoveredTree(slot ? slot.id : null);
+            renderer.domElement.style.cursor = slot ? 'grab' : 'default';
+          } else {
+            const handleHits = raycaster.intersectObjects(city.sandbox.getRoadHandleTargets(), false);
+            if (handleHits.length > 0) {
+              const t = handleHits[0].object.userData.sandboxRoadHandleType;
+              renderer.domElement.style.cursor = t === 'midpoint' ? 'copy' : 'grab';
+            } else {
+              renderer.domElement.style.cursor = 'pointer';
+            }
+          }
+          return;
+        }
+
         if (activeDragPointerId === e.pointerId && pinchStartDist === 0) {
           const dx = e.clientX - lastDragX;
           const dy = e.clientY - lastDragY;
@@ -703,13 +1372,59 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       };
 
       const onPointerUp = (e: PointerEvent) => {
+        if (sandboxDragPointerId === e.pointerId) {
+          try {
+            renderer.domElement.releasePointerCapture(e.pointerId);
+          } catch {
+            // Ignore
+          }
+          sandboxDragPointerId = null;
+          if (sandboxDragBuildingId) {
+            const endedId = sandboxDragBuildingId;
+            sandboxDragBuildingId = null;
+            city.sandbox.endDrag(endedId);
+          } else if (sandboxDragTreeId) {
+            const endedTreeId = sandboxDragTreeId;
+            sandboxDragTreeId = null;
+            city.sandbox.endTreeDrag(endedTreeId);
+          } else if (sandboxDragRoad) {
+            sandboxDragRoad = null;
+            city.sandbox.endRoadNodeDrag();
+          }
+          renderer.domElement.style.cursor = sandboxModeRef.current ? 'grab' : 'default';
+          emitSandboxState();
+        }
+        if (sandboxPanPointerId === e.pointerId) {
+          sandboxPanPointerId = null;
+          if (sandboxModeRef.current && pointerDragDist <= 6) {
+            const activeTool = city.sandbox.getToolMode();
+            if (activeTool === 'buildings') {
+              city.sandbox.selectBuilding(null);
+            } else if (activeTool === 'trees') {
+              city.sandbox.selectTree(null);
+            } else if (activeTool === 'roads') {
+              const hitPt = raycastTerrainPoint(e.clientX, e.clientY);
+              if (hitPt) {
+                city.sandbox.pickRoadAt(hitPt.x, hitPt.z);
+              } else {
+                city.sandbox.selectRoad(null);
+              }
+            }
+            emitSandboxState();
+          }
+          renderer.domElement.style.cursor = 'default';
+        }
+        if (sandboxRotatePointerId === e.pointerId) {
+          sandboxRotatePointerId = null;
+          renderer.domElement.style.cursor = 'default';
+        }
         if (activeDragPointerId === e.pointerId) {
           activeDragPointerId = null;
         }
       };
 
       const onPointerClick = (e: MouseEvent) => {
-        if (phaseRef.current !== 'playing') return;
+        if (phaseRef.current !== 'playing' || sandboxModeRef.current) return;
         if (pointerDragDist > 8) return;
         updatePointer(e.clientX, e.clientY);
         const activeCam =
@@ -741,6 +1456,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         }
       };
 
+      renderer.domElement.addEventListener('contextmenu', onContextMenu);
       renderer.domElement.addEventListener('pointerdown', onPointerDown);
       renderer.domElement.addEventListener('pointermove', onPointerMove);
       window.addEventListener('pointerup', onPointerUp);
@@ -754,6 +1470,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       let prevTouchFlap = false;
       let prevMode: ExplorationMode = explorationModeRef.current;
       let prevCamPreset: CameraPreset = cameraPresetRef.current;
+      let prevSandboxMode = false;
 
       const onKeyDown = (e: KeyboardEvent) => {
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
@@ -762,7 +1479,76 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         const wasDown = heldKeys.has(e.code);
         heldKeys.add(e.code);
 
-        if (!wasDown && phaseRef.current === 'playing') {
+        if (phaseRef.current !== 'playing') return;
+
+        if (sandboxModeRef.current) {
+          if (!wasDown) {
+            const activeTool = city.sandbox.getToolMode();
+            if (e.code === 'Digit1') {
+              city.sandbox.setToolMode('buildings');
+              emitSandboxState();
+            } else if (e.code === 'Digit2') {
+              city.sandbox.setToolMode('trees');
+              emitSandboxState();
+            } else if (e.code === 'Digit3') {
+              city.sandbox.setToolMode('roads');
+              emitSandboxState();
+            } else if (e.code === 'KeyR') {
+              const delta = e.shiftKey ? -Math.PI / 4 : Math.PI / 4;
+              if (activeTool === 'buildings') {
+                city.sandbox.rotateSelected(delta);
+              } else if (activeTool === 'trees') {
+                city.sandbox.rotateSelectedTree(delta);
+              }
+              emitSandboxState();
+            } else if (e.code === 'Equal' || e.code === 'NumpadAdd') {
+              if (activeTool === 'trees') {
+                city.sandbox.scaleSelectedTree(0.15);
+                emitSandboxState();
+              } else if (activeTool === 'roads') {
+                city.sandbox.adjustSelectedRoadWidth(0.8);
+                emitSandboxState();
+              }
+            } else if (e.code === 'Minus' || e.code === 'NumpadSubtract') {
+              if (activeTool === 'trees') {
+                city.sandbox.scaleSelectedTree(-0.15);
+                emitSandboxState();
+              } else if (activeTool === 'roads') {
+                city.sandbox.adjustSelectedRoadWidth(-0.8);
+                emitSandboxState();
+              }
+            } else if (e.code === 'KeyG') {
+              city.sandbox.setGridSnap(!city.sandbox.isGridSnap());
+              emitSandboxState();
+            } else if (e.code === 'Delete' || e.code === 'Backspace') {
+              if (activeTool === 'buildings') {
+                const selId = city.sandbox.getSelectedId();
+                if (selId && city.sandbox.deleteCustomHouse(selId)) {
+                  e.preventDefault();
+                  emitSandboxState();
+                }
+              } else if (activeTool === 'trees') {
+                if (city.sandbox.deleteSelectedTree()) {
+                  e.preventDefault();
+                  emitSandboxState();
+                }
+              } else if (activeTool === 'roads') {
+                if (city.sandbox.deleteSelectedRoadNode() || city.sandbox.deleteSelectedRoad()) {
+                  e.preventDefault();
+                  emitSandboxState();
+                }
+              }
+            } else if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
+              e.preventDefault();
+              if (city.sandbox.undo()) {
+                emitSandboxState();
+              }
+            }
+          }
+          return;
+        }
+
+        if (!wasDown) {
           if (e.code === 'Space') {
             if (explorationModeRef.current === 'sparrow') {
               flapQueued = true;
@@ -793,6 +1579,14 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       };
       const onWheel = (e: WheelEvent) => {
         if (phaseRef.current !== 'playing') return;
+        if (sandboxModeRef.current) {
+          sandboxCamRef.current.zoom = THREE.MathUtils.clamp(
+            sandboxCamRef.current.zoom - e.deltaY * 0.0008,
+            0.38,
+            2.2
+          );
+          return;
+        }
         simRef.current.zoomFactor = THREE.MathUtils.clamp(
           simRef.current.zoomFactor - e.deltaY * 0.0008,
           0.68,
@@ -807,8 +1601,11 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         if (phaseRef.current !== 'playing') return;
         if (e.touches.length === 2) {
           activeDragPointerId = null;
+          sandboxPanPointerId = null;
           pinchStartDist = getTouchDist(e.touches[0], e.touches[1]);
-          pinchStartZoom = simRef.current.zoomFactor;
+          pinchStartZoom = sandboxModeRef.current
+            ? sandboxCamRef.current.zoom
+            : simRef.current.zoomFactor;
         }
       };
       const onTouchMove = (e: TouchEvent) => {
@@ -817,7 +1614,11 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           e.preventDefault();
           const dist = getTouchDist(e.touches[0], e.touches[1]);
           const ratio = dist / pinchStartDist;
-          simRef.current.zoomFactor = THREE.MathUtils.clamp(pinchStartZoom * ratio, 0.68, 2.2);
+          if (sandboxModeRef.current) {
+            sandboxCamRef.current.zoom = THREE.MathUtils.clamp(pinchStartZoom * ratio, 0.38, 2.2);
+          } else {
+            simRef.current.zoomFactor = THREE.MathUtils.clamp(pinchStartZoom * ratio, 0.68, 2.2);
+          }
         }
       };
       const onTouchEnd = (e: TouchEvent) => {
@@ -1081,7 +1882,57 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
 
         let groundY = getCachedGroundY(sim.x, sim.z);
 
-        if (isSparrow) {
+        const nowSandbox = sandboxModeRef.current && phaseRef.current === 'playing';
+        if (nowSandbox !== prevSandboxMode) {
+          prevSandboxMode = nowSandbox;
+          city.sandbox.setSandboxActive(nowSandbox);
+          if (nowSandbox) {
+            sandboxCamRef.current.x = sim.x;
+            sandboxCamRef.current.z = sim.z;
+            sandboxCamRef.current.yaw = sim.isoYawOffset;
+            sandboxCamRef.current.zoom = THREE.MathUtils.clamp(sim.zoomFactor * 0.82, 0.55, 1.15);
+            sim.speed = 0;
+            audioEngine.updateEngineSound(0, vType, false);
+          } else {
+            sandboxDragBuildingId = null;
+            sandboxDragTreeId = null;
+            sandboxDragRoad = null;
+            sandboxDragPointerId = null;
+            sandboxPanPointerId = null;
+            sandboxRotatePointerId = null;
+            renderer.domElement.style.cursor = 'default';
+          }
+          emitSandboxState();
+        }
+
+        if (nowSandbox) {
+          audioEngine.updateEngineSound(0, vType, false);
+          const cam = sandboxCamRef.current;
+          const panSpeed = (44 / Math.max(0.4, cam.zoom)) * dt;
+          const isoAzimuth = Math.PI / 4 + cam.yaw;
+          const rightX = Math.cos(isoAzimuth);
+          const rightZ = -Math.sin(isoAzimuth);
+          const upX = -Math.sin(isoAzimuth);
+          const upZ = -Math.cos(isoAzimuth);
+
+          let moveRight = 0;
+          let moveUp = 0;
+          if (heldKeys.has('KeyW') || heldKeys.has('ArrowUp')) moveUp += 1;
+          if (heldKeys.has('KeyS') || heldKeys.has('ArrowDown')) moveUp -= 1;
+          if (heldKeys.has('KeyD') || heldKeys.has('ArrowRight')) moveRight += 1;
+          if (heldKeys.has('KeyA') || heldKeys.has('ArrowLeft')) moveRight -= 1;
+          if (moveRight !== 0 || moveUp !== 0) {
+            const len = Math.hypot(moveRight, moveUp);
+            const nx = moveRight / len;
+            const ny = moveUp / len;
+            cam.x = THREE.MathUtils.clamp(cam.x + (nx * rightX + ny * upX) * panSpeed, -216, 190);
+            cam.z = THREE.MathUtils.clamp(cam.z + (nx * rightZ + ny * upZ) * panSpeed, -134, 106);
+          }
+          if (heldKeys.has('KeyQ')) cam.yaw += 1.35 * dt;
+          if (heldKeys.has('KeyE')) cam.yaw -= 1.35 * dt;
+
+          city.sandbox.updateVisuals(elapsed);
+        } else if (isSparrow) {
           vehicleRig.root.visible = false;
           cityAvatarRig.root.visible = false;
           companionRig.root.visible = false;
@@ -1457,8 +2308,8 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           const rz = blm.ringMesh.position.z;
           const dist = Math.hypot(sim.x - rx, sim.z - rz);
           const centerDist = Math.hypot(
-            sim.x - blm.def.position[0],
-            sim.z - blm.def.position[2]
+            sim.x - blm.group.position.x,
+            sim.z - blm.group.position.z
           );
           const effDist = Math.min(dist, centerDist);
           if (effDist < blm.def.interactionRadius && effDist < closestDist) {
@@ -1567,8 +2418,8 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         sim.nearAncientSignpost = nearSign;
 
         const dHome = Math.hypot(
-          sim.x - PLAYER_HOME_DOOR_POS[0],
-          sim.z - PLAYER_HOME_DOOR_POS[1]
+          sim.x - city.homeRingMesh.position.x,
+          sim.z - city.homeRingMesh.position.z
         );
         sim.nearPlayerHome = dHome < 7.2;
         if (dHome <= 75) {
@@ -1587,6 +2438,8 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
           isFirstPerson,
           isSparrow,
           isWalking,
+          sandboxMode: nowSandbox,
+          sandboxCam: sandboxCamRef.current,
           sim,
           camera,
           fpCamera,
@@ -1613,11 +2466,16 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
             const targetId = errandPickedUpRef.current
               ? activeErrandRef.current.toLandmarkId
               : activeErrandRef.current.fromLandmarkId;
-            const targetLm = LANDMARKS.find((l) => l.id === targetId);
-            if (targetLm) {
-              distToErrand = Math.round(
-                Math.hypot(sim.x - targetLm.position[0], sim.z - targetLm.position[2])
-              );
+            const livePos = city.sandbox.getLandmarkPosition(targetId);
+            if (livePos) {
+              distToErrand = Math.round(Math.hypot(sim.x - livePos[0], sim.z - livePos[1]));
+            } else {
+              const targetLm = LANDMARKS.find((l) => l.id === targetId);
+              if (targetLm) {
+                distToErrand = Math.round(
+                  Math.hypot(sim.x - targetLm.position[0], sim.z - targetLm.position[2])
+                );
+              }
             }
           }
 
@@ -1682,6 +2540,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
         window.removeEventListener('resize', onResize);
         window.removeEventListener('pointerup', onPointerUp);
         window.removeEventListener('pointercancel', onPointerUp);
+        renderer.domElement.removeEventListener('contextmenu', onContextMenu);
         renderer.domElement.removeEventListener('pointerdown', onPointerDown);
         renderer.domElement.removeEventListener('pointermove', onPointerMove);
         renderer.domElement.removeEventListener('click', onPointerClick);
@@ -1695,6 +2554,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
 
         audioEngine.updateEngineSound(0, vehicleConfigRef.current.type, false);
         unbindChaseDrag();
+        sandboxBridgeRef.current = null;
         sparrowActionsRef.current = null;
         sparrowFx.dispose();
         vehicleRig.dispose();

@@ -22,6 +22,9 @@ import {
   UserSavePayload,
   VehicleConfig,
 } from '../types/game';
+import { TradeProfileState } from '../types/trade';
+import { DEFAULT_TRADE_PROFILE } from '../data/tradeCatalog';
+import { sanitizeTradeProfile } from '../game/tradeEngine';
 
 const LEGACY_ROOM_STORAGE_KEY = 'efeler_cozy_room_v1';
 const LEGACY_AGENDA_STORAGE_KEY = 'efeler_agenda_notes_v1';
@@ -102,6 +105,9 @@ export function useGamePersistence() {
   );
   const [cozyRoomState, setCozyRoomState] = useState<CozyRoomState>(initialSave.cozyRoomState);
   const [agendaNotes, setAgendaNotes] = useState<AgendaNote[]>(initialSave.agendaNotes);
+  const [tradeProfile, setTradeProfile] = useState<TradeProfileState>(
+    () => sanitizeTradeProfile(initialSave.tradeProfile ?? DEFAULT_TRADE_PROFILE)
+  );
 
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [cloudSyncing, setCloudSyncing] = useState(false);
@@ -126,6 +132,7 @@ export function useGamePersistence() {
         houseExterior,
         cozyRoomState,
         agendaNotes,
+        tradeProfile,
       }),
     [
       agendaNotes,
@@ -139,6 +146,7 @@ export function useGamePersistence() {
       displayName,
       houseExterior,
       lokmaPower,
+      tradeProfile,
       unlockedFurnitureStyles,
       vehicleConfig,
     ]
@@ -161,6 +169,7 @@ export function useGamePersistence() {
     setHouseExterior(data.houseExterior);
     setCozyRoomState(data.cozyRoomState);
     setAgendaNotes(data.agendaNotes);
+    setTradeProfile(sanitizeTradeProfile(data.tradeProfile ?? DEFAULT_TRADE_PROFILE));
   }, []);
 
   // Local auto-save (immediate debounce)
@@ -229,6 +238,10 @@ export function useGamePersistence() {
             unlockedFurnitureStyles: Array.from(
               new Set([...cloudData.unlockedFurnitureStyles, ...local.unlockedFurnitureStyles])
             ),
+            tradeProfile:
+              (cloudData.tradeProfile?.version ?? 1) >= (local.tradeProfile?.version ?? 1)
+                ? sanitizeTradeProfile(cloudData.tradeProfile)
+                : sanitizeTradeProfile(local.tradeProfile),
           });
           applySavePayload(merged);
           setCloudStatusMessage('Bulut profilin yüklendi.');
@@ -339,6 +352,8 @@ export function useGamePersistence() {
     setCozyRoomState,
     agendaNotes,
     setAgendaNotes,
+    tradeProfile,
+    setTradeProfile,
     firebaseUser,
     cloudSyncing,
     cloudStatusMessage,

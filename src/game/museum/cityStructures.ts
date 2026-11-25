@@ -69,49 +69,92 @@ function addClassicalStatue(
   const g = new THREE.Group();
   g.position.set(sx, sy + 1.41, sz);
   g.rotation.y = rotY;
+  const cast = !ctx.isSoftwareGl;
+  const addPart = (geo: THREE.BufferGeometry, mat = ctx.mats.statueMarble) => {
+    const m = new THREE.Mesh(ctx.trackGeo(geo), mat);
+    m.castShadow = cast;
+    m.receiveShadow = true;
+    g.add(m);
+    return m;
+  };
 
-  // Flowing pleated marble chiton robe
-  const robe = new THREE.Mesh(
-    ctx.trackGeo(new THREE.CylinderGeometry(0.18, 0.34, 1.05, 16)),
-    ctx.mats.statueMarble
-  );
-  robe.position.y = 0.525;
-  robe.castShadow = !ctx.isSoftwareGl;
-  g.add(robe);
+  // Sculpted LatheGeometry circular plinth & flowing pleated classical chiton robe
+  const robeProfile = [
+    new THREE.Vector2(0.42, 0.0),
+    new THREE.Vector2(0.39, 0.06),
+    new THREE.Vector2(0.34, 0.14),
+    new THREE.Vector2(0.31, 0.42),
+    new THREE.Vector2(0.24, 0.78),
+    new THREE.Vector2(0.185, 1.02),
+    new THREE.Vector2(0.21, 1.12),
+  ];
+  const robeGeo = new THREE.LatheGeometry(robeProfile, 28);
+  robeGeo.computeVertexNormals();
+  const robe = addPart(robeGeo);
+  robe.scale.set(1.04, 1.0, 0.88);
 
-  // Draped torso & himation fold
-  const torso = new THREE.Mesh(
-    ctx.trackGeo(new THREE.CylinderGeometry(0.24, 0.19, 0.56, 16)),
-    ctx.mats.statueMarble
-  );
-  torso.position.y = 1.16;
-  torso.scale.set(1.08, 1, 0.78);
-  torso.castShadow = !ctx.isSoftwareGl;
-  g.add(torso);
+  // Organic CapsuleGeometry sculpted torso + softened shoulders
+  const torso = addPart(new THREE.CapsuleGeometry(0.185, 0.28, 10, 22));
+  torso.position.set(0, 1.19, 0);
+  torso.scale.set(1.12, 1.0, 0.78);
 
-  const shoulders = new THREE.Mesh(
-    ctx.trackGeo(new THREE.SphereGeometry(0.24, 14, 12)),
-    ctx.mats.statueMarble
-  );
+  const shoulders = addPart(new THREE.SphereGeometry(0.225, 22, 16));
   shoulders.position.set(0, 1.38, 0);
-  shoulders.scale.set(1.25, 0.56, 0.74);
-  g.add(shoulders);
+  shoulders.scale.set(1.28, 0.56, 0.74);
 
-  const head = new THREE.Mesh(
-    ctx.trackGeo(new THREE.SphereGeometry(0.135, 16, 14)),
-    ctx.mats.statueMarble
+  // Diagonal draped TubeGeometry himation sash & graceful sculpted arms
+  const himationCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-0.22, 1.42, 0.08),
+    new THREE.Vector3(-0.08, 1.24, 0.16),
+    new THREE.Vector3(0.16, 1.06, 0.14),
+    new THREE.Vector3(0.22, 0.94, 0.02),
+    new THREE.Vector3(0.06, 0.92, -0.17),
+    new THREE.Vector3(-0.18, 1.26, -0.14),
+  ]);
+  addPart(new THREE.TubeGeometry(himationCurve, 26, 0.055, 14, false));
+
+  const jointGeo = new THREE.SphereGeometry(0.068, 14, 12);
+  const armGeo = new THREE.CapsuleGeometry(0.052, 0.26, 8, 16);
+  [-0.24, 0.24].forEach((ax, idx) => {
+    const sh = addPart(jointGeo);
+    sh.position.set(ax, 1.36, 0.01);
+    const arm = addPart(armGeo);
+    arm.position.set(ax * 1.08, 1.18, idx === 0 ? 0.07 : 0.03);
+    arm.rotation.set(idx === 0 ? -0.45 : -0.15, 0, ax < 0 ? 0.18 : -0.18);
+  });
+
+  // Tapered LatheGeometry neck + smooth sculpted classical head & hair bun
+  const neckGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.082, 0.0),
+      new THREE.Vector2(0.064, 0.06),
+      new THREE.Vector2(0.068, 0.12),
+    ],
+    20
   );
-  head.position.set(0, 1.62, 0.02);
-  head.castShadow = !ctx.isSoftwareGl;
-  g.add(head);
+  neckGeo.computeVertexNormals();
+  const neck = addPart(neckGeo);
+  neck.position.set(0, 1.44, 0.01);
+
+  const head = addPart(new THREE.SphereGeometry(0.135, 24, 18));
+  head.scale.set(0.94, 1.08, 1.0);
+  head.position.set(0, 1.63, 0.02);
+
+  const bun = addPart(new THREE.SphereGeometry(0.075, 16, 14));
+  bun.position.set(0, 1.66, -0.1);
 
   if (withCrown) {
-    const crown = new THREE.Mesh(
-      ctx.trackGeo(new THREE.CylinderGeometry(0.145, 0.12, 0.18, 14)),
-      ctx.mats.carvedFrieze
-    );
-    crown.position.set(0, 1.77, 0.01);
-    g.add(crown);
+    const crownProfile = [
+      new THREE.Vector2(0.118, 0.0),
+      new THREE.Vector2(0.128, 0.06),
+      new THREE.Vector2(0.15, 0.15),
+      new THREE.Vector2(0.138, 0.185),
+      new THREE.Vector2(0.095, 0.185),
+    ];
+    const crownGeo = new THREE.LatheGeometry(crownProfile, 24);
+    crownGeo.computeVertexNormals();
+    const crown = addPart(crownGeo, ctx.mats.carvedFrieze);
+    crown.position.set(0, 1.71, 0.01);
   }
 
   ctx.root.add(g);
@@ -518,22 +561,46 @@ export function buildMiletDidymaStructures(ctx: CityBuildContext): [number, numb
     const medusaGroup = new THREE.Group();
     medusaGroup.position.set(mx, my + 1.18, mz + 0.56);
     const face = new THREE.Mesh(
-      ctx.trackGeo(new THREE.SphereGeometry(0.46, 18, 16)),
+      ctx.trackGeo(new THREE.SphereGeometry(0.46, 26, 20)),
       ctx.mats.statueMarble
     );
     face.scale.set(0.95, 1.12, 0.42);
     face.castShadow = !ctx.isSoftwareGl;
+    face.receiveShadow = true;
     medusaGroup.add(face);
 
-    // Sculpted radiating serpentine curls & acanthus frieze frame around Medusa's face
+    // Sculpted radiating serpentine curls via sinuous TubeGeometry around Medusa's face
     for (let k = 0; k < 12; k++) {
       const ang = (k / 12) * Math.PI * 2;
+      const cosA = Math.cos(ang);
+      const sinA = Math.sin(ang);
+      const perpX = -sinA;
+      const perpY = cosA;
+      const waveSign = k % 2 === 0 ? 1 : -1;
+      const snakeCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(cosA * 0.36, sinA * 0.41, -0.02),
+        new THREE.Vector3(
+          cosA * 0.5 + perpX * 0.08 * waveSign,
+          sinA * 0.56 + perpY * 0.08 * waveSign,
+          0.05
+        ),
+        new THREE.Vector3(
+          cosA * 0.64 - perpX * 0.07 * waveSign,
+          sinA * 0.7 - perpY * 0.07 * waveSign,
+          0.02
+        ),
+        new THREE.Vector3(
+          cosA * 0.74 + perpX * 0.05 * waveSign,
+          sinA * 0.8 + perpY * 0.05 * waveSign,
+          -0.03
+        ),
+      ]);
       const curl = new THREE.Mesh(
-        ctx.trackGeo(new THREE.TorusGeometry(0.14, 0.045, 8, 12, Math.PI * 1.4)),
+        ctx.trackGeo(new THREE.TubeGeometry(snakeCurve, 16, 0.042, 12, false)),
         ctx.mats.carvedFrieze
       );
-      curl.position.set(Math.cos(ang) * 0.52, Math.sin(ang) * 0.56, -0.02);
-      curl.rotation.z = ang + 0.5;
+      curl.castShadow = !ctx.isSoftwareGl;
+      curl.receiveShadow = true;
       medusaGroup.add(curl);
     }
     ctx.root.add(medusaGroup);

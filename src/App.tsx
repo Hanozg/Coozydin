@@ -11,7 +11,9 @@ import { NpcDialogueModal } from './components/NpcDialogueModal';
 import { PauseModal } from './components/PauseModal';
 import { ProfileModal } from './components/ProfileModal';
 import { RealAydinMapModal } from './components/RealAydinMapModal';
+import { SandboxOverlay } from './components/SandboxOverlay';
 import { TitleScreen } from './components/TitleScreen';
+import { TradeMarketModal } from './components/TradeMarketModal';
 import {
   ANCIENT_CITY_MAP,
   getAncientCityByLandmarkId,
@@ -22,9 +24,11 @@ import {
   getRadioStationForDistrict,
   LANDMARKS,
 } from './data/efelerData';
+import { getTradeHubByLandmarkId } from './data/tradeCatalog';
 import { audioEngine } from './game/audioEngine';
 import { narrateLandmark, stopVoiceGuide } from './game/voiceGuide';
 import { useGamePersistence } from './hooks/useGamePersistence';
+import { useTradeSystem } from './hooks/useTradeSystem';
 import {
   AncientCityId,
   BuildingNpcDef,
@@ -38,11 +42,13 @@ import {
   MuseumExhibitDef,
   NpcActionOption,
   PlayerHudSnapshot,
+  SandboxHudState,
   SeasonType,
   StreetInteractionType,
   TimeOfDay,
   WeatherType,
 } from './types/game';
+import { TradeHubId } from './types/trade';
 
 const INITIAL_HUD: PlayerHudSnapshot = {
   speedKmh: 0,
@@ -90,6 +96,8 @@ export default function App() {
     setCozyRoomState,
     agendaNotes,
     setAgendaNotes,
+    tradeProfile,
+    setTradeProfile,
     firebaseUser,
     cloudSyncing,
     cloudStatusMessage,
@@ -106,6 +114,8 @@ export default function App() {
   });
 
   const [phase, setPhase] = useState<GamePhase>('title');
+  const [sandboxMode, setSandboxMode] = useState(false);
+  const [sandboxState, setSandboxState] = useState<SandboxHudState | null>(null);
   const [inHome, setInHome] = useState(false);
   const [inAncientMuseum, setInAncientMuseum] = useState(false);
   const [activeAncientCityId, setActiveAncientCityId] = useState<AncientCityId>('tralleis');
@@ -114,6 +124,8 @@ export default function App() {
     'landmarks' | 'museum' | 'errands' | 'evolution'
   >('landmarks');
   const [realMapOpen, setRealMapOpen] = useState(false);
+  const [tradeMarketOpen, setTradeMarketOpen] = useState(false);
+  const [tradeInitialHubId, setTradeInitialHubId] = useState<TradeHubId | null>(null);
   const [agendaOpen, setAgendaOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -422,7 +434,9 @@ export default function App() {
   );
 
   const handleNavigateToLandmark = useCallback((lm: LandmarkDef) => {
-    const [lx, , lz] = lm.position;
+    const livePos = canvasRef.current?.getLandmarkPosition(lm.id);
+    const lx = livePos ? livePos[0] : lm.position[0];
+    const lz = livePos ? livePos[1] : lm.position[2];
     let tx = lx;
     let tz = lz + 10.5;
     let heading = 0;
@@ -493,6 +507,7 @@ export default function App() {
     setProfileOpen(false);
     setInHome(false);
     setInAncientMuseum(false);
+    setSandboxMode(false);
     setPhase('playing');
   }, []);
 
@@ -591,6 +606,7 @@ export default function App() {
     setRealMapOpen(false);
     setProfileOpen(false);
     setAboutOpen(false);
+    setSandboxMode(false);
     setInAncientMuseum(false);
     setInHome(true);
   }, [vehicleConfig.type]);
@@ -599,6 +615,28 @@ export default function App() {
     setAgendaOpen(false);
     setInHome(false);
   }, []);
+
+  const handleEnterSandbox = useCallback(() => {
+    audioEngine.init();
+    audioEngine.updateEngineSound(0, vehicleConfig.type, false);
+    canvasRef.current?.setTouchInput({
+      forward: false,
+      backward: false,
+      left: false,
+      right: false,
+      flap: false,
+      dive: false,
+    });
+    setJournalOpen(false);
+    setRealMapOpen(false);
+    setProfileOpen(false);
+    setAboutOpen(false);
+    setActiveNpc(null);
+    setInHome(false);
+    setInAncientMuseum(false);
+    setSandboxMode(true);
+    setPhase('playing');
+  }, [vehicleConfig.type]);
 
   const handleEnterAncientMuseum = useCallback(
     (cityId?: AncientCityId) => {
@@ -626,6 +664,7 @@ export default function App() {
       setProfileOpen(false);
       setAboutOpen(false);
       setActiveNpc(null);
+      setSandboxMode(false);
       setInHome(false);
       setInAncientMuseum(true);
       setPhase('playing');
@@ -665,6 +704,44 @@ export default function App() {
     [setAgendaNotes]
   );
 
+  const nearbyTradeHubId: TradeHubId | null =
+    getTradeHubByLandmarkId(hud.nearbyLandmark?.id)?.id ?? null;
+
+  const tradeSystem = useTradeSystem({
+    firebaseUser,
+    displayName,
+    avatarEmoji,
+    coins,
+    setCoins,
+    tradeProfile,
+    setTradeProfile,
+    season,
+    explorationMode,
+    vehicleType: vehicleConfig.type,
+    nearbyHubId: nearbyTradeHubId,
+    onNotify: (msg) => {
+      audioEngine.init();
+      audioEngine.playDiscoveryChime();
+      showErrandToast(msg);
+    },
+  });
+
+  const handleOpenTradeMarket = useCallback(
+    (hubId?: TradeHubId) => {
+      canvasRef.current?.setTouchInput({
+        forward: false,
+        backward: false,
+        left: false,
+        right: false,
+        flap: false,
+        dive: false,
+      });
+      setTradeInitialHubId(hubId ?? nearbyTradeHubId ?? null);
+      setTradeMarketOpen(true);
+    },
+    [nearbyTradeHubId]
+  );
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const tag = document.activeElement?.tagName;
@@ -674,6 +751,8 @@ export default function App() {
           setAboutOpen(false);
         } else if (profileOpen) {
           setProfileOpen(false);
+        } else if (tradeMarketOpen) {
+          setTradeMarketOpen(false);
         } else if (agendaOpen) {
           setAgendaOpen(false);
         } else if (activeNpc) {
@@ -686,15 +765,54 @@ export default function App() {
           setInHome(false);
         } else if (inAncientMuseum) {
           return;
+        } else if (sandboxMode) {
+          setSandboxMode(false);
         } else if (phase === 'playing') {
           setPhase('paused');
         } else if (phase === 'paused') {
           setPhase('playing');
         }
       } else if (
+        e.code === 'KeyT' &&
+        !e.repeat &&
+        phase === 'playing' &&
+        !sandboxMode &&
+        !inHome &&
+        !inAncientMuseum &&
+        !journalOpen &&
+        !realMapOpen &&
+        !agendaOpen &&
+        !profileOpen &&
+        !aboutOpen &&
+        !activeNpc &&
+        !typing
+      ) {
+        if (tradeMarketOpen) {
+          setTradeMarketOpen(false);
+        } else {
+          handleOpenTradeMarket();
+        }
+      } else if (
+        e.code === 'KeyB' &&
+        !e.repeat &&
+        phase === 'playing' &&
+        !inHome &&
+        !inAncientMuseum &&
+        !journalOpen &&
+        !realMapOpen &&
+        !tradeMarketOpen &&
+        !agendaOpen &&
+        !profileOpen &&
+        !aboutOpen &&
+        !activeNpc &&
+        !typing
+      ) {
+        setSandboxMode((prev) => !prev);
+      } else if (
         e.code === 'KeyE' &&
         !e.repeat &&
         phase === 'playing' &&
+        !sandboxMode &&
         !inHome &&
         !inAncientMuseum &&
         !journalOpen &&
@@ -719,6 +837,7 @@ export default function App() {
       } else if (
         e.code === 'KeyJ' &&
         phase === 'playing' &&
+        !sandboxMode &&
         !inHome &&
         !inAncientMuseum &&
         !realMapOpen &&
@@ -732,6 +851,7 @@ export default function App() {
       } else if (
         e.code === 'KeyM' &&
         phase === 'playing' &&
+        !sandboxMode &&
         !inHome &&
         !inAncientMuseum &&
         !journalOpen &&
@@ -745,6 +865,7 @@ export default function App() {
       } else if (
         e.code === 'KeyV' &&
         phase === 'playing' &&
+        !sandboxMode &&
         !inHome &&
         !inAncientMuseum &&
         !journalOpen &&
@@ -761,6 +882,7 @@ export default function App() {
       } else if (
         e.code === 'KeyC' &&
         phase === 'playing' &&
+        !sandboxMode &&
         !inHome &&
         !inAncientMuseum &&
         !journalOpen &&
@@ -786,6 +908,7 @@ export default function App() {
     discoveredIds,
     errandPickedUp,
     handleEnterAncientMuseum,
+    handleOpenTradeMarket,
     hud.nearbyLandmark?.id,
     inAncientMuseum,
     inHome,
@@ -793,6 +916,8 @@ export default function App() {
     phase,
     profileOpen,
     realMapOpen,
+    sandboxMode,
+    tradeMarketOpen,
   ]);
 
   useEffect(() => {
@@ -821,7 +946,7 @@ export default function App() {
   }, []);
 
   const effectivePhase: GamePhase =
-    (journalOpen || realMapOpen || profileOpen || aboutOpen || Boolean(activeNpc)) &&
+    (journalOpen || realMapOpen || tradeMarketOpen || profileOpen || aboutOpen || Boolean(activeNpc)) &&
     phase === 'playing'
       ? 'paused'
       : phase;
@@ -894,6 +1019,7 @@ export default function App() {
           <EfelerCanvas
             ref={canvasRef}
             phase={effectivePhase}
+            sandboxMode={sandboxMode}
             explorationMode={explorationMode}
             avatarConfig={cozyRoomState.avatarConfig || DEFAULT_AVATAR_CONFIG}
             vehicleConfig={vehicleConfig}
@@ -910,6 +1036,7 @@ export default function App() {
             errandPickedUp={errandPickedUp}
             initialTransform={lastTransformRef.current}
             onHudUpdate={handleHudUpdate}
+            onSandboxStateChange={setSandboxState}
             onDiscoverLandmark={handleDiscoverLandmark}
             onErrandAction={handleErrandAction}
             onInspectSignpost={handleInspectSignpost}
@@ -963,8 +1090,10 @@ export default function App() {
       )}
 
       {phase === 'playing' &&
+        !sandboxMode &&
         !journalOpen &&
         !realMapOpen &&
+        !tradeMarketOpen &&
         !profileOpen &&
         !aboutOpen &&
         !activeNpc &&
@@ -1050,6 +1179,9 @@ export default function App() {
           }}
           onEnterHome={handleEnterHome}
           onEnterAncientMuseum={handleEnterAncientMuseum}
+          tradeBadgeCount={tradeSystem.unclaimedProceedsListings.length}
+          onOpenTradeMarket={handleOpenTradeMarket}
+          onEnterSandbox={handleEnterSandbox}
           onPause={() => {
             canvasRef.current?.setTouchInput({
               forward: false,
@@ -1068,6 +1200,62 @@ export default function App() {
           onAdjustZoom={handleAdjustZoom}
         />
       )}
+
+      {phase === 'playing' &&
+        sandboxMode &&
+        !journalOpen &&
+        !realMapOpen &&
+        !profileOpen &&
+        !aboutOpen &&
+        !activeNpc &&
+        !inHome &&
+        !inAncientMuseum && (
+          <SandboxOverlay
+            state={sandboxState}
+            onExitSandbox={() => setSandboxMode(false)}
+            onSetToolMode={(mode) => canvasRef.current?.sandboxSetToolMode(mode)}
+            onFocusBuilding={(id) => canvasRef.current?.sandboxFocusBuilding(id)}
+            onDeselect={() => canvasRef.current?.sandboxSelectBuilding(null)}
+            onRotateSelected={(deltaRad) => canvasRef.current?.sandboxRotateSelected(deltaRad)}
+            onNudgeSelected={(dx, dz) => canvasRef.current?.sandboxNudgeSelected(dx, dz)}
+            onSpawnHouse={(spec) => canvasRef.current?.sandboxSpawnHouse(spec)}
+            onDeleteSelected={() => canvasRef.current?.sandboxDeleteSelected()}
+            onResetSelected={() => canvasRef.current?.sandboxResetSelected()}
+            onDeselectTree={() => canvasRef.current?.sandboxSelectTree(null)}
+            onRotateSelectedTree={(deltaRad) =>
+              canvasRef.current?.sandboxRotateSelectedTree(deltaRad)
+            }
+            onScaleSelectedTree={(deltaScale) =>
+              canvasRef.current?.sandboxScaleSelectedTree(deltaScale)
+            }
+            onNudgeSelectedTree={(dx, dz) => canvasRef.current?.sandboxNudgeSelectedTree(dx, dz)}
+            onSpawnTree={(kind) => canvasRef.current?.sandboxSpawnTree(kind)}
+            onDeleteSelectedTree={() => canvasRef.current?.sandboxDeleteSelectedTree()}
+            onResetSelectedTree={() => canvasRef.current?.sandboxResetSelectedTree()}
+            onFocusRoad={(id) => canvasRef.current?.sandboxFocusRoad(id)}
+            onDeselectRoad={() => canvasRef.current?.sandboxSelectRoad(null)}
+            onAdjustRoadWidth={(delta) => canvasRef.current?.sandboxAdjustRoadWidth(delta)}
+            onSetRoadSurface={(surface) => canvasRef.current?.sandboxSetRoadSurface(surface)}
+            onToggleRoadSurface={() => canvasRef.current?.sandboxToggleRoadSurface()}
+            onToggleRoadCenterLine={() => canvasRef.current?.sandboxToggleRoadCenterLine()}
+            onToggleRoadSidewalk={() => canvasRef.current?.sandboxToggleRoadSidewalk()}
+            onSetRoadCornerRadius={(radius) =>
+              canvasRef.current?.sandboxSetRoadCornerRadius(radius)
+            }
+            onToggleAutoRoundCorners={() =>
+              canvasRef.current?.sandboxToggleAutoRoundCorners()
+            }
+            onAppendRoadNode={() => canvasRef.current?.sandboxAppendRoadNode()}
+            onDeleteRoadNode={() => canvasRef.current?.sandboxDeleteRoadNode()}
+            onSpawnRoad={(spec) => canvasRef.current?.sandboxSpawnRoad(spec)}
+            onDeleteSelectedRoad={() => canvasRef.current?.sandboxDeleteSelectedRoad()}
+            onResetSelectedRoad={() => canvasRef.current?.sandboxResetSelectedRoad()}
+            onResetAll={() => canvasRef.current?.sandboxResetAll()}
+            onUndo={() => canvasRef.current?.sandboxUndo()}
+            onToggleGridSnap={() => canvasRef.current?.sandboxToggleGridSnap()}
+            onAdjustZoom={handleAdjustZoom}
+          />
+        )}
 
       {activeNpc && !inHome && (() => {
         const availableErrandForNpc =
@@ -1168,11 +1356,50 @@ export default function App() {
         />
       )}
 
+      {tradeMarketOpen && !inHome && !inAncientMuseum && (
+        <TradeMarketModal
+          coins={coins}
+          tradeProfile={tradeProfile}
+          season={season}
+          playerPos={hud.playerPos}
+          nearbyHubId={nearbyTradeHubId}
+          initialHubId={tradeInitialHubId}
+          isOnlineMode={tradeSystem.isOnlineMode}
+          activeUid={tradeSystem.activeUid}
+          marketEpoch={tradeSystem.marketEpoch}
+          epochCountdownSec={tradeSystem.epochCountdownSec}
+          quotesByHub={tradeSystem.quotesByHub}
+          supplyPressureByKey={tradeSystem.supplyPressureByKey}
+          activeContracts={tradeSystem.activeContracts}
+          cargoCapacityKg={tradeSystem.cargoCapacityKg}
+          cargoUsedKg={tradeSystem.cargoUsedKg}
+          openMarketListings={tradeSystem.openMarketListings}
+          myListings={tradeSystem.myListings}
+          unclaimedProceedsListings={tradeSystem.unclaimedProceedsListings}
+          ledgerEntries={tradeSystem.ledgerEntries}
+          busyAction={tradeSystem.busyAction}
+          syncError={tradeSystem.syncError}
+          onClaimStarterGrant={tradeSystem.claimStarterGrant}
+          onBuyFromHub={tradeSystem.buyFromHub}
+          onSellToHub={tradeSystem.sellToHub}
+          onCompleteContract={tradeSystem.completeContract}
+          onUpgradeMerchantTier={tradeSystem.upgradeMerchantTier}
+          onCreateP2PListing={tradeSystem.createP2PListing}
+          onCancelP2PListing={tradeSystem.cancelP2PListing}
+          onBuyP2PListing={tradeSystem.buyP2PListing}
+          onClaimP2PProceeds={tradeSystem.claimP2PProceeds}
+          onJumpToLandmark={handleNavigateToLandmark}
+          onOpenProfile={() => setProfileOpen(true)}
+          onClose={() => setTradeMarketOpen(false)}
+        />
+      )}
+
       {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
 
       {phase === 'paused' &&
         !journalOpen &&
         !realMapOpen &&
+        !tradeMarketOpen &&
         !profileOpen &&
         !aboutOpen &&
         !activeNpc &&

@@ -262,3 +262,163 @@ test('optional completion and furniture style fields can remain absent', async (
   delete data.cozyRoomState.furniture[0].styleId;
   await assertSucceeds(setDoc(doc(ownerDb, 'users', 'alice'), data));
 });
+
+function validTradeProfile() {
+  return {
+    version: 2,
+    cargoTier: 2,
+    reputationXp: 55,
+    totalTrades: 4,
+    totalProfit: 120,
+    starterGrantClaimed: true,
+    inventory: [{ itemId: 'aydin_inciri', quantity: 5, avgUnitCost: 22 }],
+    completedContractKeys: ['c_10_0_yagcilarici_zeytinyagi'],
+    recentCommandIds: ['op_test_1'],
+  };
+}
+
+function validMarketListing(overrides = {}) {
+  return {
+    id: 'lst_1',
+    sellerUid: 'alice',
+    sellerName: 'Alice',
+    sellerEmoji: '🏡',
+    hubId: 'yagcilarici',
+    itemId: 'aydin_inciri',
+    quantity: 4,
+    unitPrice: 30,
+    totalPrice: 120,
+    feeCoins: 6,
+    status: 'open',
+    buyerUid: null,
+    buyerName: null,
+    claimedBySeller: false,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    ...overrides,
+  };
+}
+
+function validLedgerEntry(overrides = {}) {
+  return {
+    id: 'tx_1',
+    uid: 'alice',
+    idempotencyKey: 'op_tx_1',
+    type: 'buy_hub',
+    hubId: 'yagcilarici',
+    itemId: 'aydin_inciri',
+    quantity: 4,
+    unitPrice: 24,
+    totalCoins: -96,
+    feeCoins: 0,
+    profitDelta: 0,
+    balanceAfter: 104,
+    counterpartyName: 'Yağcılar İçi',
+    note: '4 Kasa Sarı Lop İncir alındı',
+    createdAt: serverTimestamp(),
+    ...overrides,
+  };
+}
+
+test('owner can update profile with valid tradeProfile and rejects tier poisoning', async () => {
+  await seedProfile();
+  await assertSucceeds(
+    updateDoc(doc(ownerDb, 'users', 'alice'), {
+      tradeProfile: validTradeProfile(),
+      updatedAt: serverTimestamp(),
+    })
+  );
+  await assertFails(
+    updateDoc(doc(ownerDb, 'users', 'alice'), {
+      tradeProfile: { ...validTradeProfile(), cargoTier: 99 },
+      updatedAt: serverTimestamp(),
+    })
+  );
+});
+
+test('P2P escrow listing lifecycle enforces identity, math, no self-buy, and terminal locking', async () => {
+  await seedProfile();
+  await environment.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'users', 'bob'), { ...validProfile(), uid: 'bob', displayName: 'Bob' });
+  });
+
+  // Identity spoofing fails
+  await assertFails(setDoc(doc(otherDb, 'marketListings', 'lst_spoof'), validMarketListing({ id: 'lst_spoof' })));
+
+  // Math tampering fails (4 * 30 != 10)
+  await assertFails(
+    setDoc(doc(ownerDb, 'marketListings', 'lst_math'), validMarketListing({ id: 'lst_math', totalPrice: 10 }))
+  );
+
+  // Valid create succeeds
+  await assertSucceeds(setDoc(doc(ownerDb, 'marketListings', 'lst_1'), validMarketListing()));
+
+  // Self-buy wash trading fails
+  await assertFails(
+    updateDoc(doc(ownerDb, 'marketListings', 'lst_1'), {
+      status: 'sold',
+      buyerUid: 'alice',
+      buyerName: 'Alice',
+      updatedAt: serverTimestamp(),
+    })
+  );
+
+  // State shortcutting open -> claimed fails
+  await assertFails(
+    updateDoc(doc(ownerDb, 'marketListings', 'lst_1'), {
+      status: 'claimed',
+      claimedBySeller: true,
+      updatedAt: serverTimestamp(),
+    })
+  );
+
+  // Non-seller cancel fails
+  await assertFails(
+    updateDoc(doc(otherDb, 'marketListings', 'lst_1'), {
+      status: 'cancelled',
+      updatedAt: serverTimestamp(),
+    })
+  );
+
+  // Buyer fill succeeds
+  await assertSucceeds(
+    updateDoc(doc(otherDb, 'marketListings', 'lst_1'), {
+      status: 'sold',
+      buyerUid: 'bob',
+      buyerName: 'Bob',
+      updatedAt: serverTimestamp(),
+    })
+  );
+
+  // Seller claim proceeds succeeds
+  await assertSucceeds(
+    updateDoc(doc(ownerDb, 'marketListings', 'lst_1'), {
+      status: 'claimed',
+      claimedBySeller: true,
+      updatedAt: serverTimestamp(),
+    })
+  );
+
+  // Double-claim / terminal state mutation fails
+  await assertFails(
+    updateDoc(doc(ownerDb, 'marketListings', 'lst_1'), {
+      status: 'sold',
+      claimedBySeller: false,
+      updatedAt: serverTimestamp(),
+    })
+  );
+
+  // Hard delete always fails
+  await assertFails(deleteDoc(doc(ownerDb, 'marketListings', 'lst_1')));
+});
+
+test('tradeLedger is strictly owner-only and append-only immutable', async () => {
+  await seedProfile();
+  await assertSucceeds(setDoc(doc(ownerDb, 'users', 'alice', 'tradeLedger', 'tx_1'), validLedgerEntry()));
+  await assertFails(getDoc(doc(otherDb, 'users', 'alice', 'tradeLedger', 'tx_1')));
+  await assertFails(
+    updateDoc(doc(ownerDb, 'users', 'alice', 'tradeLedger', 'tx_1'), { note: 'Tampered' })
+  );
+  await assertFails(deleteDoc(doc(ownerDb, 'users', 'alice', 'tradeLedger', 'tx_1')));
+});
+

@@ -227,39 +227,47 @@ export function createPedestrianSystem(): PedestrianSystem {
   const sharedMat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     vertexColors: true,
-    roughness: 0.82,
-    metalness: 0.02,
+    roughness: 0.7,
+    metalness: 0.04,
+    flatShading: false,
   });
 
   const torsoInst = new THREE.InstancedMesh(torsoGeo, sharedMat, count);
-  torsoInst.castShadow = false;
+  torsoInst.castShadow = true;
+  torsoInst.receiveShadow = true;
   torsoInst.frustumCulled = false;
 
   const legLInst = new THREE.InstancedMesh(legGeo, sharedMat, count);
-  legLInst.castShadow = false;
+  legLInst.castShadow = true;
+  legLInst.receiveShadow = true;
   legLInst.frustumCulled = false;
 
   const legRInst = new THREE.InstancedMesh(legGeo, sharedMat, count);
-  legRInst.castShadow = false;
+  legRInst.castShadow = true;
+  legRInst.receiveShadow = true;
   legRInst.frustumCulled = false;
 
   const armLInst = new THREE.InstancedMesh(armGeo, sharedMat, count);
-  armLInst.castShadow = false;
+  armLInst.castShadow = true;
+  armLInst.receiveShadow = true;
   armLInst.frustumCulled = false;
 
   const armRInst = new THREE.InstancedMesh(armGeo, sharedMat, count);
-  armRInst.castShadow = false;
+  armRInst.castShadow = true;
+  armRInst.receiveShadow = true;
   armRInst.frustumCulled = false;
 
   const handsInst = new THREE.InstancedMesh(handGeo, sharedMat, count * 2);
-  handsInst.castShadow = false;
+  handsInst.castShadow = true;
+  handsInst.receiveShadow = true;
   handsInst.frustumCulled = false;
 
   const variantCount = headGeos.length; // 4
   const perVariant = count / variantCount; // 16
   const headInsts = headGeos.map((geo) => {
     const inst = new THREE.InstancedMesh(geo, sharedMat, perVariant);
-    inst.castShadow = false;
+    inst.castShadow = true;
+    inst.receiveShadow = true;
     inst.frustumCulled = false;
     return inst;
   });
@@ -1245,7 +1253,7 @@ export function createAmbientTrafficSystem(mats: CityMaterialLibrary): AmbientTr
         hatStyle: isScooter ? 'beret' : i % 2 === 0 ? 'newsboy' : 'none',
         facialHair: i % 4 === 3 ? 'mustache' : 'none',
       },
-      { scale: 0.132, forwardIsNegZ: true, castShadow: false }
+      { scale: 0.132, forwardIsNegZ: true, castShadow: 'full' }
     );
     riderRig.root.position.set(0, isScooter ? 0.3 : 0.34, 0.14);
     // Seated posture gripping handlebars

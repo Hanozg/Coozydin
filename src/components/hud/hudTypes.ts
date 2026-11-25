@@ -15,6 +15,7 @@ import {
   VehicleConfig,
   WeatherType,
 } from '../../types/game';
+import { TradeHubId } from '../../types/trade';
 
 export const TREAT_LABELS: Record<Exclude<HeldTreatType, 'none'>, string> = {
   coffee: '☕ Türk Kahvesi',
@@ -76,6 +77,9 @@ export interface GameHUDProps {
   onOpenAbout: () => void;
   onEnterHome: () => void;
   onEnterAncientMuseum: (cityId?: AncientCityId) => void;
+  tradeBadgeCount?: number;
+  onOpenTradeMarket: (hubId?: TradeHubId) => void;
+  onEnterSandbox: () => void;
   onPause: () => void;
   onDiscoverNearby: () => void;
   onHorn: () => void;

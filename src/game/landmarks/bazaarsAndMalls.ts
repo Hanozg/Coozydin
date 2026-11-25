@@ -562,22 +562,97 @@ export function buildYagcilarIci(def: LandmarkDef, mats: CityMaterialLibrary): B
   });
 
   // Olive-Oil Amphoras (Zeytinyağı Küpleri), Spice Sacks & Wicker Fig Baskets along Shop Fronts
-  const amphoraMat = new THREE.MeshStandardMaterial({ color: 0xb85f3c, roughness: 0.72 });
-  const sackMat = new THREE.MeshStandardMaterial({ color: 0xc2a274, roughness: 0.92 });
+  const amphoraMat = new THREE.MeshStandardMaterial({
+    color: 0xb85f3c,
+    roughness: 0.7,
+    metalness: 0.06,
+    flatShading: false,
+  });
+  const sackMat = new THREE.MeshStandardMaterial({
+    color: 0xc2a274,
+    roughness: 0.78,
+    metalness: 0.02,
+    flatShading: false,
+  });
   const spiceColors = [0xd48e28, 0xb8382c, 0x6c8738];
+
+  const küpProfile = [
+    new THREE.Vector2(0.17, 0.0),
+    new THREE.Vector2(0.24, 0.12),
+    new THREE.Vector2(0.32, 0.36),
+    new THREE.Vector2(0.29, 0.56),
+    new THREE.Vector2(0.17, 0.72),
+    new THREE.Vector2(0.15, 0.8),
+    new THREE.Vector2(0.2, 0.85),
+    new THREE.Vector2(0.18, 0.88),
+    new THREE.Vector2(0.13, 0.82),
+  ];
+  const küpGeo = new THREE.LatheGeometry(küpProfile, 24);
+  küpGeo.computeVertexNormals();
+  const küpHandleGeoL = new THREE.TubeGeometry(
+    new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-0.26, 0.54, 0),
+      new THREE.Vector3(-0.33, 0.68, 0),
+      new THREE.Vector3(-0.18, 0.78, 0),
+    ]),
+    14,
+    0.026,
+    10,
+    false
+  );
+  const küpHandleGeoR = new THREE.TubeGeometry(
+    new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0.26, 0.54, 0),
+      new THREE.Vector3(0.33, 0.68, 0),
+      new THREE.Vector3(0.18, 0.78, 0),
+    ]),
+    14,
+    0.026,
+    10,
+    false
+  );
+
+  const sackProfile = [
+    new THREE.Vector2(0.26, 0.0),
+    new THREE.Vector2(0.32, 0.16),
+    new THREE.Vector2(0.3, 0.4),
+    new THREE.Vector2(0.24, 0.54),
+    new THREE.Vector2(0.28, 0.6),
+  ];
+  const sackGeo = new THREE.LatheGeometry(sackProfile, 22);
+  sackGeo.computeVertexNormals();
+
   [-5.2, -1.6, 2.4, 5.4].forEach((px, idx) => {
-    const küp = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.22, 0.78, 10), amphoraMat);
-    küp.position.set(px, 0.68, -2.75);
+    const küpGroup = new THREE.Group();
+    küpGroup.position.set(px, 0.29, -2.75);
+    const küp = new THREE.Mesh(küpGeo, amphoraMat);
     küp.castShadow = true;
-    const sack = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, 0.56, 8), sackMat);
-    sack.position.set(px + 0.65, 0.58, 2.75);
+    küp.receiveShadow = true;
+    const hL = new THREE.Mesh(küpHandleGeoL, amphoraMat);
+    hL.castShadow = true;
+    hL.receiveShadow = true;
+    const hR = new THREE.Mesh(küpHandleGeoR, amphoraMat);
+    hR.castShadow = true;
+    hR.receiveShadow = true;
+    küpGroup.add(küp, hL, hR);
+
+    const sack = new THREE.Mesh(sackGeo, sackMat);
+    sack.position.set(px + 0.65, 0.3, 2.75);
+    sack.castShadow = true;
+    sack.receiveShadow = true;
     const spiceTop = new THREE.Mesh(
-      new THREE.SphereGeometry(0.24, 8, 6),
-      new THREE.MeshStandardMaterial({ color: spiceColors[idx % spiceColors.length], roughness: 0.85 })
+      new THREE.SphereGeometry(0.24, 18, 12),
+      new THREE.MeshStandardMaterial({
+        color: spiceColors[idx % spiceColors.length],
+        roughness: 0.75,
+        flatShading: false,
+      })
     );
     spiceTop.scale.set(1, 0.45, 1);
-    spiceTop.position.set(px + 0.65, 0.88, 2.75);
-    group.add(küp, sack, spiceTop);
+    spiceTop.position.set(px + 0.65, 0.86, 2.75);
+    spiceTop.castShadow = true;
+    spiceTop.receiveShadow = true;
+    group.add(küpGroup, sack, spiceTop);
   });
 
   // Central West Courtyard Octagonal Stone Bazaar Fountain

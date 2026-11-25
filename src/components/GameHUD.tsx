@@ -59,6 +59,9 @@ export const GameHUD = memo(function GameHUD({
   onOpenAbout,
   onEnterHome,
   onEnterAncientMuseum,
+  tradeBadgeCount,
+  onOpenTradeMarket,
+  onEnterSandbox,
   onPause,
   onDiscoverNearby,
   onHorn,
@@ -223,6 +226,9 @@ export const GameHUD = memo(function GameHUD({
         onOpenProfile={onOpenProfile}
         onEnterHome={onEnterHome}
         onEnterAncientMuseum={onEnterAncientMuseum}
+        tradeBadgeCount={tradeBadgeCount}
+        onOpenTradeMarket={onOpenTradeMarket}
+        onEnterSandbox={onEnterSandbox}
         onOpenRealMap={onOpenRealMap}
         onOpenJournal={onOpenJournal}
         onToggleVoiceGuide={onToggleVoiceGuide}
@@ -250,6 +256,7 @@ export const GameHUD = memo(function GameHUD({
             setDockCollapsed(false);
             toggleDrawer('house');
           }}
+          onOpenTradeMarket={onOpenTradeMarket}
           onToggleVoiceGuide={onToggleVoiceGuide}
         />
 

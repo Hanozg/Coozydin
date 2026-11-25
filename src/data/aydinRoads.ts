@@ -1,13 +1,20 @@
+import { SandboxRoadSurface } from '../types/game';
+
 export interface RoadSegmentDef {
   id: string;
   name: string;
-  surface: 'asphalt' | 'cobble';
+  surface: SandboxRoadSurface;
   width: number;
   hasCenterLine: boolean;
+  hasSidewalk?: boolean;
+  cornerRadius?: number;
   points: [number, number][];
 }
 
 export interface InternalRoadSegment extends RoadSegmentDef {
+  hasSidewalk: boolean;
+  cornerRadius: number;
+  renderPoints: [number, number][];
   minX: number;
   maxX: number;
   minZ: number;
@@ -441,13 +448,99 @@ const RAW_ROADS: RoadSegmentDef[] = [
   },
 ];
 
-export const AYDIN_ROAD_SEGMENTS: InternalRoadSegment[] = RAW_ROADS.map((road) => {
+/**
+ * Smoothly rounds interior polyline corners using tangent-clamped quadratic Bézier fillets
+ * while preserving the user's original control points non-destructively.
+ */
+export function roundPolylineCorners(
+  rawPoints: [number, number][],
+  cornerRadius: number
+): [number, number][] {
+  const n = rawPoints.length;
+  if (n < 3 || cornerRadius <= 0.1) {
+    return rawPoints.map(([px, pz]) => [px, pz]);
+  }
+
+  const out: [number, number][] = [[rawPoints[0][0], rawPoints[0][1]]];
+
+  for (let i = 1; i < n - 1; i++) {
+    const [px, pz] = rawPoints[i - 1];
+    const [cx, cz] = rawPoints[i];
+    const [nx, nz] = rawPoints[i + 1];
+
+    const vInX = px - cx;
+    const vInZ = pz - cz;
+    const lenIn = Math.hypot(vInX, vInZ);
+
+    const vOutX = nx - cx;
+    const vOutZ = nz - cz;
+    const lenOut = Math.hypot(vOutX, vOutZ);
+
+    if (lenIn < 0.6 || lenOut < 0.6) {
+      out.push([cx, cz]);
+      continue;
+    }
+
+    const uInX = vInX / lenIn;
+    const uInZ = vInZ / lenIn;
+    const uOutX = vOutX / lenOut;
+    const uOutZ = vOutZ / lenOut;
+
+    const dot = uInX * uOutX + uInZ * uOutZ;
+    // Nearly straight (~180°) or hairpin fold: keep crisp vertex
+    if (dot < -0.994 || dot > 0.992) {
+      out.push([cx, cz]);
+      continue;
+    }
+
+    // Limit trim to 44% of either adjacent segment so neighboring fillets never collide
+    const trim = Math.min(cornerRadius, lenIn * 0.44, lenOut * 0.44);
+    if (trim < 0.35) {
+      out.push([cx, cz]);
+      continue;
+    }
+
+    const t0x = cx + uInX * trim;
+    const t0z = cz + uInZ * trim;
+    const t1x = cx + uOutX * trim;
+    const t1z = cz + uOutZ * trim;
+
+    const subSteps = Math.max(3, Math.min(9, Math.round(trim * 0.9)));
+    for (let s = 0; s <= subSteps; s++) {
+      const t = s / subSteps;
+      const omt = 1 - t;
+      const bx = omt * omt * t0x + 2 * omt * t * cx + t * t * t1x;
+      const bz = omt * omt * t0z + 2 * omt * t * cz + t * t * t1z;
+      const prevOut = out[out.length - 1];
+      if (!prevOut || Math.hypot(bx - prevOut[0], bz - prevOut[1]) > 0.12) {
+        out.push([bx, bz]);
+      }
+    }
+  }
+
+  const last = rawPoints[n - 1];
+  const prevOut = out[out.length - 1];
+  if (!prevOut || Math.hypot(last[0] - prevOut[0], last[1] - prevOut[1]) > 0.08) {
+    out.push([last[0], last[1]]);
+  } else {
+    out[out.length - 1] = [last[0], last[1]];
+  }
+
+  return out;
+}
+
+function buildInternalRoad(road: RoadSegmentDef): InternalRoadSegment {
+  const pts: [number, number][] = road.points.map(([px, pz]) => [px, pz]);
+  const cornerRadius = Math.max(0, Math.min(20, road.cornerRadius ?? 0));
+  const hasSidewalk = road.hasSidewalk !== false;
+  const renderPoints = roundPolylineCorners(pts, cornerRadius);
+
   let minX = Infinity;
   let maxX = -Infinity;
   let minZ = Infinity;
   let maxZ = -Infinity;
-  for (let i = 0; i < road.points.length; i++) {
-    const [px, pz] = road.points[i];
+  for (let i = 0; i < renderPoints.length; i++) {
+    const [px, pz] = renderPoints[i];
     if (px < minX) minX = px;
     if (px > maxX) maxX = px;
     if (pz < minZ) minZ = pz;
@@ -455,13 +548,56 @@ export const AYDIN_ROAD_SEGMENTS: InternalRoadSegment[] = RAW_ROADS.map((road) =
   }
   const pad = road.width * 0.5 + 3.2;
   return {
-    ...road,
+    id: road.id,
+    name: road.name,
+    surface: road.surface,
+    width: road.width,
+    hasCenterLine: road.hasCenterLine,
+    hasSidewalk,
+    cornerRadius,
+    points: pts,
+    renderPoints,
     minX: minX - pad,
     maxX: maxX + pad,
     minZ: minZ - pad,
     maxZ: maxZ + pad,
   };
-});
+}
+
+export const AYDIN_ROAD_SEGMENTS: InternalRoadSegment[] = RAW_ROADS.map(buildInternalRoad);
+
+export function getDefaultRoadDefs(): RoadSegmentDef[] {
+  return RAW_ROADS.map((r) => ({
+    ...r,
+    hasSidewalk: r.hasSidewalk !== false,
+    cornerRadius: r.cornerRadius ?? 0,
+    points: r.points.map(([px, pz]) => [px, pz] as [number, number]),
+  }));
+}
+
+export function getDefaultRoadDef(id: string): RoadSegmentDef | null {
+  const found = RAW_ROADS.find((r) => r.id === id);
+  if (!found) return null;
+  return {
+    ...found,
+    hasSidewalk: found.hasSidewalk !== false,
+    cornerRadius: found.cornerRadius ?? 0,
+    points: found.points.map(([px, pz]) => [px, pz] as [number, number]),
+  };
+}
+
+export function setLiveRoadSegments(nextDefs: RoadSegmentDef[]): void {
+  AYDIN_ROAD_SEGMENTS.length = 0;
+  for (let i = 0; i < nextDefs.length; i++) {
+    if (nextDefs[i].points.length >= 2) {
+      AYDIN_ROAD_SEGMENTS.push(buildInternalRoad(nextDefs[i]));
+    }
+  }
+}
+
+export function resetLiveRoadSegments(): void {
+  setLiveRoadSegments(RAW_ROADS);
+}
 
 export interface RoadSampleResult {
   dist: number;
@@ -470,7 +606,7 @@ export interface RoadSampleResult {
 
 /**
  * Fast polyline distance query with per-road AABB rejection.
- * Safe to invoke every animation frame in getWalkableSurfaceHeightAt.
+ * Queries the rounded renderPoints so driving elevation and road picking follow curved corners.
  */
 export function sampleNearestRoad(x: number, z: number, maxSearchDist = 12): RoadSampleResult {
   let bestDistSq = maxSearchDist * maxSearchDist;
@@ -481,7 +617,7 @@ export function sampleNearestRoad(x: number, z: number, maxSearchDist = 12): Roa
     if (x < road.minX || x > road.maxX || z < road.minZ || z > road.maxZ) {
       continue;
     }
-    const pts = road.points;
+    const pts = road.renderPoints;
     for (let j = 0; j < pts.length - 1; j++) {
       const ax = pts[j][0];
       const az = pts[j][1];

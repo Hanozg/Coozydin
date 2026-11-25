@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { SeasonType } from '../types/game';
+import { SandboxTreeKind, SandboxTreeOverrideEntry, SeasonType } from '../types/game';
 import { getTerrainHeightAt } from './terrain';
 
 export interface TreePlacement {
@@ -20,6 +20,26 @@ export interface ShrubPlacement {
   variant: number;
 }
 
+export interface EditableTreeSlot {
+  id: string;
+  kind: SandboxTreeKind;
+  label: string;
+  index: number;
+  x: number;
+  z: number;
+  rotY: number;
+  scale: number;
+  heightScale: number;
+  variant: number;
+  defaultX: number;
+  defaultZ: number;
+  defaultRotY: number;
+  defaultScale: number;
+  deleted: boolean;
+  isCustom: boolean;
+  liftY: number;
+}
+
 export interface SeasonalAtmosphereState {
   season: SeasonType;
   frostFactor: number; // 0..1 (winter + snow accumulation)
@@ -31,6 +51,31 @@ export interface SeasonalAtmosphereState {
 
 export interface SeasonalFoliageSystem {
   group: THREE.Group;
+  getTreeRaycastTargets: () => THREE.InstancedMesh[];
+  getTreeByInstance: (kind: SandboxTreeKind, instanceId: number) => EditableTreeSlot | null;
+  getTree: (id: string) => EditableTreeSlot | null;
+  getAllTrees: () => EditableTreeSlot[];
+  setTreeTransform: (
+    id: string,
+    x: number,
+    z: number,
+    rotY: number,
+    scale: number,
+    liftY?: number
+  ) => EditableTreeSlot | null;
+  setTreeDeleted: (id: string, deleted: boolean) => boolean;
+  spawnCustomTree: (
+    kind: SandboxTreeKind,
+    x: number,
+    z: number,
+    scale?: number,
+    rotY?: number,
+    forcedId?: string
+  ) => EditableTreeSlot | null;
+  resetTree: (id: string) => boolean;
+  resetAllTrees: () => void;
+  exportTreeOverrides: () => SandboxTreeOverrideEntry[];
+  hydrateTreeOverrides: (entries: SandboxTreeOverrideEntry[]) => void;
   update: (dt: number, elapsed: number, state: SeasonalAtmosphereState) => void;
   dispose: () => void;
 }
@@ -347,12 +392,23 @@ export function createSeasonalFoliageSystem(
     birdMat
   );
 
-  const blCount = Math.max(1, broadleafSpots.length);
-  const blTrunks = new THREE.InstancedMesh(trunkGeo, trunkMat, blCount);
-  const blCrowns = new THREE.InstancedMesh(crownGeo, crownMat, blCount);
-  const blStones = new THREE.InstancedMesh(stoneGeo, stoneMat, blCount);
-  const blMounds = new THREE.InstancedMesh(moundGeo, moundMat, blCount);
-  const blBirds = new THREE.InstancedMesh(birdGeo, birdMat, blCount);
+  const EXTRA_TREE_CAPACITY = 80;
+  const MAP_RAYCAST_SPHERE = new THREE.Sphere(new THREE.Vector3(0, 12, 0), 460);
+
+  const blCap = Math.max(1, broadleafSpots.length + EXTRA_TREE_CAPACITY);
+  const blTrunks = new THREE.InstancedMesh(trunkGeo, trunkMat, blCap);
+  const blCrowns = new THREE.InstancedMesh(crownGeo, crownMat, blCap);
+  const blStones = new THREE.InstancedMesh(stoneGeo, stoneMat, blCap);
+  const blMounds = new THREE.InstancedMesh(moundGeo, moundMat, blCap);
+  const blBirds = new THREE.InstancedMesh(birdGeo, birdMat, blCap);
+
+  blTrunks.count = broadleafSpots.length;
+  blCrowns.count = broadleafSpots.length;
+  blStones.count = broadleafSpots.length;
+  blMounds.count = broadleafSpots.length;
+  blBirds.count = broadleafSpots.length;
+  blTrunks.userData.sandboxTreeKind = 'broadleaf';
+  blCrowns.userData.sandboxTreeKind = 'broadleaf';
 
   blTrunks.castShadow = false;
   blTrunks.receiveShadow = true;
@@ -363,10 +419,35 @@ export function createSeasonalFoliageSystem(
 
   const dummy = new THREE.Object3D();
   const broadleafBaseY: number[] = [];
+  const treeSlotMap = new Map<string, EditableTreeSlot>();
+  const blSlots: EditableTreeSlot[] = [];
+  const pineSlots: EditableTreeSlot[] = [];
+  const palmSlots: EditableTreeSlot[] = [];
 
   broadleafSpots.forEach((spot, i) => {
     const gy = getTerrainHeightAt(spot.x, spot.z);
     broadleafBaseY.push(gy);
+    const slot: EditableTreeSlot = {
+      id: `tree:broadleaf:${i}`,
+      kind: 'broadleaf',
+      label: `Çınar / Zeytin Ağacı #${i + 1}`,
+      index: i,
+      x: spot.x,
+      z: spot.z,
+      rotY: spot.rotY,
+      scale: spot.scale,
+      heightScale: spot.heightScale,
+      variant: spot.variant,
+      defaultX: spot.x,
+      defaultZ: spot.z,
+      defaultRotY: spot.rotY,
+      defaultScale: spot.scale,
+      deleted: false,
+      isCustom: false,
+      liftY: 0,
+    };
+    blSlots.push(slot);
+    treeSlotMap.set(slot.id, slot);
     dummy.position.set(spot.x, gy, spot.z);
     dummy.rotation.set(0, spot.rotY, 0);
     dummy.scale.set(spot.scale, spot.scale * spot.heightScale, spot.scale);
@@ -379,8 +460,9 @@ export function createSeasonalFoliageSystem(
   });
 
   [blTrunks, blCrowns, blStones, blMounds, blBirds].forEach((inst) => {
+    inst.frustumCulled = false;
+    inst.boundingSphere = MAP_RAYCAST_SPHERE;
     inst.instanceMatrix.needsUpdate = true;
-    inst.computeBoundingSphere();
     group.add(inst);
   });
 
@@ -400,9 +482,13 @@ export function createSeasonalFoliageSystem(
   });
   disposables.push(pineTrunkGeo, pineTrunkMat, pineCrownGeo, pineCrownMat);
 
-  const pCount = Math.max(1, pineSpots.length);
-  const pineTrunks = new THREE.InstancedMesh(pineTrunkGeo, pineTrunkMat, pCount);
-  const pineCrowns = new THREE.InstancedMesh(pineCrownGeo, pineCrownMat, pCount);
+  const pCap = Math.max(1, pineSpots.length + EXTRA_TREE_CAPACITY);
+  const pineTrunks = new THREE.InstancedMesh(pineTrunkGeo, pineTrunkMat, pCap);
+  const pineCrowns = new THREE.InstancedMesh(pineCrownGeo, pineCrownMat, pCap);
+  pineTrunks.count = pineSpots.length;
+  pineCrowns.count = pineSpots.length;
+  pineTrunks.userData.sandboxTreeKind = 'pine';
+  pineCrowns.userData.sandboxTreeKind = 'pine';
   pineTrunks.castShadow = false;
   pineCrowns.castShadow = true;
   pineCrowns.receiveShadow = true;
@@ -411,6 +497,27 @@ export function createSeasonalFoliageSystem(
   pineSpots.forEach((spot, i) => {
     const gy = getTerrainHeightAt(spot.x, spot.z);
     pineBaseY.push(gy);
+    const slot: EditableTreeSlot = {
+      id: `tree:pine:${i}`,
+      kind: 'pine',
+      label: `Fıstık Çamı #${i + 1}`,
+      index: i,
+      x: spot.x,
+      z: spot.z,
+      rotY: spot.rotY,
+      scale: spot.scale,
+      heightScale: spot.heightScale,
+      variant: spot.variant,
+      defaultX: spot.x,
+      defaultZ: spot.z,
+      defaultRotY: spot.rotY,
+      defaultScale: spot.scale,
+      deleted: false,
+      isCustom: false,
+      liftY: 0,
+    };
+    pineSlots.push(slot);
+    treeSlotMap.set(slot.id, slot);
     dummy.position.set(spot.x, gy, spot.z);
     dummy.rotation.set(0, spot.rotY, 0);
     dummy.scale.set(spot.scale, spot.scale * spot.heightScale, spot.scale);
@@ -418,11 +525,12 @@ export function createSeasonalFoliageSystem(
     pineTrunks.setMatrixAt(i, dummy.matrix);
     pineCrowns.setMatrixAt(i, dummy.matrix);
   });
-  pineTrunks.instanceMatrix.needsUpdate = true;
-  pineCrowns.instanceMatrix.needsUpdate = true;
-  pineTrunks.computeBoundingSphere();
-  pineCrowns.computeBoundingSphere();
-  group.add(pineTrunks, pineCrowns);
+  [pineTrunks, pineCrowns].forEach((inst) => {
+    inst.frustumCulled = false;
+    inst.boundingSphere = MAP_RAYCAST_SPHERE;
+    inst.instanceMatrix.needsUpdate = true;
+    group.add(inst);
+  });
 
   // --- 3. Boulevard Palms ---
   const palmParts: THREE.BufferGeometry[] = [];
@@ -451,9 +559,13 @@ export function createSeasonalFoliageSystem(
   const palmCrownMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.72 });
   disposables.push(palmCrownGeo, palmTrunkGeo, palmTrunkMat, palmCrownMat);
 
-  const palmCount = Math.max(1, palmSpots.length);
-  const palmTrunks = new THREE.InstancedMesh(palmTrunkGeo, palmTrunkMat, palmCount);
-  const palmCrowns = new THREE.InstancedMesh(palmCrownGeo, palmCrownMat, palmCount);
+  const palmCap = Math.max(1, palmSpots.length + EXTRA_TREE_CAPACITY);
+  const palmTrunks = new THREE.InstancedMesh(palmTrunkGeo, palmTrunkMat, palmCap);
+  const palmCrowns = new THREE.InstancedMesh(palmCrownGeo, palmCrownMat, palmCap);
+  palmTrunks.count = palmSpots.length;
+  palmCrowns.count = palmSpots.length;
+  palmTrunks.userData.sandboxTreeKind = 'palm';
+  palmCrowns.userData.sandboxTreeKind = 'palm';
   palmTrunks.castShadow = false;
   palmCrowns.castShadow = true;
 
@@ -461,6 +573,27 @@ export function createSeasonalFoliageSystem(
   palmSpots.forEach((spot, i) => {
     const gy = getTerrainHeightAt(spot.x, spot.z);
     palmBaseY.push(gy);
+    const slot: EditableTreeSlot = {
+      id: `tree:palm:${i}`,
+      kind: 'palm',
+      label: `Bulvar Palmiyesi #${i + 1}`,
+      index: i,
+      x: spot.x,
+      z: spot.z,
+      rotY: spot.rotY,
+      scale: spot.scale,
+      heightScale: spot.heightScale,
+      variant: spot.variant,
+      defaultX: spot.x,
+      defaultZ: spot.z,
+      defaultRotY: spot.rotY,
+      defaultScale: spot.scale,
+      deleted: false,
+      isCustom: false,
+      liftY: 0,
+    };
+    palmSlots.push(slot);
+    treeSlotMap.set(slot.id, slot);
     dummy.position.set(spot.x, gy, spot.z);
     dummy.rotation.set(0, spot.rotY, 0);
     dummy.scale.setScalar(spot.scale);
@@ -468,11 +601,12 @@ export function createSeasonalFoliageSystem(
     palmTrunks.setMatrixAt(i, dummy.matrix);
     palmCrowns.setMatrixAt(i, dummy.matrix);
   });
-  palmTrunks.instanceMatrix.needsUpdate = true;
-  palmCrowns.instanceMatrix.needsUpdate = true;
-  palmTrunks.computeBoundingSphere();
-  palmCrowns.computeBoundingSphere();
-  group.add(palmTrunks, palmCrowns);
+  [palmTrunks, palmCrowns].forEach((inst) => {
+    inst.frustumCulled = false;
+    inst.boundingSphere = MAP_RAYCAST_SPHERE;
+    inst.instanceMatrix.needsUpdate = true;
+    group.add(inst);
+  });
 
   // --- 4. Seasonal Flowering Shrubs ---
   const shrubGeo = new THREE.IcosahedronGeometry(0.55, 1);
@@ -565,9 +699,252 @@ export function createSeasonalFoliageSystem(
   let lastAutumnW = -1;
   let lastWinterW = -1;
   let lastFrost = -1;
+  let customTreeSeq = 1;
+
+  const syncSlotMatrix = (slot: EditableTreeSlot) => {
+    if (slot.deleted) {
+      dummy.position.set(0, -999, 0);
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.set(0, 0, 0);
+      dummy.updateMatrix();
+    } else {
+      const gy = getTerrainHeightAt(slot.x, slot.z);
+      if (slot.kind === 'broadleaf') broadleafBaseY[slot.index] = gy;
+      else if (slot.kind === 'pine') pineBaseY[slot.index] = gy;
+      else palmBaseY[slot.index] = gy;
+
+      dummy.position.set(slot.x, gy + slot.liftY, slot.z);
+      dummy.rotation.set(0, slot.rotY, 0);
+      if (slot.kind === 'palm') {
+        dummy.scale.setScalar(slot.scale);
+      } else {
+        dummy.scale.set(slot.scale, slot.scale * slot.heightScale, slot.scale);
+      }
+      dummy.updateMatrix();
+    }
+
+    if (slot.kind === 'broadleaf') {
+      blTrunks.setMatrixAt(slot.index, dummy.matrix);
+      blCrowns.setMatrixAt(slot.index, dummy.matrix);
+      blStones.setMatrixAt(slot.index, dummy.matrix);
+      blMounds.setMatrixAt(slot.index, dummy.matrix);
+      blBirds.setMatrixAt(slot.index, dummy.matrix);
+      blTrunks.instanceMatrix.needsUpdate = true;
+      blCrowns.instanceMatrix.needsUpdate = true;
+      blStones.instanceMatrix.needsUpdate = true;
+      blMounds.instanceMatrix.needsUpdate = true;
+      blBirds.instanceMatrix.needsUpdate = true;
+    } else if (slot.kind === 'pine') {
+      pineTrunks.setMatrixAt(slot.index, dummy.matrix);
+      pineCrowns.setMatrixAt(slot.index, dummy.matrix);
+      pineTrunks.instanceMatrix.needsUpdate = true;
+      pineCrowns.instanceMatrix.needsUpdate = true;
+    } else {
+      palmTrunks.setMatrixAt(slot.index, dummy.matrix);
+      palmCrowns.setMatrixAt(slot.index, dummy.matrix);
+      palmTrunks.instanceMatrix.needsUpdate = true;
+      palmCrowns.instanceMatrix.needsUpdate = true;
+    }
+  };
+
+  const spawnCustomTree = (
+    kind: SandboxTreeKind,
+    x: number,
+    z: number,
+    scale = 1.0,
+    rotY = 0,
+    forcedId?: string
+  ): EditableTreeSlot | null => {
+    const cx = THREE.MathUtils.clamp(x, -216, 190);
+    const cz = THREE.MathUtils.clamp(z, -134, 106);
+    const sc = THREE.MathUtils.clamp(scale, 0.5, 2.2);
+
+    const arr = kind === 'broadleaf' ? blSlots : kind === 'pine' ? pineSlots : palmSlots;
+    const cap = kind === 'broadleaf' ? blCap : kind === 'pine' ? pCap : palmCap;
+    const baseYArr = kind === 'broadleaf' ? broadleafBaseY : kind === 'pine' ? pineBaseY : palmBaseY;
+
+    // Reuse a previously deleted custom slot if capacity is full
+    let slotIndex = arr.length;
+    if (slotIndex >= cap) {
+      const reusable = arr.find((s) => s.isCustom && s.deleted);
+      if (!reusable) return null;
+      treeSlotMap.delete(reusable.id);
+      slotIndex = reusable.index;
+    }
+
+    const id = forcedId ?? `custom_tree_${kind}_${Date.now().toString(36)}_${customTreeSeq++}`;
+    const label =
+      kind === 'broadleaf'
+        ? 'Eklenen Çınar / Zeytin'
+        : kind === 'pine'
+          ? 'Eklenen Fıstık Çamı'
+          : 'Eklenen Bulvar Palmiyesi';
+
+    const slot: EditableTreeSlot = {
+      id,
+      kind,
+      label,
+      index: slotIndex,
+      x: cx,
+      z: cz,
+      rotY,
+      scale: sc,
+      heightScale: kind === 'palm' ? 1 : 1.02,
+      variant: slotIndex,
+      defaultX: cx,
+      defaultZ: cz,
+      defaultRotY: rotY,
+      defaultScale: sc,
+      deleted: false,
+      isCustom: true,
+      liftY: 0,
+    };
+
+    if (slotIndex === arr.length) {
+      arr.push(slot);
+      baseYArr.push(getTerrainHeightAt(cx, cz));
+      if (kind === 'broadleaf') {
+        blTrunks.count = arr.length;
+        blCrowns.count = arr.length;
+        blStones.count = arr.length;
+        blMounds.count = arr.length;
+        blBirds.count = arr.length;
+      } else if (kind === 'pine') {
+        pineTrunks.count = arr.length;
+        pineCrowns.count = arr.length;
+      } else {
+        palmTrunks.count = arr.length;
+        palmCrowns.count = arr.length;
+      }
+    } else {
+      arr[slotIndex] = slot;
+    }
+
+    treeSlotMap.set(id, slot);
+    syncSlotMatrix(slot);
+    colorsDirty = true;
+    return slot;
+  };
+
+  const isSlotEdited = (s: EditableTreeSlot): boolean => {
+    if (s.isCustom) return !s.deleted;
+    if (s.deleted) return true;
+    return (
+      Math.hypot(s.x - s.defaultX, s.z - s.defaultZ) > 0.15 ||
+      Math.abs(s.scale - s.defaultScale) > 0.03 ||
+      Math.abs(s.rotY - s.defaultRotY) > 0.05
+    );
+  };
 
   return {
     group,
+    getTreeRaycastTargets: () => [
+      blCrowns,
+      blTrunks,
+      pineCrowns,
+      pineTrunks,
+      palmCrowns,
+      palmTrunks,
+    ],
+    getTreeByInstance: (kind, instanceId) => {
+      const arr = kind === 'broadleaf' ? blSlots : kind === 'pine' ? pineSlots : palmSlots;
+      const slot = arr[instanceId];
+      if (!slot || slot.deleted) return null;
+      return slot;
+    },
+    getTree: (id) => treeSlotMap.get(id) ?? null,
+    getAllTrees: () => [...blSlots, ...pineSlots, ...palmSlots],
+    setTreeTransform: (id, x, z, rotY, scale, liftY = 0) => {
+      const slot = treeSlotMap.get(id);
+      if (!slot || slot.deleted) return null;
+      slot.x = THREE.MathUtils.clamp(x, -216, 190);
+      slot.z = THREE.MathUtils.clamp(z, -134, 106);
+      slot.rotY = rotY;
+      slot.scale = THREE.MathUtils.clamp(scale, 0.5, 2.2);
+      slot.liftY = liftY;
+      syncSlotMatrix(slot);
+      return slot;
+    },
+    setTreeDeleted: (id, deleted) => {
+      const slot = treeSlotMap.get(id);
+      if (!slot) return false;
+      slot.deleted = deleted;
+      slot.liftY = 0;
+      syncSlotMatrix(slot);
+      if (!deleted) colorsDirty = true;
+      return true;
+    },
+    spawnCustomTree,
+    resetTree: (id) => {
+      const slot = treeSlotMap.get(id);
+      if (!slot) return false;
+      if (slot.isCustom) {
+        slot.deleted = true;
+        slot.liftY = 0;
+        syncSlotMatrix(slot);
+        return true;
+      }
+      slot.x = slot.defaultX;
+      slot.z = slot.defaultZ;
+      slot.rotY = slot.defaultRotY;
+      slot.scale = slot.defaultScale;
+      slot.deleted = false;
+      slot.liftY = 0;
+      syncSlotMatrix(slot);
+      colorsDirty = true;
+      return true;
+    },
+    resetAllTrees: () => {
+      treeSlotMap.forEach((slot) => {
+        if (slot.isCustom) {
+          slot.deleted = true;
+        } else {
+          slot.x = slot.defaultX;
+          slot.z = slot.defaultZ;
+          slot.rotY = slot.defaultRotY;
+          slot.scale = slot.defaultScale;
+          slot.deleted = false;
+        }
+        slot.liftY = 0;
+        syncSlotMatrix(slot);
+      });
+      colorsDirty = true;
+    },
+    exportTreeOverrides: () => {
+      const out: SandboxTreeOverrideEntry[] = [];
+      treeSlotMap.forEach((slot) => {
+        if (!isSlotEdited(slot)) return;
+        out.push({
+          id: slot.id,
+          kind: slot.kind,
+          x: Math.round(slot.x * 100) / 100,
+          z: Math.round(slot.z * 100) / 100,
+          rotY: Math.round(slot.rotY * 1000) / 1000,
+          scale: Math.round(slot.scale * 100) / 100,
+          deleted: slot.deleted || undefined,
+          isCustom: slot.isCustom || undefined,
+        });
+      });
+      return out;
+    },
+    hydrateTreeOverrides: (entries) => {
+      for (const entry of entries) {
+        if (!entry || typeof entry.id !== 'string') continue;
+        const existing = treeSlotMap.get(entry.id);
+        if (existing) {
+          existing.x = THREE.MathUtils.clamp(entry.x, -216, 190);
+          existing.z = THREE.MathUtils.clamp(entry.z, -134, 106);
+          existing.rotY = entry.rotY;
+          existing.scale = THREE.MathUtils.clamp(entry.scale, 0.5, 2.2);
+          existing.deleted = Boolean(entry.deleted);
+          existing.liftY = 0;
+          syncSlotMatrix(existing);
+        } else if (entry.isCustom && !entry.deleted) {
+          spawnCustomTree(entry.kind, entry.x, entry.z, entry.scale, entry.rotY, entry.id);
+        }
+      }
+      colorsDirty = true;
+    },
     update: (dt: number, elapsed: number, state: SeasonalAtmosphereState) => {
       const rate = Math.min(1, dt * 1.4);
       seasonW.spring = THREE.MathUtils.lerp(seasonW.spring, state.season === 'spring' ? 1 : 0, rate);
@@ -595,7 +972,6 @@ export function createSeasonalFoliageSystem(
       }
 
       if (colorsDirty) {
-        // Update Trunk & Base Mound Colors only when season/frost shifts
         trunkMat.color.copy(cBarkNormal).lerp(cBarkWinter, snowBlend * 0.72);
         moundMat.color
           .copy(cMoundGreen)
@@ -608,7 +984,6 @@ export function createSeasonalFoliageSystem(
       if (shouldUpdateMatrices) {
         swayAccum = 0;
 
-        // Update Broadleaf Instances (wind sway + winter leaf-drop + perched birds)
         const showCrowns = leafPresence > 0.03;
         const showBirds = winterBirdPresence > 0.03;
         blCrowns.visible = showCrowns;
@@ -618,12 +993,13 @@ export function createSeasonalFoliageSystem(
         let pineMoved = colorsDirty;
         let palmMoved = colorsDirty;
 
-        for (let i = 0; i < broadleafSpots.length; i++) {
-          const spot = broadleafSpots[i];
+        for (let i = 0; i < blSlots.length; i++) {
+          const spot = blSlots[i];
+          if (spot.deleted) continue;
           const dx = spot.x - state.lookX;
           const dz = spot.z - state.lookZ;
           if (!colorsDirty && dx * dx + dz * dz > maxSwayDistSq) continue;
-          const gy = broadleafBaseY[i];
+          const gy = broadleafBaseY[i] + spot.liftY;
           const swayZ = Math.sin(elapsed * (1.2 + state.windStrength * 0.45) + i * 0.7) * 0.025 * state.windStrength;
           const swayX = Math.cos(elapsed * 1.05 + i * 1.1) * 0.018 * state.windStrength;
 
@@ -656,13 +1032,13 @@ export function createSeasonalFoliageSystem(
         if (showBirds && blMoved) blBirds.instanceMatrix.needsUpdate = true;
         if (colorsDirty && blCrowns.instanceColor) blCrowns.instanceColor.needsUpdate = true;
 
-        // Update Low-Poly Tiered Pines (gentle wind sway + snow frosting)
-        for (let i = 0; i < pineSpots.length; i++) {
-          const spot = pineSpots[i];
+        for (let i = 0; i < pineSlots.length; i++) {
+          const spot = pineSlots[i];
+          if (spot.deleted) continue;
           const dx = spot.x - state.lookX;
           const dz = spot.z - state.lookZ;
           if (!colorsDirty && dx * dx + dz * dz > maxSwayDistSq) continue;
-          const gy = pineBaseY[i];
+          const gy = pineBaseY[i] + spot.liftY;
           const swayZ = Math.sin(elapsed * 1.4 + i * 0.9) * 0.022 * state.windStrength;
           dummy.position.set(spot.x, gy, spot.z);
           dummy.rotation.set(0, spot.rotY, swayZ);
@@ -679,13 +1055,13 @@ export function createSeasonalFoliageSystem(
         if (pineMoved) pineCrowns.instanceMatrix.needsUpdate = true;
         if (colorsDirty && pineCrowns.instanceColor) pineCrowns.instanceColor.needsUpdate = true;
 
-        // Update Palms & Shrubs
-        for (let i = 0; i < palmSpots.length; i++) {
-          const spot = palmSpots[i];
+        for (let i = 0; i < palmSlots.length; i++) {
+          const spot = palmSlots[i];
+          if (spot.deleted) continue;
           const dx = spot.x - state.lookX;
           const dz = spot.z - state.lookZ;
           if (!colorsDirty && dx * dx + dz * dz > maxSwayDistSq) continue;
-          const gy = palmBaseY[i];
+          const gy = palmBaseY[i] + spot.liftY;
           const swayZ = Math.sin(elapsed * 1.5 + i * 0.6) * 0.03 * state.windStrength;
           dummy.position.set(spot.x, gy, spot.z);
           dummy.rotation.set(0, spot.rotY, swayZ);

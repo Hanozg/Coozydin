@@ -30,6 +30,9 @@ function finalizeTexture(
 export interface ProceduralTextureSet {
   asphalt: THREE.CanvasTexture;
   cobblestone: THREE.CanvasTexture;
+  dirtRoad: THREE.CanvasTexture;
+  gravelRoad: THREE.CanvasTexture;
+  brickRoad: THREE.CanvasTexture;
   almasik: THREE.CanvasTexture;
   travertine: THREE.CanvasTexture;
   terracottaRoof: THREE.CanvasTexture;
@@ -42,6 +45,9 @@ export interface ProceduralTextureSet {
   dirtPath: THREE.CanvasTexture;
   stuccoGrain: THREE.CanvasTexture;
   stripedAwning: THREE.CanvasTexture;
+  beachSand: THREE.CanvasTexture;
+  seaWater: THREE.CanvasTexture;
+  woodDeck: THREE.CanvasTexture;
   industrialBrick: THREE.CanvasTexture;
   ancientSignpost: THREE.CanvasTexture;
   contactShadow: THREE.CanvasTexture;
@@ -94,6 +100,97 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
     }
   }
   const cobblestone = finalizeTexture(cobCanvas, aniso, 2, 2, true);
+
+  // 2b. Sunlit Aydın Country Dirt Road (compacted wheel ruts + ochre earth & pebbles)
+  const [dirtRdCanvas, dirtRdCtx] = makeCanvas(256, 256);
+  dirtRdCtx.fillStyle = '#C29B6B';
+  dirtRdCtx.fillRect(0, 0, 256, 256);
+  // Subtle grassy-ochre shoulder tint along left/right edges (U=0 and U=1)
+  const edgeGradL = dirtRdCtx.createLinearGradient(0, 0, 38, 0);
+  edgeGradL.addColorStop(0, 'rgba(136, 134, 84, 0.42)');
+  edgeGradL.addColorStop(1, 'rgba(136, 134, 84, 0)');
+  dirtRdCtx.fillStyle = edgeGradL;
+  dirtRdCtx.fillRect(0, 0, 38, 256);
+  const edgeGradR = dirtRdCtx.createLinearGradient(256, 0, 218, 0);
+  edgeGradR.addColorStop(0, 'rgba(136, 134, 84, 0.42)');
+  edgeGradR.addColorStop(1, 'rgba(136, 134, 84, 0)');
+  dirtRdCtx.fillStyle = edgeGradR;
+  dirtRdCtx.fillRect(218, 0, 38, 256);
+  // Compacted twin wheel tracks along the road length
+  dirtRdCtx.fillStyle = 'rgba(132, 94, 56, 0.24)';
+  dirtRdCtx.fillRect(58, 0, 36, 256);
+  dirtRdCtx.fillRect(162, 0, 36, 256);
+  dirtRdCtx.fillStyle = 'rgba(222, 194, 148, 0.22)';
+  dirtRdCtx.fillRect(110, 0, 36, 256);
+  for (let i = 0; i < 4200; i++) {
+    const x = (i * 79) % 256;
+    const y = (i * 131) % 256;
+    const v = ((i * 23) % 34) - 17;
+    dirtRdCtx.fillStyle = `rgb(${194 + v}, ${154 + Math.floor(v * 0.85)}, ${105 + Math.floor(v * 0.65)})`;
+    dirtRdCtx.fillRect(x, y, 2, 2);
+  }
+  for (let i = 0; i < 180; i++) {
+    const x = (i * 97 + 13) % 256;
+    const y = (i * 53 + 7) % 256;
+    const r = 1.2 + (i % 3) * 0.7;
+    dirtRdCtx.fillStyle = i % 2 === 0 ? '#A58258' : '#D9BC90';
+    dirtRdCtx.beginPath();
+    dirtRdCtx.arc(x, y, r, 0, Math.PI * 2);
+    dirtRdCtx.fill();
+  }
+  const dirtRoad = finalizeTexture(dirtRdCanvas, aniso, 1, 2, true);
+
+  // 2c. Crushed Aegean Limestone Gravel Road (Stabilize / Çakıl)
+  const [gravCanvas, gravCtx] = makeCanvas(256, 256);
+  gravCtx.fillStyle = '#9D978C';
+  gravCtx.fillRect(0, 0, 256, 256);
+  gravCtx.fillStyle = 'rgba(118, 112, 102, 0.24)';
+  gravCtx.fillRect(54, 0, 42, 256);
+  gravCtx.fillRect(160, 0, 42, 256);
+  for (let i = 0; i < 5500; i++) {
+    const x = (i * 67) % 256;
+    const y = (i * 149) % 256;
+    const shade = 128 + ((i * 29) % 62);
+    gravCtx.fillStyle = `rgb(${shade + 6}, ${shade + 2}, ${shade - 5})`;
+    gravCtx.fillRect(x, y, 2 + (i % 2), 2);
+  }
+  for (let i = 0; i < 320; i++) {
+    const x = (i * 109 + 17) % 256;
+    const y = (i * 71 + 11) % 256;
+    const r = 1.4 + (i % 3) * 0.75;
+    gravCtx.fillStyle = i % 3 === 0 ? '#C9C2B6' : i % 3 === 1 ? '#7B756C' : '#B2ABA0';
+    gravCtx.beginPath();
+    gravCtx.arc(x, y, r, 0, Math.PI * 2);
+    gravCtx.fill();
+  }
+  const gravelRoad = finalizeTexture(gravCanvas, aniso, 2, 2, true);
+
+  // 2d. Interlocking Terracotta Paving Stones (Kırmızı Kilit Taşı)
+  const [brkRdCanvas, brkRdCtx] = makeCanvas(256, 256);
+  brkRdCtx.fillStyle = '#735748';
+  brkRdCtx.fillRect(0, 0, 256, 256);
+  const bRows = 16;
+  const bCols = 8;
+  const bH = 256 / bRows;
+  const bW = 256 / bCols;
+  for (let r = 0; r < bRows; r++) {
+    const shift = (r % 2) * (bW * 0.5);
+    for (let c = -1; c <= bCols; c++) {
+      const x = c * bW + shift + 1.5;
+      const y = r * bH + 1.5;
+      const isAccent = (r + c) % 5 === 0;
+      const v = ((r * 23 + c * 37) % 20) - 10;
+      if (isAccent) {
+        brkRdCtx.fillStyle = `rgb(${194 + v}, ${160 + Math.floor(v * 0.7)}, ${128 + Math.floor(v * 0.5)})`;
+      } else {
+        brkRdCtx.fillStyle = `rgb(${176 + v}, ${96 + Math.floor(v * 0.6)}, ${72 + Math.floor(v * 0.5)})`;
+      }
+      brkRdCtx.beginPath();
+      brkRdCtx.roundRect(x, y, bW - 3, bH - 3, 2.5);
+      brkRdCtx.fill();
+    }
+  }
+  const brickRoad = finalizeTexture(brkRdCanvas, aniso, 2, 2, true);
 
   // 3. Almaşık Duvar (Alternating Stone & Ottoman Brick - Nasuh Paşa Külliyesi)
   const [almCanvas, almCtx] = makeCanvas(256, 256);
@@ -341,9 +438,91 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
   const contactShadow = new THREE.CanvasTexture(shadCanvas);
   contactShadow.needsUpdate = true;
 
+  // 11. Golden Aegean Beach Sand (wind ripples + fine quartz & shell flecks)
+  const [sandCanvas, sandCtx] = makeCanvas(256, 256);
+  sandCtx.fillStyle = '#EED49B';
+  sandCtx.fillRect(0, 0, 256, 256);
+  for (let y = 0; y < 256; y += 16) {
+    const gradWave = sandCtx.createLinearGradient(0, y, 0, y + 16);
+    gradWave.addColorStop(0, 'rgba(255, 245, 214, 0.24)');
+    gradWave.addColorStop(0.5, 'rgba(210, 174, 114, 0.14)');
+    gradWave.addColorStop(1, 'rgba(255, 245, 214, 0.24)');
+    sandCtx.fillStyle = gradWave;
+    sandCtx.fillRect(0, y, 256, 16);
+  }
+  for (let i = 0; i < 4200; i++) {
+    const x = (i * 89) % 256;
+    const y = (i * 151) % 256;
+    const v = 212 + ((i * 23) % 36);
+    sandCtx.fillStyle =
+      i % 19 === 0
+        ? 'rgba(255, 250, 238, 0.72)'
+        : `rgb(${Math.min(252, v + 14)}, ${Math.min(236, v - 4)}, ${Math.max(122, v - 58)})`;
+    sandCtx.fillRect(x, y, i % 13 === 0 ? 2 : 1, 1);
+  }
+  const beachSand = finalizeTexture(sandCanvas, aniso, 2, 2, true);
+
+  // 12. Sunlit Aegean Turquoise Sea Water (caustic light ribbons & gentle foam shimmer)
+  const [seaCanvas, seaCtx] = makeCanvas(256, 256);
+  const seaGrad = seaCtx.createLinearGradient(0, 0, 0, 256);
+  seaGrad.addColorStop(0, '#1893B6');
+  seaGrad.addColorStop(0.5, '#25B1CE');
+  seaGrad.addColorStop(1, '#3CC4D8');
+  seaCtx.fillStyle = seaGrad;
+  seaCtx.fillRect(0, 0, 256, 256);
+  seaCtx.strokeStyle = 'rgba(185, 244, 252, 0.32)';
+  seaCtx.lineWidth = 3;
+  for (let row = 0; row < 10; row++) {
+    const baseY = row * 26 + 12;
+    seaCtx.beginPath();
+    for (let x = 0; x <= 256; x += 16) {
+      const wy = baseY + Math.sin((x / 256) * Math.PI * 4 + row * 1.1) * 5;
+      if (x === 0) seaCtx.moveTo(x, wy);
+      else seaCtx.lineTo(x, wy);
+    }
+    seaCtx.stroke();
+  }
+  for (let i = 0; i < 320; i++) {
+    const x = (i * 67) % 256;
+    const y = (i * 113) % 256;
+    seaCtx.fillStyle =
+      i % 5 === 0 ? 'rgba(240, 253, 255, 0.48)' : 'rgba(14, 118, 152, 0.22)';
+    seaCtx.fillRect(x, y, 6 + (i % 7), 2);
+  }
+  const seaWater = finalizeTexture(seaCanvas, aniso, 2, 2, true);
+
+  // 13. Sun-Bleached Teak Pier & Cabana Wood Deck
+  const [deckCanvas, deckCtx] = makeCanvas(256, 256);
+  deckCtx.fillStyle = '#B78554';
+  deckCtx.fillRect(0, 0, 256, 256);
+  const plankCount = 8;
+  const plankH = 256 / plankCount;
+  for (let p = 0; p < plankCount; p++) {
+    const y = p * plankH;
+    const shift = ((p * 29) % 18) - 9;
+    deckCtx.fillStyle = `rgb(${182 + shift}, ${134 + shift}, ${86 + Math.round(shift * 0.7)})`;
+    deckCtx.fillRect(0, y + 1, 256, plankH - 2);
+    deckCtx.fillStyle = 'rgba(72, 46, 26, 0.45)';
+    deckCtx.fillRect(0, y, 256, 2);
+    // Subtle wood grain streaks
+    deckCtx.fillStyle = 'rgba(105, 68, 38, 0.16)';
+    for (let g = 0; g < 6; g++) {
+      const gy = y + 4 + ((g * 5 + p * 3) % (plankH - 6));
+      deckCtx.fillRect(0, gy, 256, 1);
+    }
+    // Plank joint seam
+    const seamX = ((p * 97 + 42) % 220) + 18;
+    deckCtx.fillStyle = 'rgba(66, 42, 22, 0.48)';
+    deckCtx.fillRect(seamX, y, 2, plankH);
+  }
+  const woodDeck = finalizeTexture(deckCanvas, aniso, 2, 2, true);
+
   return {
     asphalt,
     cobblestone,
+    dirtRoad,
+    gravelRoad,
+    brickRoad,
     almasik,
     travertine,
     terracottaRoof,
@@ -356,12 +535,18 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
     dirtPath,
     stuccoGrain,
     stripedAwning,
+    beachSand,
+    seaWater,
+    woodDeck,
     industrialBrick,
     ancientSignpost,
     contactShadow,
     dispose: () => {
       asphalt.dispose();
       cobblestone.dispose();
+      dirtRoad.dispose();
+      gravelRoad.dispose();
+      brickRoad.dispose();
       almasik.dispose();
       travertine.dispose();
       terracottaRoof.dispose();
@@ -374,6 +559,9 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
       dirtPath.dispose();
       stuccoGrain.dispose();
       stripedAwning.dispose();
+      beachSand.dispose();
+      seaWater.dispose();
+      woodDeck.dispose();
       industrialBrick.dispose();
       ancientSignpost.dispose();
       contactShadow.dispose();

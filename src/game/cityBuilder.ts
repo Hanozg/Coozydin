@@ -30,6 +30,7 @@ import { CityMaterialLibrary } from './materials';
 import { mergeStaticGroupMeshes } from './meshMerge';
 import { PerchSystem } from './perchSystem';
 import { buildMainRoadSignposts } from './roadSignposts';
+import { createSandboxManager, SandboxManager } from './sandboxManager';
 import { SeasonalAtmosphereState, SeasonalFoliageSystem } from './seasonalFoliage';
 import { buildNeighborhoodsAndProps } from './world/neighborhoodsAndProps';
 import { buildRoadNetwork } from './world/roadNetwork';
@@ -39,6 +40,7 @@ export interface BuiltCity {
   group: THREE.Group;
   landmarks: BuiltLandmark[];
   colliders: ColliderBox[];
+  sandbox: SandboxManager;
   figTree: LivingFigTree;
   pedestrians: PedestrianSystem;
   trafficLights: TrafficLightSystem;
@@ -82,12 +84,15 @@ export function buildEfelerCity(
     localDisposables,
   });
 
-  // 5. Seam-Clipped Polyline Road Network, Curbs, Sidewalks & Crosswalks
-  buildRoadNetwork({
-    staticWorldGroup,
+  // 5. Seam-Clipped Polyline Road Network, Curbs, Sidewalks & Crosswalks (dynamic for Sandbox editing)
+  const roadNetwork = buildRoadNetwork({
+    group,
     mats,
     localDisposables,
   });
+
+  const sandbox = createSandboxManager(group, colliders);
+  sandbox.bindRoadNetwork(roadNetwork);
 
   // 6. Authentic Historical & Modern Efeler Landmarks
   const landmarks = buildAllLandmarks(LANDMARKS, mats);
@@ -95,12 +100,36 @@ export function buildEfelerCity(
     group.add(lm.group);
     group.add(lm.ringMesh);
     colliders.push(...lm.colliders);
+    sandbox.registerBuilding({
+      id: `landmark:${lm.def.id}`,
+      label: lm.def.name,
+      category: 'landmark',
+      group: lm.group,
+      x: lm.def.position[0],
+      z: lm.def.position[2],
+      rotY: lm.group.rotation.y,
+      colliders: lm.colliders,
+      ringMesh: lm.ringMesh,
+    });
   });
 
   // 7. Living World Additions: Fig Tree, Pedestrians, Traffic Lights, Steam Train, Ambient Traffic & Signposts
   const figTree = createLivingFigTree(mats);
   group.add(figTree.group);
-  colliders.push({ minX: -2.7, maxX: 2.7, minZ: 17.1, maxZ: 22.5 });
+  const figTreeCollider: ColliderBox = { minX: -2.7, maxX: 2.7, minZ: 17.1, maxZ: 22.5 };
+  colliders.push(figTreeCollider);
+  sandbox.registerBuilding({
+    id: 'landmark:fig_tree',
+    label: 'Atatürk Meydanı İncir Ağacı',
+    category: 'landmark',
+    group: figTree.group,
+    x: 0,
+    z: 19.8,
+    rotY: 0,
+    colliders: [figTreeCollider],
+    footprintW: 5.8,
+    footprintD: 5.8,
+  });
 
   const pedestrians = createPedestrianSystem();
   group.add(pedestrians.group);
@@ -146,7 +175,12 @@ export function buildEfelerCity(
     crumbSpots,
     initialHouseExterior,
     localDisposables,
+    sandbox,
   });
+
+  // Bind editable foliage & restore any user-arranged sandbox buildings, trees, and roads
+  sandbox.bindFoliage(neighborhoods.foliage);
+  sandbox.hydrateFromStorage();
 
   mergeStaticGroupMeshes(staticWorldGroup);
 
@@ -185,6 +219,7 @@ export function buildEfelerCity(
     group,
     landmarks,
     colliders,
+    sandbox,
     figTree,
     pedestrians,
     trafficLights,
@@ -300,6 +335,24 @@ export function buildEfelerCity(
           2.5,
           dt
         );
+        mats.dirtRoad.roughness = THREE.MathUtils.damp(
+          mats.dirtRoad.roughness,
+          0.94 - state.wetFactor * 0.24,
+          2.5,
+          dt
+        );
+        mats.gravelRoad.roughness = THREE.MathUtils.damp(
+          mats.gravelRoad.roughness,
+          0.9 - state.wetFactor * 0.28,
+          2.5,
+          dt
+        );
+        mats.brickRoad.roughness = THREE.MathUtils.damp(
+          mats.brickRoad.roughness,
+          0.82 - state.wetFactor * 0.35,
+          2.5,
+          dt
+        );
         mats.sidewalk.roughness = THREE.MathUtils.damp(
           mats.sidewalk.roughness,
           0.84 - state.wetFactor * 0.32,
@@ -309,6 +362,8 @@ export function buildEfelerCity(
       };
     })(),
     dispose: () => {
+      sandbox.dispose();
+      roadNetwork.dispose();
       group.traverse((obj) => {
         if ((obj as THREE.Mesh).isMesh) {
           const geo = (obj as THREE.Mesh).geometry;

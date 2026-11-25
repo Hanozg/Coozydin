@@ -1,3 +1,5 @@
+import type { TradeProfileState } from './trade';
+
 export type GamePhase = 'title' | 'playing' | 'paused';
 
 export type VehicleType = 'car' | 'bicycle' | 'motorcycle';
@@ -131,6 +133,7 @@ export interface UserSavePayload {
   houseExterior: HouseExteriorConfig;
   cozyRoomState: CozyRoomState;
   agendaNotes: AgendaNote[];
+  tradeProfile?: TradeProfileState;
 }
 
 export type MuseumSurfaceType = 'marble' | 'stone' | 'mosaic' | 'dirt' | 'crypt_stone';
@@ -349,3 +352,141 @@ export interface ColliderBox {
   maxY?: number;
   roof?: RoofColliderMeta;
 }
+
+export type SandboxToolMode = 'buildings' | 'trees' | 'roads';
+
+export type SandboxBuildingCategory = 'landmark' | 'player_home' | 'house' | 'custom_house';
+
+export type SandboxCustomPropKind =
+  | 'house'
+  | 'sea_cove'
+  | 'sand_beach'
+  | 'sun_loungers'
+  | 'beach_volleyball'
+  | 'wooden_pier'
+  | 'beach_cabana'
+  | 'lifeguard_tower'
+  | 'sailboat_surf';
+
+export interface SandboxCustomHouseSpec {
+  kind?: SandboxCustomPropKind;
+  w: number;
+  d: number;
+  h: number;
+  variant: number;
+  label: string;
+}
+
+export interface SandboxPlacementEntry {
+  id: string;
+  x: number;
+  z: number;
+  rotY: number;
+  customSpec?: SandboxCustomHouseSpec;
+}
+
+export interface SandboxBuildingSummary {
+  id: string;
+  label: string;
+  category: SandboxBuildingCategory;
+  x: number;
+  z: number;
+  rotY: number;
+  defaultX: number;
+  defaultZ: number;
+  defaultRotY: number;
+  isMoved: boolean;
+  isCustom: boolean;
+}
+
+export type SandboxTreeKind = 'broadleaf' | 'pine' | 'palm';
+
+export interface SandboxTreeSummary {
+  id: string;
+  kind: SandboxTreeKind;
+  label: string;
+  x: number;
+  z: number;
+  rotY: number;
+  scale: number;
+  isMoved: boolean;
+  isCustom: boolean;
+}
+
+export interface SandboxTreeOverrideEntry {
+  id: string;
+  kind: SandboxTreeKind;
+  x: number;
+  z: number;
+  rotY: number;
+  scale: number;
+  deleted?: boolean;
+  isCustom?: boolean;
+}
+
+export type SandboxRoadSurface = 'asphalt' | 'cobble' | 'dirt' | 'gravel' | 'brick';
+
+export interface SandboxRoadSummary {
+  id: string;
+  name: string;
+  surface: SandboxRoadSurface;
+  width: number;
+  hasCenterLine: boolean;
+  hasSidewalk: boolean;
+  cornerRadius: number;
+  pointCount: number;
+  centerX: number;
+  centerZ: number;
+  isEdited: boolean;
+  isCustom: boolean;
+}
+
+export interface SandboxRoadOverrideEntry {
+  id: string;
+  name: string;
+  surface: SandboxRoadSurface;
+  width: number;
+  hasCenterLine: boolean;
+  hasSidewalk?: boolean;
+  cornerRadius?: number;
+  points: [number, number][];
+  deleted?: boolean;
+  isCustom?: boolean;
+}
+
+export interface SandboxNewRoadSpec {
+  name: string;
+  surface: SandboxRoadSurface;
+  width: number;
+  hasCenterLine: boolean;
+  hasSidewalk?: boolean;
+  cornerRadius?: number;
+  length: number;
+}
+
+export interface SandboxHudState {
+  toolMode: SandboxToolMode;
+  selectedId: string | null;
+  selectedBuilding: SandboxBuildingSummary | null;
+  selectedTreeId: string | null;
+  selectedTree: SandboxTreeSummary | null;
+  selectedRoadId: string | null;
+  selectedRoadNodeIndex: number | null;
+  selectedRoad: SandboxRoadSummary | null;
+  autoRoundCorners: boolean;
+  isDragging: boolean;
+  onRoadWarning: boolean;
+  gridSnap: boolean;
+  movedCount: number;
+  customCount: number;
+  editedTreeCount: number;
+  customTreeCount: number;
+  deletedTreeCount: number;
+  editedRoadCount: number;
+  customRoadCount: number;
+  canUndo: boolean;
+  buildings: SandboxBuildingSummary[];
+  roads: SandboxRoadSummary[];
+}
+
+

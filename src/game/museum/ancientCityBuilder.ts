@@ -536,11 +536,21 @@ export function buildAncientCity(
     plinth.castShadow = !isSoftwareGl;
     g.add(plinth);
 
-    const torus = new THREE.Mesh(
-      trackGeo(new THREE.CylinderGeometry(0.49 * radiusScale, 0.55 * radiusScale, 0.24, 16)),
-      mats.crackedMarble
-    );
-    torus.position.y = 0.38;
+    // Classical Attic column base (double torus + scotia) via LatheGeometry
+    const baseProfile = [
+      new THREE.Vector2(0.56 * radiusScale, 0.0),
+      new THREE.Vector2(0.58 * radiusScale, 0.045),
+      new THREE.Vector2(0.52 * radiusScale, 0.095),
+      new THREE.Vector2(0.46 * radiusScale, 0.145),
+      new THREE.Vector2(0.51 * radiusScale, 0.195),
+      new THREE.Vector2(0.46 * radiusScale, 0.24),
+    ];
+    const baseGeo = trackGeo(new THREE.LatheGeometry(baseProfile, 24));
+    baseGeo.computeVertexNormals();
+    const torus = new THREE.Mesh(baseGeo, mats.crackedMarble);
+    torus.position.y = 0.26;
+    torus.castShadow = !isSoftwareGl;
+    torus.receiveShadow = true;
     g.add(torus);
 
     const shaftH = Math.max(1.2, height - 0.9);
@@ -549,7 +559,7 @@ export function buildAncientCity(
         (broken ? 0.42 : 0.39) * radiusScale,
         0.46 * radiusScale,
         shaftH,
-        16,
+        24,
         spiral ? 14 : 1
       )
     );
@@ -579,11 +589,20 @@ export function buildAncientCity(
     cameraCollisionMeshes.push(shaft);
 
     if (!broken) {
-      const cap = new THREE.Mesh(
-        trackGeo(new THREE.CylinderGeometry(0.56 * radiusScale, 0.4 * radiusScale, 0.34, 16)),
-        mats.carvedFrieze
-      );
-      cap.position.y = 0.5 + shaftH + 0.17;
+      // Sculpted echinus / Corinthian bell capital via LatheGeometry
+      const capProfile = [
+        new THREE.Vector2(0.39 * radiusScale, 0.0),
+        new THREE.Vector2(0.43 * radiusScale, 0.05),
+        new THREE.Vector2(0.41 * radiusScale, 0.12),
+        new THREE.Vector2(0.48 * radiusScale, 0.24),
+        new THREE.Vector2(0.58 * radiusScale, 0.34),
+      ];
+      const capGeo = trackGeo(new THREE.LatheGeometry(capProfile, 24));
+      capGeo.computeVertexNormals();
+      const cap = new THREE.Mesh(capGeo, mats.carvedFrieze);
+      cap.position.y = 0.5 + shaftH;
+      cap.castShadow = !isSoftwareGl;
+      cap.receiveShadow = true;
       g.add(cap);
 
       const abacus = new THREE.Mesh(
@@ -591,6 +610,8 @@ export function buildAncientCity(
         mats.carvedFrieze
       );
       abacus.position.y = 0.5 + shaftH + 0.42;
+      abacus.castShadow = !isSoftwareGl;
+      abacus.receiveShadow = true;
       g.add(abacus);
     }
 
@@ -829,53 +850,118 @@ export function buildAncientCity(
     addSolidBox(1.15, 0.92, 1.15, sx, sy + 0.74, sz, mats.inscriptionStone, true, true);
     addSolidBox(1.36, 0.18, 1.36, sx, sy + 1.28, sz, mats.carvedFrieze, false, true);
 
-    // Classical draped Ephebos figure leaning calmly beside a marble support pillar
+    // Classical draped Ephebos figure leaning calmly beside a sculpted marble support pillar
     const statGroup = new THREE.Group();
     statGroup.position.set(sx, sy + 1.37, sz);
     statGroup.rotation.y = 0.65;
+    const addEphebosPart = (geo: THREE.BufferGeometry) => {
+      const m = new THREE.Mesh(trackGeo(geo), mats.statueMarble);
+      m.castShadow = !isSoftwareGl;
+      m.receiveShadow = true;
+      statGroup.add(m);
+      return m;
+    };
 
-    const supportPillar = new THREE.Mesh(
-      trackGeo(new THREE.CylinderGeometry(0.14, 0.16, 1.05, 12)),
-      mats.statueMarble
-    );
-    supportPillar.position.set(-0.26, 0.52, -0.05);
-    statGroup.add(supportPillar);
+    // Sculpted LatheGeometry marble support column with base & molded capital
+    const pillarProfile = [
+      new THREE.Vector2(0.19, 0.0),
+      new THREE.Vector2(0.17, 0.08),
+      new THREE.Vector2(0.145, 0.16),
+      new THREE.Vector2(0.13, 0.92),
+      new THREE.Vector2(0.175, 1.0),
+      new THREE.Vector2(0.18, 1.06),
+      new THREE.Vector2(0.0, 1.06),
+    ];
+    const supportPillarGeo = new THREE.LatheGeometry(pillarProfile, 24);
+    supportPillarGeo.computeVertexNormals();
+    const supportPillar = addEphebosPart(supportPillarGeo);
+    supportPillar.position.set(-0.26, 0.0, -0.05);
 
-    // Legs & contrapposto stance
-    const legGeo = trackGeo(new THREE.CylinderGeometry(0.085, 0.068, 0.78, 12));
-    const legL = new THREE.Mesh(legGeo, mats.statueMarble);
-    legL.position.set(-0.08, 0.39, 0.02);
-    statGroup.add(legL);
-    const legR = new THREE.Mesh(legGeo, mats.statueMarble);
-    legR.position.set(0.12, 0.38, 0.06);
-    legR.rotation.z = -0.08;
-    statGroup.add(legR);
+    // Contrapposto sculpted CapsuleGeometry legs with knee joints & feet
+    const thighGeo = new THREE.CapsuleGeometry(0.082, 0.28, 8, 18);
+    const shinGeo = new THREE.CapsuleGeometry(0.066, 0.28, 8, 18);
+    const jointGeo = new THREE.SphereGeometry(0.072, 16, 12);
 
-    // Draped athlete cloak (chlamys) wrapping torso & shoulders
-    const cloak = new THREE.Mesh(
-      trackGeo(new THREE.CylinderGeometry(0.24, 0.21, 0.72, 16)),
-      mats.statueMarble
-    );
-    cloak.position.set(0.0, 0.96, 0.02);
-    cloak.scale.set(1.06, 1, 0.78);
-    cloak.castShadow = !isSoftwareGl;
-    statGroup.add(cloak);
+    const thighL = addEphebosPart(thighGeo);
+    thighL.position.set(-0.08, 0.56, 0.02);
+    const kneeL = addEphebosPart(jointGeo);
+    kneeL.position.set(-0.08, 0.39, 0.03);
+    const shinL = addEphebosPart(shinGeo);
+    shinL.position.set(-0.08, 0.21, 0.02);
 
-    // Shoulders & folded meditative arms
-    const shoulders = new THREE.Mesh(
-      trackGeo(new THREE.SphereGeometry(0.24, 16, 12)),
-      mats.statueMarble
-    );
-    shoulders.position.set(0, 1.24, 0.01);
+    const thighR = addEphebosPart(thighGeo);
+    thighR.position.set(0.1, 0.56, 0.05);
+    thighR.rotation.z = -0.1;
+    const kneeR = addEphebosPart(jointGeo);
+    kneeR.position.set(0.125, 0.38, 0.07);
+    const shinR = addEphebosPart(shinGeo);
+    shinR.position.set(0.135, 0.2, 0.05);
+    shinR.rotation.z = -0.06;
+
+    // Draped athlete cloak (chlamys) sculpted with LatheGeometry + TubeGeometry folds
+    const cloakProfile = [
+      new THREE.Vector2(0.22, 0.0),
+      new THREE.Vector2(0.24, 0.22),
+      new THREE.Vector2(0.205, 0.44),
+      new THREE.Vector2(0.245, 0.68),
+      new THREE.Vector2(0.21, 0.78),
+    ];
+    const cloakGeo = new THREE.LatheGeometry(cloakProfile, 26);
+    cloakGeo.computeVertexNormals();
+    const cloak = addEphebosPart(cloakGeo);
+    cloak.position.set(0.0, 0.62, 0.02);
+    cloak.scale.set(1.06, 1.0, 0.78);
+
+    const drapeCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0.2, 1.24, 0.08),
+      new THREE.Vector3(0.02, 1.05, 0.18),
+      new THREE.Vector3(-0.22, 1.06, 0.08),
+      new THREE.Vector3(-0.28, 0.72, 0.04),
+    ]);
+    addEphebosPart(new THREE.TubeGeometry(drapeCurve, 22, 0.058, 14, false));
+
+    // Softened shoulders & folded meditative CapsuleGeometry arms
+    const shoulders = addEphebosPart(new THREE.SphereGeometry(0.24, 22, 16));
+    shoulders.position.set(0, 1.25, 0.01);
     shoulders.scale.set(1.22, 0.62, 0.76);
-    statGroup.add(shoulders);
 
-    // Sculpted neck & classical curly-haired head tilted gently downward
-    const head = new THREE.Mesh(trackGeo(new THREE.SphereGeometry(0.135, 16, 14)), mats.statueMarble);
-    head.position.set(0.02, 1.48, 0.04);
+    const armGeo = new THREE.CapsuleGeometry(0.052, 0.26, 8, 16);
+    const armL = addEphebosPart(armGeo);
+    armL.position.set(-0.22, 1.12, 0.06);
+    armL.rotation.set(-0.35, 0, 0.28);
+    const armR = addEphebosPart(armGeo);
+    armR.position.set(0.16, 1.06, 0.14);
+    armR.rotation.set(-0.75, 0, -0.45);
+
+    // Tapered LatheGeometry neck & classical curly-haired head tilted gently downward
+    const neckGeo = new THREE.LatheGeometry(
+      [
+        new THREE.Vector2(0.082, 0.0),
+        new THREE.Vector2(0.066, 0.06),
+        new THREE.Vector2(0.07, 0.115),
+      ],
+      20
+    );
+    neckGeo.computeVertexNormals();
+    const neck = addEphebosPart(neckGeo);
+    neck.position.set(0.01, 1.32, 0.02);
+
+    const head = addEphebosPart(new THREE.SphereGeometry(0.138, 24, 18));
+    head.scale.set(0.94, 1.07, 1.0);
+    head.position.set(0.02, 1.49, 0.04);
     head.rotation.x = 0.18;
-    head.castShadow = !isSoftwareGl;
-    statGroup.add(head);
+
+    const curlCrownCurve = new THREE.CatmullRomCurve3(
+      [
+        new THREE.Vector3(-0.11, 1.54, 0.08),
+        new THREE.Vector3(0.02, 1.59, 0.14),
+        new THREE.Vector3(0.14, 1.54, 0.06),
+        new THREE.Vector3(0.11, 1.5, -0.07),
+        new THREE.Vector3(-0.08, 1.5, -0.07),
+      ],
+      true
+    );
+    addEphebosPart(new THREE.TubeGeometry(curlCrownCurve, 24, 0.032, 10, true));
 
     root.add(statGroup);
   }
@@ -1131,22 +1217,50 @@ export function buildAncientCity(
       root.add(rib);
     }
 
-    // Recessed wall niches holding sculpted terracotta Roman Amphorae
+    // Recessed wall niches holding authentic LatheGeometry + TubeGeometry terracotta Roman Amphorae
+    const amphoraProfile = [
+      new THREE.Vector2(0.04, 0.0),
+      new THREE.Vector2(0.075, 0.08),
+      new THREE.Vector2(0.175, 0.28),
+      new THREE.Vector2(0.225, 0.48),
+      new THREE.Vector2(0.195, 0.64),
+      new THREE.Vector2(0.1, 0.74),
+      new THREE.Vector2(0.082, 0.87),
+      new THREE.Vector2(0.118, 0.92),
+      new THREE.Vector2(0.105, 0.95),
+      new THREE.Vector2(0.072, 0.92),
+    ];
+    const amphoraGeo = trackGeo(new THREE.LatheGeometry(amphoraProfile, 24));
+    amphoraGeo.computeVertexNormals();
+    const handleCurveL = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-0.18, 0.63, 0),
+      new THREE.Vector3(-0.23, 0.76, 0),
+      new THREE.Vector3(-0.18, 0.87, 0),
+      new THREE.Vector3(-0.09, 0.86, 0),
+    ]);
+    const handleGeoL = trackGeo(new THREE.TubeGeometry(handleCurveL, 14, 0.018, 10, false));
+    const handleCurveR = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0.18, 0.63, 0),
+      new THREE.Vector3(0.23, 0.76, 0),
+      new THREE.Vector3(0.18, 0.87, 0),
+      new THREE.Vector3(0.09, 0.86, 0),
+    ]);
+    const handleGeoR = trackGeo(new THREE.TubeGeometry(handleCurveR, 14, 0.018, 10, false));
+
     const addAmphora = (ax: number, ay: number, az: number, tilt = 0) => {
       const g = new THREE.Group();
       g.position.set(ax, ay, az);
       g.rotation.z = tilt;
-      const body = new THREE.Mesh(trackGeo(new THREE.SphereGeometry(0.24, 12, 10)), mats.terracotta);
-      body.scale.set(0.85, 1.55, 0.85);
-      body.position.y = 0.38;
-      g.add(body);
-      const neck = new THREE.Mesh(trackGeo(new THREE.CylinderGeometry(0.08, 0.11, 0.26, 10)), mats.terracotta);
-      neck.position.y = 0.78;
-      g.add(neck);
-      const rim = new THREE.Mesh(trackGeo(new THREE.TorusGeometry(0.1, 0.025, 8, 12)), mats.terracotta);
-      rim.rotation.x = Math.PI * 0.5;
-      rim.position.y = 0.91;
-      g.add(rim);
+      const vessel = new THREE.Mesh(amphoraGeo, mats.terracotta);
+      vessel.castShadow = !isSoftwareGl;
+      vessel.receiveShadow = true;
+      const hL = new THREE.Mesh(handleGeoL, mats.terracotta);
+      hL.castShadow = !isSoftwareGl;
+      hL.receiveShadow = true;
+      const hR = new THREE.Mesh(handleGeoR, mats.terracotta);
+      hR.castShadow = !isSoftwareGl;
+      hR.receiveShadow = true;
+      g.add(vessel, hL, hR);
       root.add(g);
     };
 

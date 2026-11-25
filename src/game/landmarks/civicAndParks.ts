@@ -284,20 +284,33 @@ export function buildSariBelediye(def: LandmarkDef, mats: CityMaterialLibrary): 
 
   const blackGraniteMat = new THREE.MeshStandardMaterial({
     color: 0x16181c,
-    roughness: 0.24,
-    metalness: 0.34,
+    roughness: 0.3,
+    metalness: 0.3,
+    flatShading: false,
   });
   const stepRadii = [2.45, 2.08, 1.72, 1.38];
   stepRadii.forEach((rad, idx) => {
-    const step = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad + 0.04, 0.24, 28), blackGraniteMat);
+    const step = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad + 0.04, 0.24, 32), blackGraniteMat);
     step.position.y = 0.12 + idx * 0.24;
     step.castShadow = true;
     step.receiveShadow = true;
     monGroup.add(step);
   });
 
-  const subPlinth = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.22, 1.05), blackGraniteMat);
-  subPlinth.position.y = 1.07;
+  // Molded LatheGeometry circular granite plinth supporting the bronze statue
+  const plinthProfile = [
+    new THREE.Vector2(0.76, 0.0),
+    new THREE.Vector2(0.74, 0.06),
+    new THREE.Vector2(0.64, 0.14),
+    new THREE.Vector2(0.66, 0.22),
+    new THREE.Vector2(0.0, 0.22),
+  ];
+  const subPlinthGeo = new THREE.LatheGeometry(plinthProfile, 28);
+  subPlinthGeo.computeVertexNormals();
+  const subPlinth = new THREE.Mesh(subPlinthGeo, blackGraniteMat);
+  subPlinth.position.y = 0.96;
+  subPlinth.castShadow = true;
+  subPlinth.receiveShadow = true;
   monGroup.add(subPlinth);
 
   // Two small ground uplights on the black granite tier (matching photo)
@@ -308,31 +321,124 @@ export function buildSariBelediye(def: LandmarkDef, mats: CityMaterialLibrary): 
     monGroup.add(uplight);
   });
 
-  // Standing Bronze Atatürk Statue with Cape & Hat/Scroll (matching photo silhouette)
+  // Standing Bronze Atatürk Statue with Flowing Cape, Overcoat & Held Hat
   const bronzeMat = new THREE.MeshStandardMaterial({
-    color: 0x4b3828,
-    roughness: 0.36,
-    metalness: 0.72,
+    color: 0x5c4632,
+    roughness: 0.55,
+    metalness: 0.3,
+    flatShading: false,
   });
-  const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 1.05, 10), bronzeMat);
-  legs.position.set(0, 1.7, 0);
-  legs.castShadow = true;
-  const coat = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.44, 1.35, 12), bronzeMat);
-  coat.position.set(0, 2.15, -0.05);
-  coat.castShadow = true;
-  const shoulders = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.44, 0.36), bronzeMat);
-  shoulders.position.set(0, 2.7, -0.02);
-  shoulders.castShadow = true;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 12, 10), bronzeMat);
+  const darkBronzeMat = new THREE.MeshStandardMaterial({
+    color: 0x453425,
+    roughness: 0.58,
+    metalness: 0.3,
+    flatShading: false,
+  });
+  const addBronze = (geo: THREE.BufferGeometry, mat = bronzeMat) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    monGroup.add(m);
+    return m;
+  };
+
+  // Sculpted trousers & boots
+  const statLegGeo = new THREE.CapsuleGeometry(0.105, 0.78, 10, 20);
+  [-0.14, 0.14].forEach((lx, i) => {
+    const leg = addBronze(statLegGeo);
+    leg.position.set(lx, 1.66, i === 0 ? 0.03 : -0.02);
+    const shoe = addBronze(new THREE.CapsuleGeometry(0.085, 0.14, 8, 16), darkBronzeMat);
+    shoe.rotation.x = Math.PI / 2;
+    shoe.position.set(lx, 1.24, 0.08);
+  });
+
+  // Flowing LatheGeometry draped greatcoat skirt & torso
+  const coatProfile = [
+    new THREE.Vector2(0.46, 0.0),
+    new THREE.Vector2(0.42, 0.34),
+    new THREE.Vector2(0.34, 0.82),
+    new THREE.Vector2(0.28, 1.18),
+    new THREE.Vector2(0.33, 1.46),
+  ];
+  const coatGeo = new THREE.LatheGeometry(coatProfile, 28);
+  coatGeo.computeVertexNormals();
+  const coat = addBronze(coatGeo);
+  coat.scale.set(1.06, 1.0, 0.86);
+  coat.position.set(0, 1.46, -0.04);
+
+  // Broad softened CapsuleGeometry shoulder yoke + deltoid joints
+  const shoulders = addBronze(new THREE.CapsuleGeometry(0.185, 0.42, 10, 22));
+  shoulders.rotation.z = Math.PI / 2;
+  shoulders.position.set(0, 2.74, -0.02);
+
+  // Sweeping TubeGeometry bronze cape folds draping behind shoulders
+  [
+    [
+      new THREE.Vector3(-0.34, 2.78, -0.14),
+      new THREE.Vector3(-0.42, 2.25, -0.26),
+      new THREE.Vector3(-0.46, 1.56, -0.24),
+    ],
+    [
+      new THREE.Vector3(0.0, 2.76, -0.18),
+      new THREE.Vector3(0.02, 2.18, -0.34),
+      new THREE.Vector3(0.05, 1.52, -0.3),
+    ],
+    [
+      new THREE.Vector3(0.32, 2.78, -0.14),
+      new THREE.Vector3(0.38, 2.24, -0.26),
+      new THREE.Vector3(0.42, 1.56, -0.22),
+    ],
+  ].forEach((pts) => {
+    const foldCurve = new THREE.CatmullRomCurve3(pts);
+    addBronze(new THREE.TubeGeometry(foldCurve, 18, 0.095, 14, false), darkBronzeMat);
+  });
+
+  // Sculpted tapered neck & high-segment head
+  const neckGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.125, 0.0),
+      new THREE.Vector2(0.105, 0.08),
+      new THREE.Vector2(0.11, 0.16),
+    ],
+    22
+  );
+  neckGeo.computeVertexNormals();
+  const neck = addBronze(neckGeo);
+  neck.position.set(0, 2.86, 0.0);
+
+  const head = addBronze(new THREE.SphereGeometry(0.205, 24, 18));
+  head.scale.set(0.94, 1.08, 1.0);
   head.position.set(0, 3.16, 0.02);
-  head.castShadow = true;
-  const rightArm = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.62, 8), bronzeMat);
-  rightArm.position.set(-0.34, 2.42, 0.18);
-  rightArm.rotation.set(-0.55, 0, -0.35);
-  const heldHat = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 0.22, 10), bronzeMat);
-  heldHat.position.set(-0.46, 2.26, 0.34);
+
+  // Left & Right CapsuleGeometry arms with softened shoulder/elbow joints
+  const armJointGeo = new THREE.SphereGeometry(0.1, 16, 12);
+  const statArmGeo = new THREE.CapsuleGeometry(0.082, 0.52, 8, 18);
+  const rightShoulder = addBronze(armJointGeo);
+  rightShoulder.position.set(-0.34, 2.72, 0.02);
+  const rightArm = addBronze(statArmGeo);
+  rightArm.position.set(-0.37, 2.44, 0.16);
+  rightArm.rotation.set(-0.55, 0, -0.28);
+
+  const leftShoulder = addBronze(armJointGeo);
+  leftShoulder.position.set(0.34, 2.72, 0.0);
+  const leftArm = addBronze(statArmGeo);
+  leftArm.position.set(0.36, 2.42, 0.06);
+  leftArm.rotation.set(-0.18, 0, 0.14);
+
+  // Held Fedora Hat crafted via LatheGeometry
+  const hatProfile = [
+    new THREE.Vector2(0.22, 0.0),
+    new THREE.Vector2(0.145, 0.025),
+    new THREE.Vector2(0.135, 0.14),
+    new THREE.Vector2(0.1, 0.19),
+    new THREE.Vector2(0.0, 0.195),
+  ];
+  const heldHatGeo = new THREE.LatheGeometry(hatProfile, 24);
+  heldHatGeo.computeVertexNormals();
+  const heldHat = addBronze(heldHatGeo, darkBronzeMat);
+  heldHat.position.set(-0.46, 2.24, 0.34);
   heldHat.rotation.z = 0.65;
-  monGroup.add(legs, coat, shoulders, head, rightArm, heldHat);
+
   group.add(monGroup);
 
   // 5. Left Foreground Silver Flagpole with Turkish Flag (left side of photo)

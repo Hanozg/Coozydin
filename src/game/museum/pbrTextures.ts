@@ -354,8 +354,9 @@ export function createMuseumPbrMaterials(
       normalMap: marbleSet.normalMap,
       normalScale: new THREE.Vector2(0.45, 0.45),
       roughnessMap: marbleSet.roughnessMap,
-      roughness: 0.46,
-      metalness: 0.05,
+      roughness: 0.52,
+      metalness: 0.3,
+      flatShading: false,
       color: new THREE.Color(0xf7f1e6),
       envMapIntensity: 1.05,
     })
@@ -832,8 +833,9 @@ export function createMuseumPbrMaterials(
   const terracotta = track(
     new THREE.MeshStandardMaterial({
       color: new THREE.Color(0xb86643),
-      roughness: 0.78,
+      roughness: 0.7,
       metalness: 0.04,
+      flatShading: false,
       normalMap: brickSet.normalMap,
       normalScale: new THREE.Vector2(0.35, 0.35),
     })
@@ -842,8 +844,9 @@ export function createMuseumPbrMaterials(
   const agedBronze = track(
     new THREE.MeshStandardMaterial({
       color: new THREE.Color(0x6d563c),
-      roughness: 0.42,
-      metalness: 0.78,
+      roughness: 0.52,
+      metalness: 0.3,
+      flatShading: false,
       envMapIntensity: 1.1,
     })
   );

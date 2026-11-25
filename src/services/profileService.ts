@@ -15,6 +15,7 @@ import {
   UserSavePayload,
   VehicleConfig,
 } from '../types/game';
+import { sanitizeTradeProfile } from '../game/tradeEngine';
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from './firebase';
 
 const LOCAL_SAVE_KEY = 'efeler_player_save_v1';
@@ -191,6 +192,7 @@ export function sanitizeUserSavePayload(raw: Partial<UserSavePayload>): UserSave
     houseExterior,
     cozyRoomState,
     agendaNotes,
+    tradeProfile: sanitizeTradeProfile(raw.tradeProfile),
   };
 }
 
@@ -272,6 +274,7 @@ export async function saveCloudProfile(uid: string, payload: UserSavePayload): P
         houseExterior: clean.houseExterior,
         cozyRoomState: clean.cozyRoomState,
         agendaNotes: clean.agendaNotes,
+        tradeProfile: clean.tradeProfile,
         updatedAt: serverTimestamp(),
       });
     } catch (error) {

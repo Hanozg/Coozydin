@@ -5,6 +5,9 @@ export interface CityMaterialLibrary {
   asphalt: THREE.MeshStandardMaterial;
   roadStripe: THREE.MeshStandardMaterial;
   cobble: THREE.MeshStandardMaterial;
+  dirtRoad: THREE.MeshStandardMaterial;
+  gravelRoad: THREE.MeshStandardMaterial;
+  brickRoad: THREE.MeshStandardMaterial;
   sidewalk: THREE.MeshStandardMaterial;
   plaza: THREE.MeshStandardMaterial;
   dirtPath: THREE.MeshStandardMaterial;
@@ -43,6 +46,9 @@ export interface CityMaterialLibrary {
   signpostFace: THREE.MeshStandardMaterial;
   stripedAwning: THREE.MeshStandardMaterial;
   stripedAwningMap: THREE.CanvasTexture;
+  beachSand: THREE.MeshStandardMaterial;
+  seaWater: THREE.MeshStandardMaterial;
+  woodDeck: THREE.MeshStandardMaterial;
   dispose: () => void;
 }
 
@@ -68,6 +74,24 @@ export function createCityMaterials(
   const cobble = new THREE.MeshStandardMaterial({
     map: textures.cobblestone,
     roughness: 0.84,
+    metalness: 0.04,
+  });
+
+  const dirtRoad = new THREE.MeshStandardMaterial({
+    map: textures.dirtRoad,
+    roughness: 0.94,
+    metalness: 0.0,
+  });
+
+  const gravelRoad = new THREE.MeshStandardMaterial({
+    map: textures.gravelRoad,
+    roughness: 0.9,
+    metalness: 0.02,
+  });
+
+  const brickRoad = new THREE.MeshStandardMaterial({
+    map: textures.brickRoad,
+    roughness: 0.82,
     metalness: 0.04,
   });
 
@@ -313,10 +337,35 @@ export function createCityMaterials(
     metalness: 0.02,
   });
 
+  const beachSand = new THREE.MeshStandardMaterial({
+    map: textures.beachSand,
+    roughness: 0.94,
+    metalness: 0.0,
+  });
+
+  const seaWater = new THREE.MeshStandardMaterial({
+    map: textures.seaWater,
+    color: 0xffffff,
+    roughness: 0.1,
+    metalness: 0.16,
+    envMapIntensity: 1.4,
+    transparent: true,
+    opacity: isSoftwareGl ? 0.86 : 0.88,
+  });
+
+  const woodDeck = new THREE.MeshStandardMaterial({
+    map: textures.woodDeck,
+    roughness: 0.78,
+    metalness: 0.02,
+  });
+
   const all = [
     asphalt,
     roadStripe,
     cobble,
+    dirtRoad,
+    gravelRoad,
+    brickRoad,
     sidewalk,
     plaza,
     dirtPath,
@@ -354,12 +403,18 @@ export function createCityMaterials(
     railSteel,
     signpostFace,
     stripedAwning,
+    beachSand,
+    seaWater,
+    woodDeck,
   ];
 
   return {
     asphalt,
     roadStripe,
     cobble,
+    dirtRoad,
+    gravelRoad,
+    brickRoad,
     sidewalk,
     plaza,
     dirtPath,
@@ -398,6 +453,9 @@ export function createCityMaterials(
     signpostFace,
     stripedAwning,
     stripedAwningMap: textures.stripedAwning,
+    beachSand,
+    seaWater,
+    woodDeck,
     dispose: () => {
       all.forEach((m) => m.dispose());
     },

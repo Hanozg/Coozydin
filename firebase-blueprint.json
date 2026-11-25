@@ -2,7 +2,7 @@
   "entities": {
     "UserProfile": {
       "title": "UserProfile",
-      "description": "Oyuncunun Efeler: Aydın Yolları profili, puanları, keşifleri, ev dış cephe tercihi ve oda mobilya tasarımları.",
+      "description": "Oyuncunun Efeler: Aydın Yolları profili, puanları, keşifleri, ev dış cephe tercihi, oda mobilya tasarımları ve ticaret profili.",
       "type": "object",
       "properties": {
         "uid": {
@@ -68,6 +68,10 @@
           "type": "array",
           "description": "Oyuncunun masa ajandasına eklediği notlar."
         },
+        "tradeProfile": {
+          "type": "object",
+          "description": "Oyuncunun kargo envanteri, tüccar rütbesi, iyimser eşzamanlılık sürümü ve tamamlanan kontrat anahtarları."
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",
@@ -95,6 +99,249 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "MarketListing": {
+      "title": "MarketListing",
+      "description": "Oyuncular arası (P2P) emanetli (escrow) online pazar ilanı. PII içermez; alım ve tahsilat atomik durum geçişleriyle korunur.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "İlan doküman kimliği.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "sellerUid": {
+          "type": "string",
+          "description": "Satıcı Firebase UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "sellerName": {
+          "type": "string",
+          "description": "Satıcı görünen adı.",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "sellerEmoji": {
+          "type": "string",
+          "description": "Satıcı rozet ikonu.",
+          "minLength": 1,
+          "maxLength": 12
+        },
+        "hubId": {
+          "type": "string",
+          "description": "İlanın bağlı olduğu Efeler ticaret merkezi.",
+          "enum": [
+            "yagcilarici",
+            "nasuhpasa",
+            "trengari",
+            "forumaydin",
+            "ramazanpasa",
+            "tralleis"
+          ]
+        },
+        "itemId": {
+          "type": "string",
+          "description": "Satılan kanonik ürün kimliği.",
+          "enum": [
+            "aydin_inciri",
+            "zeytinyagi",
+            "kestane_sekeri",
+            "pamuk_balyasi",
+            "karacasu_seramik",
+            "yagcilar_baharat",
+            "ege_lavanta",
+            "plaj_hasir",
+            "deniz_tuzu",
+            "mermer_replik",
+            "antik_sikke_katalog",
+            "sultaniye_pekmez"
+          ]
+        },
+        "quantity": {
+          "type": "integer",
+          "description": "Emanete alınan ürün adedi (1-50)."
+        },
+        "unitPrice": {
+          "type": "integer",
+          "description": "Birim satış fiyatı (İncir Puanı, 1-5000)."
+        },
+        "totalPrice": {
+          "type": "integer",
+          "description": "Toplam satış tutarı (quantity * unitPrice)."
+        },
+        "feeCoins": {
+          "type": "integer",
+          "description": "Satış gerçekleştiğinde düşülecek lonca komisyonu."
+        },
+        "status": {
+          "type": "string",
+          "description": "İlan yaşam döngüsü durumu.",
+          "enum": [
+            "open",
+            "sold",
+            "claimed",
+            "cancelled"
+          ]
+        },
+        "buyerUid": {
+          "type": "string",
+          "description": "Satın alan oyuncunun Firebase UID değeri (açıkken null).",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "buyerName": {
+          "type": "string",
+          "description": "Satın alan oyuncunun görünen adı (açıkken null).",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "claimedBySeller": {
+          "type": "boolean",
+          "description": "Satıcının tahsilat kasasından tutarı alıp almadığı."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "İlan oluşturma sunucu zamanı."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Son durum geçişi sunucu zamanı."
+        }
+      },
+      "required": [
+        "id",
+        "sellerUid",
+        "sellerName",
+        "sellerEmoji",
+        "hubId",
+        "itemId",
+        "quantity",
+        "unitPrice",
+        "totalPrice",
+        "feeCoins",
+        "status",
+        "buyerUid",
+        "buyerName",
+        "claimedBySeller",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "TradeLedgerEntry": {
+      "title": "TradeLedgerEntry",
+      "description": "Oyuncunun değiştirilemez (append-only) ticaret işlem defteri kaydı.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "İşlem defteri doküman kimliği.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "uid": {
+          "type": "string",
+          "description": "Sahip kullanıcı UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "description": "Tekrar koruması (idempotency) komut kimliği.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "type": {
+          "type": "string",
+          "description": "Ticaret işlem türü.",
+          "enum": [
+            "buy_hub",
+            "sell_hub",
+            "contract_complete",
+            "listing_create",
+            "listing_cancel",
+            "listing_buy",
+            "listing_claim",
+            "tier_upgrade",
+            "starter_grant"
+          ]
+        },
+        "hubId": {
+          "type": "string",
+          "description": "İşlemin gerçekleştiği ticaret merkezi (opsiyonel null)."
+        },
+        "itemId": {
+          "type": "string",
+          "description": "İşleme konu ürün kimliği (opsiyonel null)."
+        },
+        "quantity": {
+          "type": "integer",
+          "description": "İşlem adedi."
+        },
+        "unitPrice": {
+          "type": "integer",
+          "description": "Birim fiyat."
+        },
+        "totalCoins": {
+          "type": "integer",
+          "description": "İncir Puanı net değişimi."
+        },
+        "feeCoins": {
+          "type": "integer",
+          "description": "Ödenen lonca/kurye komisyonu."
+        },
+        "profitDelta": {
+          "type": "integer",
+          "description": "Gerçekleşen kâr/zarar farkı."
+        },
+        "balanceAfter": {
+          "type": "integer",
+          "description": "İşlem sonrası İncir Puanı bakiyesi."
+        },
+        "counterpartyName": {
+          "type": "string",
+          "description": "Karşı taraf (Pazar veya Oyuncu adı).",
+          "minLength": 1,
+          "maxLength": 48
+        },
+        "note": {
+          "type": "string",
+          "description": "Kısa işlem açıklaması.",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "İşlem sunucu zaman damgası."
+        }
+      },
+      "required": [
+        "id",
+        "uid",
+        "idempotencyKey",
+        "type",
+        "hubId",
+        "itemId",
+        "quantity",
+        "unitPrice",
+        "totalCoins",
+        "feeCoins",
+        "profitDelta",
+        "balanceAfter",
+        "counterpartyName",
+        "note",
+        "createdAt"
+      ]
     }
   },
   "firestore": {
@@ -102,7 +349,19 @@
       "schema": {
         "$ref": "#/entities/UserProfile"
       },
-      "description": "Her kullanıcıya ait özel oyun profili ve ilerleme kaydı."
+      "description": "Her kullanıcıya ait özel oyun profili, ilerleme kaydı ve ticaret envanteri."
+    },
+    "/users/{userId}/tradeLedger/{entryId}": {
+      "schema": {
+        "$ref": "#/entities/TradeLedgerEntry"
+      },
+      "description": "Kullanıcının yalnızca eklenebilir (append-only) ticaret işlem defteri."
+    },
+    "/marketListings/{listingId}": {
+      "schema": {
+        "$ref": "#/entities/MarketListing"
+      },
+      "description": "Online oyuncular arası emanetli (escrow) ticaret ilan tahtası."
     }
   }
 }

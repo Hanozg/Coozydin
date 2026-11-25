@@ -7,14 +7,17 @@ import {
   Paintbrush,
   Sparkles,
   Square,
+  Store,
 } from 'lucide-react';
 import { getAncientCityByLandmarkId } from '../../data/ancientMuseumData';
+import { getTradeHubByLandmarkId } from '../../data/tradeCatalog';
 import {
   AncientCityId,
   BuildingNpcDef,
   LandmarkDef,
   PlayerHudSnapshot,
 } from '../../types/game';
+import { TradeHubId } from '../../types/trade';
 
 interface NearbyInteractionBarProps {
   hud: PlayerHudSnapshot;
@@ -29,6 +32,7 @@ interface NearbyInteractionBarProps {
   onEnterHome: () => void;
   onEnterAncientMuseum: (cityId?: AncientCityId) => void;
   onOpenHouseDrawer: () => void;
+  onOpenTradeMarket: (hubId?: TradeHubId) => void;
   onToggleVoiceGuide: () => void;
 }
 
@@ -45,9 +49,11 @@ export function NearbyInteractionBar({
   onEnterHome,
   onEnterAncientMuseum,
   onOpenHouseDrawer,
+  onOpenTradeMarket,
   onToggleVoiceGuide,
 }: NearbyInteractionBarProps) {
   const nearbyAncientCity = getAncientCityByLandmarkId(hud.nearbyLandmark?.id);
+  const nearbyTradeHub = getTradeHubByLandmarkId(hud.nearbyLandmark?.id);
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-2 max-w-[94vw]">
@@ -150,6 +156,20 @@ export function NearbyInteractionBar({
         >
           <Landmark className="w-4 h-4 text-[#F8DFAA] shrink-0" aria-hidden="true" />
           <span>Antik Kente Gir · {nearbyAncientCity.shortName} Açık Hava Müzesi</span>
+        </button>
+      )}
+
+      {nearbyTradeHub && (
+        <button
+          type="button"
+          onClick={() => onOpenTradeMarket(nearbyTradeHub.id)}
+          className="pointer-events-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#5D8A48] hover:bg-[#4E763B] border-2 border-[#FAF2E2]/85 text-[#FAF2E2] text-xs md:text-sm font-semibold shadow-lg transition-colors cursor-pointer"
+        >
+          <Store className="w-4 h-4 text-[#FAF2E2] shrink-0" aria-hidden="true" />
+          <span>
+            {touchControlsEnabled ? '' : '[T] '}
+            {nearbyTradeHub.shortName} Pazarı · Yerinde Ticaret
+          </span>
         </button>
       )}
 

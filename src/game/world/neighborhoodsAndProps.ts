@@ -5,6 +5,7 @@ import { ColliderBox, HouseExteriorConfig } from '../../types/game';
 import { buildCustomPlayerHouse, buildDioramaHouse, BuiltCustomPlayerHouse } from '../dioramaHouses';
 import { CityMaterialLibrary } from '../materials';
 import { PerchSystem } from '../perchSystem';
+import { SandboxManager } from '../sandboxManager';
 import {
   createSeasonalFoliageSystem,
   SeasonalFoliageSystem,
@@ -19,6 +20,7 @@ import {
   getWalkableSurfaceHeightAt,
 } from '../terrain';
 import { nearRoad, overlapsAny, registerHousePerches } from './geometryHelpers';
+import { buildSummerResortModel } from './summerResortModels';
 
 export interface NeighborhoodsAndPropsResult {
   foliage: SeasonalFoliageSystem;
@@ -39,6 +41,7 @@ export function buildNeighborhoodsAndProps(params: {
   crumbSpots: Array<[number, number, number]>;
   initialHouseExterior: HouseExteriorConfig;
   localDisposables: { dispose: () => void }[];
+  sandbox?: SandboxManager;
 }): NeighborhoodsAndPropsResult {
   const {
     group,
@@ -49,6 +52,7 @@ export function buildNeighborhoodsAndProps(params: {
     crumbSpots,
     initialHouseExterior,
     localDisposables,
+    sandbox,
   } = params;
 
   const plasterMats = [
@@ -96,7 +100,7 @@ export function buildNeighborhoodsAndProps(params: {
     2,
     0.22
   );
-  colliders.push({
+  const cottageCollider: ColliderBox = {
     minX: cottageX - 3.1,
     maxX: cottageX + 3.1,
     minZ: cottageZ - 2.6,
@@ -112,6 +116,19 @@ export function buildNeighborhoodsAndProps(params: {
       ridgeAlongZ: true,
       rotY: 0.22,
     },
+  };
+  colliders.push(cottageCollider);
+  sandbox?.registerBuilding({
+    id: 'house:cottage',
+    label: 'Orta Mahalle Bağ Evi',
+    category: 'house',
+    group: builtCottage.group,
+    x: cottageX,
+    z: cottageZ,
+    rotY: 0.22,
+    colliders: [cottageCollider],
+    footprintW: 6.2,
+    footprintD: 5.2,
   });
 
   // Player's Own House ("Sıcak Yuvam") facing Sevgi Yolu (+X)
@@ -134,7 +151,7 @@ export function buildNeighborhoodsAndProps(params: {
     homeY + builtHome.chimneyTopLocal[1],
     hz - builtHome.chimneyTopLocal[0],
   ]);
-  colliders.push({
+  const homeCollider: ColliderBox = {
     minX: hx - 3.0,
     maxX: hx + 4.0,
     minZ: hz - 3.2,
@@ -150,7 +167,8 @@ export function buildNeighborhoodsAndProps(params: {
       ridgeAlongZ: true,
       rotY: Math.PI / 2,
     },
-  });
+  };
+  colliders.push(homeCollider);
   crumbSpots.push([hx + 3.6, homeY + 3.85, hz]);
 
   const homeRingMesh = new THREE.Mesh(
@@ -172,6 +190,20 @@ export function buildNeighborhoodsAndProps(params: {
     PLAYER_HOME_DOOR_POS[1]
   );
   group.add(homeRingMesh);
+
+  sandbox?.registerBuilding({
+    id: 'player_home',
+    label: 'Sıcak Yuvam (Evim)',
+    category: 'player_home',
+    group: builtHome.group,
+    x: hx,
+    z: hz,
+    rotY: Math.PI / 2,
+    colliders: [homeCollider],
+    ringMesh: homeRingMesh,
+    footprintW: 6.8,
+    footprintD: 6.4,
+  });
 
   // Stone garden walkway connecting Sıcak Yuvam front door to Adnan Menderes Blv. sidewalk
   const homeWalkway = new THREE.Mesh(new THREE.BoxGeometry(4.8, 0.22, 3.4), mats.cobble);
@@ -224,7 +256,7 @@ export function buildNeighborhoodsAndProps(params: {
 
     const peakH = registerHousePerches(perches, `house_${x}_${z}`, x, gy, z, w, d, h, variant, rotY);
 
-    colliders.push({
+    const houseCollider: ColliderBox = {
       minX: x - w / 2 - 0.3,
       maxX: x + w / 2 + 0.3,
       minZ: z - d / 2 - 0.3,
@@ -240,11 +272,77 @@ export function buildNeighborhoodsAndProps(params: {
         ridgeAlongZ: variant % 2 === 0,
         rotY,
       },
+    };
+    colliders.push(houseCollider);
+    sandbox?.registerBuilding({
+      id: `house:${variant}`,
+      label: `Efeler Konağı #${variant + 1}`,
+      category: 'house',
+      group: built.group,
+      x,
+      z,
+      rotY,
+      colliders: [houseCollider],
+      footprintW: w + 0.6,
+      footprintD: d + 1.3,
     });
     if (variant % 4 === 1) {
       crumbSpots.push([x, gy + h + peakH + 0.65, z]);
     }
   };
+
+  sandbox?.setCustomHouseFactory((spec, sx, sz, sRotY) => {
+    if (spec.kind && spec.kind !== 'house') {
+      return buildSummerResortModel(spec, mats, sx, sz, sRotY, localDisposables);
+    }
+    const gy = getTerrainHeightAt(sx, sz);
+    const wallMat = plasterMats[spec.variant % plasterMats.length];
+    const built = buildDioramaHouse({
+      w: spec.w,
+      d: spec.d,
+      h: spec.h,
+      variant: spec.variant,
+      mats,
+      wallMat,
+      lawnMat: yardLawnMat,
+      flowerBoxMat,
+      blossomMat,
+    });
+    built.group.position.set(sx, gy, sz);
+    built.group.rotation.y = sRotY;
+
+    const peakH = Math.max(1.3, Math.min(spec.w, spec.d) * 0.34);
+    const cosR = Math.cos(sRotY);
+    const sinR = Math.sin(sRotY);
+    const hw = spec.w / 2 + 0.3;
+    const hd = spec.d / 2 + 0.5;
+    const effHW = Math.abs(hw * cosR) + Math.abs(hd * sinR);
+    const effHD = Math.abs(hw * sinR) + Math.abs(hd * cosR);
+
+    const collider: ColliderBox = {
+      minX: sx - effHW,
+      maxX: sx + effHW,
+      minZ: sz - effHD,
+      maxZ: sz + effHD,
+      maxY: gy + spec.h + 0.22 + peakH + 0.14,
+      roof: {
+        cx: sx,
+        cz: sz,
+        halfW: spec.w / 2 + 0.28,
+        halfD: spec.d / 2 + 0.28,
+        wallTopY: gy + spec.h + 0.22,
+        peakH: peakH + 0.12,
+        ridgeAlongZ: spec.variant % 2 === 0,
+        rotY: sRotY,
+      },
+    };
+    return {
+      group: built.group,
+      colliders: [collider],
+      footprintW: spec.w + 0.6,
+      footprintD: spec.d + 1.0,
+    };
+  });
 
   const blockCenters: [number, number, number, number][] = [
     [-48, -3, 6.0, 5.2],
@@ -677,6 +775,12 @@ export function buildNeighborhoodsAndProps(params: {
     yardLawnMat,
     blossomMat,
     updatePlayerHomeExterior: (nextConfig: HouseExteriorConfig) => {
+      const liveTransform = sandbox?.getBuildingTransform('player_home');
+      const curX = liveTransform ? liveTransform.x : hx;
+      const curZ = liveTransform ? liveTransform.z : hz;
+      const curRotY = liveTransform ? liveTransform.rotY : Math.PI / 2;
+      const curY = getTerrainHeightAt(curX, curZ);
+
       group.remove(builtHome.group);
       builtHome.dispose();
       builtHome = buildCustomPlayerHouse({
@@ -686,13 +790,18 @@ export function buildNeighborhoodsAndProps(params: {
         flowerBoxMat,
         blossomMat,
       });
-      builtHome.group.position.set(hx, homeY, hz);
-      builtHome.group.rotation.y = Math.PI / 2;
+      builtHome.group.position.set(curX, curY, curZ);
+      builtHome.group.rotation.y = curRotY;
       group.add(builtHome.group);
+      sandbox?.rebindBuildingGroup('player_home', builtHome.group);
+
+      const cosR = Math.cos(curRotY);
+      const sinR = Math.sin(curRotY);
+      const [cx, cy, cz] = builtHome.chimneyTopLocal;
       chimneyOrigins[homeChimneyIndex] = [
-        hx + builtHome.chimneyTopLocal[2],
-        homeY + builtHome.chimneyTopLocal[1],
-        hz - builtHome.chimneyTopLocal[0],
+        curX + cx * cosR + cz * sinR,
+        curY + cy,
+        curZ - cx * sinR + cz * cosR,
       ];
     },
     updateDynamicProps: (dt, elapsed) => {

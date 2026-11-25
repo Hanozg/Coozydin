@@ -234,14 +234,16 @@ export function getWalkableSurfaceHeightAt(x: number, z: number): number {
   const surfaceY = getSurfaceHeightAt(x, z);
   let y = surfaceY;
 
-  // Polyline Aydın roads & sidewalks
+  // Polyline Aydın roads & optional sidewalks
   const roadSample = sampleNearestRoad(x, z, 8.0);
   if (roadSample.road) {
     const halfW = roadSample.road.width * 0.5;
+    const isStone = roadSample.road.surface === 'cobble' || roadSample.road.surface === 'brick';
+    const isNatural = roadSample.road.surface === 'dirt' || roadSample.road.surface === 'gravel';
     if (roadSample.dist <= halfW) {
-      y = Math.max(y, surfaceY + (roadSample.road.surface === 'cobble' ? 0.145 : 0.132));
-    } else if (roadSample.dist <= halfW + 1.35) {
-      y = Math.max(y, surfaceY + (roadSample.road.surface === 'cobble' ? 0.105 : 0.095));
+      y = Math.max(y, surfaceY + (isStone ? 0.145 : isNatural ? 0.122 : 0.132));
+    } else if (roadSample.road.hasSidewalk !== false && roadSample.dist <= halfW + 1.35) {
+      y = Math.max(y, surfaceY + (isStone ? 0.105 : 0.095));
     }
   }
 

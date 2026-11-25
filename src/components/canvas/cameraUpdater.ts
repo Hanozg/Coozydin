@@ -17,6 +17,13 @@ export interface CameraUpdateParams {
   isFirstPerson: boolean;
   isSparrow: boolean;
   isWalking: boolean;
+  sandboxMode?: boolean;
+  sandboxCam?: {
+    x: number;
+    z: number;
+    yaw: number;
+    zoom: number;
+  };
   sim: {
     x: number;
     y: number;
@@ -55,6 +62,8 @@ export function updateCanvasCamera(params: CameraUpdateParams): {
     isFirstPerson,
     isSparrow,
     isWalking,
+    sandboxMode = false,
+    sandboxCam,
     sim,
     camera,
     fpCamera,
@@ -74,14 +83,17 @@ export function updateCanvasCamera(params: CameraUpdateParams): {
     cameraPreset === 'close' ? 1.48 : cameraPreset === 'overview' ? 0.65 : 1.0;
 
   const useChaseCam =
+    !sandboxMode &&
     phase !== 'title' &&
     !isFirstPerson &&
     (isSparrow || cameraPreset === 'perspective');
-  const activeCam: THREE.Camera = isFirstPerson
-    ? fpCamera
-    : useChaseCam
-      ? chaseCamera
-      : camera;
+  const activeCam: THREE.Camera = sandboxMode
+    ? camera
+    : isFirstPerson
+      ? fpCamera
+      : useChaseCam
+        ? chaseCamera
+        : camera;
 
   if (phase === 'title') {
     const orbitAngle = elapsed * 0.11;
@@ -93,6 +105,24 @@ export function updateCanvasCamera(params: CameraUpdateParams): {
     camera.zoom = THREE.MathUtils.damp(camera.zoom, 0.9, 2.5, dt);
     lookCurrent.lerp(_lookGoal, 1 - Math.exp(-5.5 * dt));
     camera.position.lerp(_camGoal, 1 - Math.exp(-5.5 * dt));
+    camera.lookAt(lookCurrent);
+    if (Math.abs(camera.zoom - prevCamZoom) > 1e-4) {
+      prevCamZoom = camera.zoom;
+      camera.updateProjectionMatrix();
+    }
+  } else if (sandboxMode && sandboxCam) {
+    const isoAzimuth = Math.PI / 4 + sandboxCam.yaw;
+    const isoDist = 56.0;
+    const focusY = getWalkableSurfaceHeightAt(sandboxCam.x, sandboxCam.z);
+    _lookGoal.set(sandboxCam.x, focusY + 1.0, sandboxCam.z);
+    _camGoal.set(
+      _lookGoal.x + Math.sin(isoAzimuth) * isoDist,
+      focusY + 42,
+      _lookGoal.z + Math.cos(isoAzimuth) * isoDist
+    );
+    camera.zoom = THREE.MathUtils.damp(camera.zoom, sandboxCam.zoom, 8, dt);
+    lookCurrent.lerp(_lookGoal, 1 - Math.exp(-10 * dt));
+    camera.position.lerp(_camGoal, 1 - Math.exp(-10 * dt));
     camera.lookAt(lookCurrent);
     if (Math.abs(camera.zoom - prevCamZoom) > 1e-4) {
       prevCamZoom = camera.zoom;

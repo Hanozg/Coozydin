@@ -2,6 +2,7 @@ import {
   BookOpen,
   ChevronLeft,
   ChevronRight,
+  Hammer,
   Headphones,
   Home,
   Info,
@@ -11,6 +12,7 @@ import {
   Play,
   Radio,
   Square,
+  Store,
 } from 'lucide-react';
 import { AydinTopographicMinimap } from '../AydinTopographicMinimap';
 import { getFigTreeStage, LANDMARKS } from '../../data/efelerData';
@@ -24,6 +26,7 @@ import {
   PlayerHudSnapshot,
   RadioStationDef,
 } from '../../types/game';
+import { TradeHubId } from '../../types/trade';
 import { TREAT_LABELS } from './hudTypes';
 
 interface TopTelemetryBarProps {
@@ -58,6 +61,9 @@ interface TopTelemetryBarProps {
   onOpenProfile: () => void;
   onEnterHome: () => void;
   onEnterAncientMuseum: (cityId?: AncientCityId) => void;
+  tradeBadgeCount?: number;
+  onOpenTradeMarket: (hubId?: TradeHubId) => void;
+  onEnterSandbox: () => void;
   onOpenRealMap: () => void;
   onOpenJournal: () => void;
   onToggleVoiceGuide: () => void;
@@ -99,6 +105,9 @@ export function TopTelemetryBar({
   onOpenProfile,
   onEnterHome,
   onEnterAncientMuseum,
+  tradeBadgeCount = 0,
+  onOpenTradeMarket,
+  onEnterSandbox,
   onOpenRealMap,
   onOpenJournal,
   onToggleVoiceGuide,
@@ -344,6 +353,37 @@ export function TopTelemetryBar({
             >
               <Landmark className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-[#8F5624]" aria-hidden="true" />
               {!isCompactLandscape && <span className="hidden sm:inline">Antik Kentler</span>}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onOpenTradeMarket()}
+              title="Efeler Ticaret & Online Pazar Borsası (T)"
+              aria-label="Ticaret Pazarı"
+              className={`relative inline-flex items-center gap-1.5 rounded-xl bg-[#EFE0C3] hover:bg-[#E4D1AE] border border-[#5D8A48]/55 text-xs font-semibold text-[#3A2618] transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                isCompactLandscape ? 'p-1.5' : 'px-2.5 sm:px-3 py-1.5'
+              }`}
+            >
+              <Store className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-[#4B743B]" aria-hidden="true" />
+              {!isCompactLandscape && <span className="hidden sm:inline">Pazar</span>}
+              {tradeBadgeCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-[#C85A32] text-[#FAF2E2] text-[10px] font-bold font-mono-num">
+                  {tradeBadgeCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={onEnterSandbox}
+              title="Sandbox Modu — Binaların Yerini Değiştir (B)"
+              aria-label="Sandbox Modu"
+              className={`inline-flex items-center gap-1.5 rounded-xl bg-[#EFE0C3] hover:bg-[#E4D1AE] border border-[#C85A32]/50 text-xs font-semibold text-[#3A2618] transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                isCompactLandscape ? 'p-1.5' : 'px-2.5 sm:px-3 py-1.5'
+              }`}
+            >
+              <Hammer className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-[#B84C27]" aria-hidden="true" />
+              {!isCompactLandscape && <span className="hidden sm:inline">Sandbox</span>}
             </button>
 
             <button

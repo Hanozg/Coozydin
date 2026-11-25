@@ -1,16 +1,18 @@
 import * as THREE from 'three';
 import { AvatarConfig } from '../types/game';
 import {
+  capsule,
   createStorybookMaterial,
   extrudeShape,
+  lathe,
   loftOrganicHull,
   LoftStation,
   mergeParts,
-  rbox,
-  rcyl,
   smoothSphere,
   SPARROW_PALETTE,
+  taperedTube,
   transformGeo,
+  tube,
 } from './sculptor';
 
 export const SCULPTED_HUMAN_SCALE = 0.152;
@@ -93,9 +95,10 @@ export function getSharedSculptedHumanMaterial(): THREE.MeshStandardMaterial {
   if (!_sharedHumanMat) {
     _sharedHumanMat = createStorybookMaterial({
       vertexColors: true,
-      roughness: 0.82,
-      metalness: 0.02,
+      roughness: 0.7,
+      metalness: 0.04,
     });
+    _sharedHumanMat.flatShading = false;
   }
   return _sharedHumanMat;
 }
@@ -130,7 +133,7 @@ function getCachedTorsoGeometry(
   const torsoParts: THREE.BufferGeometry[] = [
     loftOrganicHull(
       torsoStations,
-      20,
+      28,
       (pos) => {
         torsoTmp.copy(coatC);
         if (pos.y < 0.35) torsoTmp.lerp(coatDark, 0.35);
@@ -142,52 +145,101 @@ function getCachedTorsoGeometry(
         }
         return torsoTmp.getHex();
       },
-      { axis: 'y' }
+      { axis: 'y', subdivideAxial: 2 }
     ),
-    transformGeo(rcyl(0.46, 0.58, 0.36, scarfHex, 18), {
-      pos: [0, 3.26, 0.04],
-    }),
+    // Smooth lathe-turned collar / scarf wrap blending torso into neck
+    transformGeo(
+      lathe(
+        [
+          [0.58, -0.18],
+          [0.56, -0.06],
+          [0.5, 0.08],
+          [0.44, 0.19],
+          [0.36, 0.22],
+        ],
+        scarfHex,
+        24
+      ),
+      { pos: [0, 3.24, 0.03] }
+    ),
   ];
 
-  // Layered shirt lapels / collar framing the neck
+  // Softened shoulder & hip socket cushions so limbs blend seamlessly at every rotation
   for (const sx of [-1, 1] as const) {
     torsoParts.push(
-      transformGeo(rbox(0.24, 0.56, 0.16, 0.05, coatDark.getHex()), {
-        rot: [0.16, sx * -0.18, sx * -0.34],
-        pos: [sx * 0.32, 2.94, 0.52],
-      })
+      transformGeo(smoothSphere(0.36, coatHex, 16, 12, [1.05, 0.96, 0.92]), {
+        pos: [sx * 1.03, 2.98, 0.02],
+      }),
+      transformGeo(smoothSphere(0.42, coatDark.getHex(), 16, 12, [1.02, 0.86, 0.94]), {
+        pos: [sx * 0.45, -0.02, 0],
+      }),
+      // Smooth curved TubeGeometry lapels framing the collar
+      tube(
+        [
+          [sx * 0.14, 2.46, 0.59],
+          [sx * 0.32, 2.86, 0.55],
+          [sx * 0.44, 3.18, 0.36],
+          [sx * 0.36, 3.32, 0.06],
+        ],
+        0.095,
+        coatDark.getHex(),
+        18,
+        10
+      )
     );
   }
 
-  // Waist belt + warm brass buckle (when not wearing traditional Efeler sash)
+  // Waist belt (LatheGeometry) + smooth rounded CapsuleGeometry brass buckle
   if (sashHex === undefined && !apron) {
     torsoParts.push(
-      transformGeo(rcyl(0.86, 0.9, 0.2, beltHex, 20), {
-        scale: [1.0, 1.0, 0.72],
-        pos: [0, 0.22, 0.0],
-      }),
-      transformGeo(rbox(0.26, 0.22, 0.12, 0.04, SPARROW_PALETTE.brassWarm), {
-        pos: [0, 0.22, 0.64],
+      transformGeo(
+        lathe(
+          [
+            [0.86, -0.11],
+            [0.91, -0.06],
+            [0.92, 0.0],
+            [0.9, 0.07],
+            [0.85, 0.11],
+          ],
+          beltHex,
+          28
+        ),
+        {
+          scale: [1.0, 1.0, 0.72],
+          pos: [0, 0.22, 0.0],
+        }
+      ),
+      transformGeo(capsule(0.09, 0.12, SPARROW_PALETTE.brassWarm, 6, 14), {
+        rot: [0, 0, Math.PI * 0.5],
+        scale: [1.0, 1.0, 0.65],
+        pos: [0, 0.22, 0.65],
       })
     );
   }
 
   if (goldTrim) {
-    // Traditional embroidered Cepken vest front trim for Efeler dancers
+    // Traditional embroidered Cepken vest curved gold trim via TubeGeometry
     for (const sx of [-1, 1] as const) {
       torsoParts.push(
-        transformGeo(rbox(0.18, 1.85, 0.24, 0.05, SPARROW_PALETTE.brassWarm), {
-          pos: [sx * 0.36, 1.82, 0.6],
-          rot: [0, 0, sx * -0.06],
-        })
+        tube(
+          [
+            [sx * 0.44, 0.84, 0.57],
+            [sx * 0.38, 1.52, 0.65],
+            [sx * 0.34, 2.22, 0.66],
+            [sx * 0.28, 2.74, 0.58],
+          ],
+          0.085,
+          SPARROW_PALETTE.brassWarm,
+          18,
+          10
+        )
       );
     }
   } else {
     for (let b = 0; b < 3; b++) {
       torsoParts.push(
-        transformGeo(rcyl(0.06, 0.06, 0.05, SPARROW_PALETTE.brassWarm, 10), {
-          rot: [Math.PI * 0.5, 0, 0],
-          pos: [0, 0.78 + b * 0.62, 0.65],
+        transformGeo(smoothSphere(0.068, SPARROW_PALETTE.brassWarm, 12, 10, [1, 1, 0.45]), {
+          pos: [0, 0.78 + b * 0.62, 0.66],
         })
       );
     }
@@ -201,7 +253,7 @@ function getCachedTorsoGeometry(
     apronBib.lineTo(-0.84, -1.45);
     apronBib.quadraticCurveTo(-0.92, -0.45, -0.78, 1.35);
     torsoParts.push(
-      transformGeo(extrudeShape(apronBib, 0.14, 0.04, SPARROW_PALETTE.apronCream, 8), {
+      transformGeo(extrudeShape(apronBib, 0.14, 0.045, SPARROW_PALETTE.apronCream, 12), {
         pos: [0, 1.25, 0.64],
       })
     );
@@ -227,11 +279,22 @@ function getCachedHeadGeometry(
   if (cached) return cached;
 
   const headParts: THREE.BufferGeometry[] = [];
-  // Neck with natural taper
+  // Smooth LatheGeometry tapered neck with organic throat/collar transition
   headParts.push(
-    transformGeo(rcyl(0.25, 0.31, 0.48, skinHex, 14), {
-      pos: [0, 0.16, -0.02],
-    })
+    transformGeo(
+      lathe(
+        [
+          [0.34, -0.14],
+          [0.31, 0.04],
+          [0.265, 0.22],
+          [0.245, 0.4],
+          [0.28, 0.5],
+        ],
+        skinHex,
+        22
+      ),
+      { pos: [0, 0.0, -0.02] }
+    )
   );
 
   const skinC = new THREE.Color(skinHex);
@@ -267,7 +330,7 @@ function getCachedHeadGeometry(
   headParts.push(
     loftOrganicHull(
       headStations,
-      20,
+      28,
       (pos) => {
         headTmp.copy(skinC);
         if (pos.z > 0.48 && pos.y > 0.76 && pos.y < 1.04 && Math.abs(pos.x) > 0.27) {
@@ -276,7 +339,7 @@ function getCachedHeadGeometry(
         if (pos.y < 0.52) headTmp.lerp(jawShade, 0.65);
         return headTmp.getHex();
       },
-      { axis: 'y' }
+      { axis: 'y', subdivideAxial: 2 }
     )
   );
 
@@ -321,34 +384,41 @@ function getCachedHeadGeometry(
 
   for (const sx of [-1, 1] as const) {
     headParts.push(
-      transformGeo(extrudeShape(earShape, 0.05, 0.018, skinHex, 6), {
+      transformGeo(extrudeShape(earShape, 0.05, 0.02, skinHex, 10), {
         rot: [0, sx * 0.28, 0],
         pos: [sx * 0.73, 1.0, -0.02],
       }),
-      // Sclera (warm ivory white of eye)
-      transformGeo(rbox(0.21, 0.155, 0.08, 0.045, 0xf7f2ea), {
+      // Smooth curved sclera (warm ivory white of eye)
+      transformGeo(smoothSphere(0.115, 0xf7f2ea, 14, 12, [0.96, 0.72, 0.38]), {
         rot: [0, sx * 0.16, 0],
         pos: [sx * 0.27, 1.12, 0.72],
       }),
-      // Upper eyelid rim
-      transformGeo(rbox(0.22, 0.042, 0.095, 0.018, lidColor), {
-        rot: [0, sx * 0.16, sx * -0.04],
-        pos: [sx * 0.27, 1.19, 0.73],
-      }),
+      // Curved upper eyelid arc via TubeGeometry
+      tube(
+        [
+          [sx * 0.16, 1.16, 0.74],
+          [sx * 0.27, 1.195, 0.755],
+          [sx * 0.38, 1.155, 0.72],
+        ],
+        0.022,
+        lidColor,
+        12,
+        8
+      ),
       // Iris
-      transformGeo(smoothSphere(0.068, irisColor, 10, 8, [0.95, 1.1, 0.55]), {
+      transformGeo(smoothSphere(0.068, irisColor, 14, 10, [0.95, 1.1, 0.55]), {
         pos: [sx * 0.265, 1.115, 0.755],
       }),
       // Pupil
-      transformGeo(smoothSphere(0.04, 0x181518, 8, 6, [0.95, 1.08, 0.5]), {
+      transformGeo(smoothSphere(0.04, 0x181518, 12, 8, [0.95, 1.08, 0.5]), {
         pos: [sx * 0.265, 1.115, 0.772],
       }),
       // Catchlight highlight
-      transformGeo(smoothSphere(0.022, 0xffffff, 6, 6, [1, 1, 0.6]), {
+      transformGeo(smoothSphere(0.022, 0xffffff, 8, 8, [1, 1, 0.6]), {
         pos: [sx * 0.265 + 0.025, 1.142, 0.786],
       }),
       // Sculpted eyebrow
-      transformGeo(extrudeShape(browShape, 0.042, 0.012, hairHex, 5), {
+      transformGeo(extrudeShape(browShape, 0.042, 0.014, hairHex, 8), {
         scale: [sx, 1, 1],
         rot: [0, sx * 0.18, sx * -0.05],
         pos: [sx * 0.28, 1.29, 0.74],
@@ -365,7 +435,7 @@ function getCachedHeadGeometry(
     stacheShape.quadraticCurveTo(0.11, -0.015, 0, -0.02);
     stacheShape.quadraticCurveTo(-0.11, -0.015, -0.27, -0.04);
     headParts.push(
-      transformGeo(extrudeShape(stacheShape, 0.07, 0.018, hairHex, 7), {
+      transformGeo(extrudeShape(stacheShape, 0.07, 0.02, hairHex, 10), {
         rot: [-0.08, 0, 0],
         pos: [0, 0.79, 0.76],
       })
@@ -373,7 +443,7 @@ function getCachedHeadGeometry(
   }
   if (facialHair === 'goatee') {
     headParts.push(
-      transformGeo(smoothSphere(0.19, hairHex, 10, 8, [0.95, 1.15, 0.7]), {
+      transformGeo(smoothSphere(0.19, hairHex, 14, 10, [0.95, 1.15, 0.7]), {
         pos: [0, 0.51, 0.64],
       })
     );
@@ -385,31 +455,57 @@ function getCachedHeadGeometry(
       { t: 0.88, rx: 0.68, rPlus: 0.22, rMinus: 0.18, offsetCenter: 0.08 },
       { t: 0.94, rx: 0.04, rPlus: 0.04, rMinus: 0.04 },
     ];
-    headParts.push(loftOrganicHull(beardStations, 16, hairHex, { axis: 'y' }));
+    headParts.push(loftOrganicHull(beardStations, 22, hairHex, { axis: 'y', subdivideAxial: 2 }));
   }
 
-  // Optional eyeglasses
+  // Optional eyeglasses using smooth curved TubeGeometry wireframes & round lenses
   if (glasses) {
     const frameHex = 0x3b2c22;
     for (const sx of [-1, 1] as const) {
+      const cx = sx * 0.28;
+      const cy = 1.12;
+      const cz = 0.815;
+      const rimPts: Array<[number, number, number]> = [];
+      for (let k = 0; k < 12; k++) {
+        const a = (k / 12) * Math.PI * 2;
+        rimPts.push([
+          cx + Math.cos(a) * 0.145,
+          cy + Math.sin(a) * 0.115,
+          cz - Math.abs(Math.cos(a)) * 0.015,
+        ]);
+      }
       headParts.push(
-        transformGeo(rbox(0.28, 0.22, 0.04, 0.05, frameHex), {
-          rot: [0, sx * 0.14, 0],
-          pos: [sx * 0.27, 1.12, 0.82],
+        tube(rimPts, 0.02, frameHex, 20, 8, true),
+        transformGeo(smoothSphere(0.115, 0xd8ecf2, 14, 10, [1.1, 0.88, 0.18]), {
+          rot: [0, sx * 0.12, 0],
+          pos: [cx, cy, cz - 0.005],
         }),
-        transformGeo(rbox(0.21, 0.15, 0.05, 0.03, 0xd8ecf2), {
-          rot: [0, sx * 0.14, 0],
-          pos: [sx * 0.27, 1.12, 0.825],
-        }),
-        transformGeo(rbox(0.03, 0.035, 0.68, 0.01, frameHex), {
-          pos: [sx * 0.66, 1.14, 0.42],
-        })
+        tube(
+          [
+            [sx * 0.42, 1.14, 0.8],
+            [sx * 0.66, 1.14, 0.56],
+            [sx * 0.72, 1.12, 0.18],
+            [sx * 0.7, 1.05, -0.02],
+          ],
+          0.018,
+          frameHex,
+          14,
+          8
+        )
       );
     }
     headParts.push(
-      transformGeo(rbox(0.14, 0.035, 0.04, 0.01, frameHex), {
-        pos: [0, 1.14, 0.84],
-      })
+      tube(
+        [
+          [-0.14, 1.135, 0.815],
+          [0, 1.155, 0.835],
+          [0.14, 1.135, 0.815],
+        ],
+        0.018,
+        frameHex,
+        10,
+        8
+      )
     );
   }
 
@@ -460,14 +556,14 @@ function getCachedHeadGeometry(
       { t: 1.84, rx: 0.52, rPlus: 0.58, rMinus: 0.58, offsetCenter: -0.02 },
       { t: 1.94, rx: 0.04, rPlus: 0.04, rMinus: 0.04, offsetCenter: -0.02 },
     ];
-    headParts.push(loftOrganicHull(hairCrownStations, 18, hairHex, { axis: 'y' }));
+    headParts.push(loftOrganicHull(hairCrownStations, 24, hairHex, { axis: 'y', subdivideAxial: 2 }));
 
     const bangShape = new THREE.Shape();
     bangShape.moveTo(-0.56, 0.08);
     bangShape.quadraticCurveTo(0.05, 0.22, 0.58, 0.04);
     bangShape.quadraticCurveTo(0.18, -0.12, -0.56, 0.08);
     headParts.push(
-      transformGeo(extrudeShape(bangShape, 0.18, 0.05, hairHex, 7), {
+      transformGeo(extrudeShape(bangShape, 0.18, 0.055, hairHex, 10), {
         rot: [0.28, 0, -0.08],
         pos: [0, 1.54, 0.68],
       })
@@ -475,50 +571,108 @@ function getCachedHeadGeometry(
 
     if (hairStyle === 'bun') {
       headParts.push(
-        transformGeo(rcyl(0.32, 0.36, 0.36, hairHex, 14), {
-          rot: [Math.PI * 0.42, 0, 0],
+        transformGeo(smoothSphere(0.35, hairHex, 18, 14, [1.05, 0.94, 0.88]), {
           pos: [0, 1.38, -0.92],
         })
       );
     } else if (hairStyle === 'bob' || hairStyle === 'waves') {
-      const lockLen = hairStyle === 'waves' ? 0.78 : 0.48;
+      const dropY = hairStyle === 'waves' ? 0.36 : 0.58;
       for (const sx of [-1, 1] as const) {
+        // Flowing organic side hair waves via CapsuleGeometry + curved TubeGeometry strands
         headParts.push(
-          transformGeo(rbox(0.24, lockLen, 0.56, 0.08, hairHex), {
-            rot: [0.06, 0, sx * -0.08],
-            pos: [sx * 0.74, 0.84, -0.1],
-          })
+          transformGeo(capsule(0.22, hairStyle === 'waves' ? 0.62 : 0.34, hairHex, 8, 16), {
+            rot: [0.08, 0, sx * -0.1],
+            scale: [0.78, 1.0, 1.22],
+            pos: [sx * 0.72, hairStyle === 'waves' ? 0.82 : 0.92, -0.12],
+          }),
+          taperedTube(
+            [
+              [sx * 0.74, 1.24, 0.08],
+              [sx * 0.8, 0.92, -0.06],
+              [sx * 0.72, dropY + 0.12, -0.18],
+              [sx * 0.64, dropY, -0.06],
+            ],
+            0.13,
+            0.075,
+            hairHex,
+            16,
+            10
+          )
         );
       }
       if (hairStyle === 'waves') {
-        headParts.push(
-          transformGeo(rbox(1.34, 0.88, 0.38, 0.12, hairHex), {
-            rot: [0.1, 0, 0],
-            pos: [0, 0.76, -0.68],
-          })
-        );
+        for (const bx of [-0.42, 0, 0.42] as const) {
+          headParts.push(
+            taperedTube(
+              [
+                [bx * 0.88, 1.28, -0.68],
+                [bx, 0.86, -0.82],
+                [bx * 0.96, 0.44, -0.76],
+                [bx * 0.86, 0.22, -0.64],
+              ],
+              0.24,
+              0.14,
+              hairHex,
+              16,
+              12
+            )
+          );
+        }
       }
     }
   }
 
-  // Hats (respecting per-NPC hatHex when provided)
+  // Hats sculpted with smooth LatheGeometry & TubeGeometry (respecting per-NPC hatHex)
   if (hatStyle === 'sunhat') {
     const strawCol = hatHex ?? SPARROW_PALETTE.croissantButter;
     headParts.push(
-      transformGeo(rcyl(1.48, 1.56, 0.11, strawCol, 24), {
-        pos: [0, 1.68, 0],
-      }),
-      transformGeo(rcyl(0.74, 0.84, 0.52, strawCol, 20), {
-        pos: [0, 1.96, 0],
-      }),
-      transformGeo(rcyl(0.8, 0.83, 0.13, SPARROW_PALETTE.awningCoral, 20), { pos: [0, 1.78, 0] })
+      transformGeo(
+        lathe(
+          [
+            [0.01, 0.52],
+            [0.58, 0.5],
+            [0.76, 0.42],
+            [0.82, 0.12],
+            [0.98, 0.02],
+            [1.46, -0.04],
+            [1.56, -0.09],
+            [1.48, -0.12],
+            [0.82, -0.04],
+          ],
+          strawCol,
+          30
+        ),
+        { pos: [0, 1.72, 0] }
+      ),
+      transformGeo(
+        lathe(
+          [
+            [0.82, 0.02],
+            [0.85, 0.08],
+            [0.83, 0.16],
+            [0.8, 0.17],
+          ],
+          SPARROW_PALETTE.awningCoral,
+          26
+        ),
+        { pos: [0, 1.72, 0] }
+      )
     );
   } else if (hatStyle === 'chef_toque') {
     const chefCol = hatHex ?? SPARROW_PALETTE.porcelainWhite;
     headParts.push(
-      transformGeo(rcyl(0.78, 0.75, 0.56, chefCol, 20), {
-        pos: [0, 1.88, 0],
-      }),
+      transformGeo(
+        lathe(
+          [
+            [0.74, 0.0],
+            [0.77, 0.28],
+            [0.8, 0.56],
+          ],
+          chefCol,
+          26
+        ),
+        { pos: [0, 1.6, 0] }
+      ),
       loftOrganicHull(
         [
           { t: 2.08, rx: 0.76, rPlus: 0.76, rMinus: 0.76, scallopLobes: 8, scallopAmp: 0.05 },
@@ -526,9 +680,9 @@ function getCachedHeadGeometry(
           { t: 2.74, rx: 0.62, rPlus: 0.62, rMinus: 0.62, scallopLobes: 8, scallopAmp: 0.04 },
           { t: 2.82, rx: 0.04, rPlus: 0.04, rMinus: 0.04 },
         ],
-        20,
+        24,
         chefCol,
-        { axis: 'y' }
+        { axis: 'y', subdivideAxial: 2 }
       )
     );
   } else if (hatStyle === 'beret') {
@@ -541,23 +695,44 @@ function getCachedHeadGeometry(
           { t: 2.02, rx: 0.56, rPlus: 0.54, rMinus: 0.54, xCenter: 0.18 },
           { t: 2.08, rx: 0.05, rPlus: 0.05, rMinus: 0.05, xCenter: 0.18 },
         ],
-        18,
+        24,
         beretCol,
-        { axis: 'y' }
+        { axis: 'y', subdivideAxial: 2 }
       )
     );
   } else if (hatStyle === 'fedora') {
     const fedCol = hatHex ?? SPARROW_PALETTE.coatMustard;
     headParts.push(
-      transformGeo(rcyl(1.18, 1.24, 0.1, fedCol, 22), {
-        pos: [0, 1.7, 0],
-      }),
-      transformGeo(rcyl(0.68, 0.8, 0.56, fedCol, 20), {
-        pos: [0, 1.98, 0],
-      }),
-      transformGeo(rcyl(0.76, 0.79, 0.12, SPARROW_PALETTE.ironworkPlum, 20), {
-        pos: [0, 1.79, 0],
-      })
+      transformGeo(
+        lathe(
+          [
+            [0.01, 0.56],
+            [0.54, 0.54],
+            [0.68, 0.48],
+            [0.78, 0.12],
+            [1.18, 0.02],
+            [1.24, -0.02],
+            [1.16, -0.06],
+            [0.78, -0.01],
+          ],
+          fedCol,
+          28
+        ),
+        { pos: [0, 1.72, 0] }
+      ),
+      transformGeo(
+        lathe(
+          [
+            [0.78, 0.02],
+            [0.81, 0.08],
+            [0.79, 0.15],
+            [0.76, 0.16],
+          ],
+          SPARROW_PALETTE.ironworkPlum,
+          26
+        ),
+        { pos: [0, 1.72, 0] }
+      )
     );
   } else if (hatStyle === 'newsboy') {
     const capCol = hatHex ?? SPARROW_PALETTE.coatSlate;
@@ -578,26 +753,48 @@ function getCachedHeadGeometry(
           { t: 1.98, rx: 0.34, rPlus: 0.36, rMinus: 0.36, offsetCenter: 0.02 },
           { t: 2.02, rx: 0.05, rPlus: 0.05, rMinus: 0.05 },
         ],
-        18,
+        24,
         capCol,
-        { axis: 'y' }
+        { axis: 'y', subdivideAxial: 2 }
       ),
-      transformGeo(rbox(0.96, 0.08, 0.46, 0.035, capBrimCol), {
-        rot: [0.16, 0, 0],
-        pos: [0, 1.64, 0.76],
+      // Smooth curved newsboy visor via flattened CapsuleGeometry
+      transformGeo(capsule(0.24, 0.56, capBrimCol, 8, 16), {
+        rot: [0.18, 0, Math.PI * 0.5],
+        scale: [0.22, 1.0, 1.0],
+        pos: [0, 1.64, 0.78],
       })
     );
   } else if (hatStyle === 'fes') {
-    // Traditional crimson Efe Fez with dark tassel
+    // Traditional crimson Efe Fez via LatheGeometry + curved TubeGeometry tassel
     const fesCol = hatHex ?? 0x9e2b2b;
     headParts.push(
-      transformGeo(rcyl(0.64, 0.78, 0.78, fesCol, 18), {
-        pos: [0, 1.96, -0.02],
-      }),
-      transformGeo(rcyl(0.06, 0.09, 0.55, SPARROW_PALETTE.ironworkPlum, 8), {
-        rot: [0.15, 0, 0.32],
-        pos: [0.58, 1.98, -0.08],
-      })
+      transformGeo(
+        lathe(
+          [
+            [0.78, -0.38],
+            [0.74, 0.0],
+            [0.65, 0.36],
+            [0.54, 0.4],
+            [0.01, 0.41],
+          ],
+          fesCol,
+          26
+        ),
+        { pos: [0, 1.96, -0.02] }
+      ),
+      taperedTube(
+        [
+          [0.04, 2.38, -0.02],
+          [0.48, 2.34, -0.06],
+          [0.64, 2.04, -0.1],
+          [0.72, 1.66, -0.14],
+        ],
+        0.045,
+        0.088,
+        SPARROW_PALETTE.ironworkPlum,
+        16,
+        10
+      )
     );
   }
   void resolvedHatHex;
@@ -613,13 +810,17 @@ function getCachedUpperArmGeometry(side: -1 | 1, sleeveHex: number): THREE.Buffe
   const cached = _upperArmGeoCache.get(key);
   if (cached) return cached;
 
+  // High-segment CapsuleGeometry upper arm with softened spherical shoulder & elbow joints
   const upperParts: THREE.BufferGeometry[] = [
-    transformGeo(rcyl(0.28, 0.3, 0.34, sleeveHex, 14), {
-      pos: [0, -0.06, 0],
+    transformGeo(smoothSphere(0.31, sleeveHex, 18, 14, [1.02, 1.0, 0.96]), {
+      pos: [0, -0.02, 0],
     }),
-    transformGeo(rcyl(0.28, 0.24, 1.24, sleeveHex, 14), {
-      rot: [0, 0, side * -0.05],
-      pos: [side * 0.04, -0.64, 0],
+    transformGeo(capsule(0.255, 0.84, sleeveHex, 8, 18), {
+      rot: [0, 0, side * -0.055],
+      pos: [side * 0.035, -0.62, 0],
+    }),
+    transformGeo(smoothSphere(0.235, sleeveHex, 16, 12), {
+      pos: [side * 0.07, -1.24, 0],
     }),
   ];
   const merged = mergeParts(upperParts);
@@ -637,20 +838,36 @@ function getCachedForeArmGeometry(
   const cached = _foreArmGeoCache.get(key);
   if (cached) return cached;
 
+  // Smooth CapsuleGeometry forearm + LatheGeometry cuff + sculpted CapsuleGeometry palm & thumb
   const foreParts: THREE.BufferGeometry[] = [
-    transformGeo(rcyl(0.23, 0.23, 0.24, sleeveHex, 14), { pos: [0, -0.02, 0] }),
-    transformGeo(rcyl(0.23, 0.19, 1.08, sleeveHex, 14), {
-      pos: [0, -0.54, 0.02],
+    transformGeo(smoothSphere(0.23, sleeveHex, 16, 12), { pos: [0, 0, 0] }),
+    transformGeo(capsule(0.205, 0.72, sleeveHex, 8, 18), {
+      pos: [0, -0.52, 0.015],
     }),
-    transformGeo(rcyl(0.2, 0.2, 0.12, SPARROW_PALETTE.wallCreamTrim, 12), {
-      pos: [0, -1.06, 0.02],
+    transformGeo(
+      lathe(
+        [
+          [0.185, -0.07],
+          [0.215, -0.02],
+          [0.215, 0.04],
+          [0.19, 0.07],
+        ],
+        SPARROW_PALETTE.wallCreamTrim,
+        20
+      ),
+      { pos: [0, -1.04, 0.02] }
+    ),
+    // Softened wrist transition into organic sculpted hand
+    transformGeo(smoothSphere(0.145, skinHex, 14, 10), {
+      pos: [0, -1.12, 0.03],
     }),
-    transformGeo(rbox(0.24, 0.34, 0.3, 0.09, skinHex), {
-      pos: [0, -1.26, 0.05],
+    transformGeo(capsule(0.135, 0.14, skinHex, 8, 16), {
+      scale: [0.92, 1.0, 1.12],
+      pos: [0, -1.27, 0.055],
     }),
-    transformGeo(rbox(0.11, 0.18, 0.14, 0.045, skinHex), {
-      rot: [0.35, 0, side * -0.35],
-      pos: [-side * 0.09, -1.2, 0.18],
+    transformGeo(capsule(0.055, 0.11, skinHex, 6, 12), {
+      rot: [0.42, 0, side * -0.38],
+      pos: [-side * 0.095, -1.21, 0.165],
     }),
   ];
   const merged = mergeParts(foreParts);
@@ -663,12 +880,27 @@ function getCachedThighGeometry(trouserHex: number): THREE.BufferGeometry {
   const cached = _thighGeoCache.get(trouserHex);
   if (cached) return cached;
 
+  // Smooth LatheGeometry tapered thigh with softened hip & knee joint spheres
   const thighParts: THREE.BufferGeometry[] = [
-    transformGeo(rcyl(0.38, 0.38, 0.32, trouserHex, 14), {
-      pos: [0, -0.06, 0],
+    transformGeo(smoothSphere(0.39, trouserHex, 18, 14), {
+      pos: [0, 0, 0],
     }),
-    transformGeo(rcyl(0.38, 0.3, 2.28, trouserHex, 14), {
-      pos: [0, -1.16, 0],
+    transformGeo(
+      lathe(
+        [
+          [0.295, -2.32],
+          [0.315, -1.75],
+          [0.355, -0.95],
+          [0.39, -0.15],
+          [0.385, 0.04],
+        ],
+        trouserHex,
+        22
+      ),
+      { pos: [0, 0, 0] }
+    ),
+    transformGeo(smoothSphere(0.3, trouserHex, 18, 14), {
+      pos: [0, -2.32, 0],
     }),
   ];
   const merged = mergeParts(thighParts);
@@ -689,7 +921,12 @@ function getCachedShinGeometry(trouserHex: number): THREE.BufferGeometry {
     { t: 0.1, rx: 0.27, rPlus: 0.28, rMinus: 0.28 },
     { t: 0.16, rx: 0.04, rPlus: 0.04, rMinus: 0.04 },
   ];
-  const geo = loftOrganicHull(shinStations, 14, trouserHex, { axis: 'y' });
+  const shinParts: THREE.BufferGeometry[] = [
+    transformGeo(smoothSphere(0.295, trouserHex, 16, 12), { pos: [0, 0, 0] }),
+    loftOrganicHull(shinStations, 22, trouserHex, { axis: 'y', subdivideAxial: 2 }),
+    transformGeo(smoothSphere(0.21, trouserHex, 16, 12), { pos: [0, -2.2, 0] }),
+  ];
+  const geo = mergeParts(shinParts);
   geo.userData.isSharedHumanGeo = true;
   _shinGeoCache.set(trouserHex, geo);
   return geo;
@@ -737,12 +974,25 @@ function getCachedShoeGeometry(): THREE.BufferGeometry {
       },
       { t: 0.9, rx: 0.04, rPlus: 0.04, rMinus: 0.04, offsetCenter: -0.31 },
     ];
-    _shoeGeo = loftOrganicHull(
+    const shoeMain = loftOrganicHull(
       shoeStations,
-      14,
+      20,
       (pos) => (pos.y < -0.33 ? SPARROW_PALETTE.cobbleDark : SPARROW_PALETTE.ironworkPlum),
-      { axis: 'z' }
+      { axis: 'z', subdivideAxial: 2 }
     );
+    const ankleCollar = transformGeo(
+      lathe(
+        [
+          [0.24, -0.08],
+          [0.23, 0.02],
+          [0.21, 0.08],
+        ],
+        SPARROW_PALETTE.ironworkPlum,
+        18
+      ),
+      { pos: [0, -0.02, 0.02] }
+    );
+    _shoeGeo = mergeParts([shoeMain, ankleCollar]);
     _shoeGeo.userData.isSharedHumanGeo = true;
   }
   return _shoeGeo;
@@ -829,8 +1079,7 @@ export function createSculptedHumanRig(
   const scarfHex = initial.scarfHex ?? SPARROW_PALETTE.wallCreamTrim;
   const sleeveHex = initial.sleeveHex ?? initial.shirtHex;
 
-  const castTorsoShadow = opts?.castShadow !== false;
-  const castHeadShadow = opts?.castShadow === 'full';
+  const castBodyShadow = opts?.castShadow !== false;
 
   const torsoMesh = new THREE.Mesh(
     getCachedTorsoGeometry(
@@ -843,7 +1092,7 @@ export function createSculptedHumanRig(
     ),
     mat
   );
-  torsoMesh.castShadow = castTorsoShadow;
+  torsoMesh.castShadow = castBodyShadow;
   torsoMesh.receiveShadow = true;
   torsoPivot.add(torsoMesh);
 
@@ -863,7 +1112,7 @@ export function createSculptedHumanRig(
     ),
     mat
   );
-  headMesh.castShadow = castHeadShadow;
+  headMesh.castShadow = castBodyShadow;
   headMesh.receiveShadow = true;
   headPivot.add(headMesh);
 
@@ -873,6 +1122,8 @@ export function createSculptedHumanRig(
     shoulder.position.set(side * 1.18, 3.04, 0.02);
 
     const upperMesh = new THREE.Mesh(getCachedUpperArmGeometry(side, sleeveHex), mat);
+    upperMesh.castShadow = castBodyShadow;
+    upperMesh.receiveShadow = true;
     shoulder.add(upperMesh);
 
     const elbow = new THREE.Group();
@@ -884,6 +1135,8 @@ export function createSculptedHumanRig(
       getCachedForeArmGeometry(side, sleeveHex, initial.skinHex),
       mat
     );
+    foreMesh.castShadow = castBodyShadow;
+    foreMesh.receiveShadow = true;
     elbow.add(foreMesh);
 
     torsoPivot.add(shoulder);
@@ -905,6 +1158,8 @@ export function createSculptedHumanRig(
     hip.position.set(side * 0.46, baseHipY, 0);
 
     const thighMesh = new THREE.Mesh(getCachedThighGeometry(initial.pantsHex), mat);
+    thighMesh.castShadow = castBodyShadow;
+    thighMesh.receiveShadow = true;
     hip.add(thighMesh);
 
     const knee = new THREE.Group();
@@ -912,6 +1167,8 @@ export function createSculptedHumanRig(
     hip.add(knee);
 
     const shinMesh = new THREE.Mesh(getCachedShinGeometry(initial.pantsHex), mat);
+    shinMesh.castShadow = castBodyShadow;
+    shinMesh.receiveShadow = true;
     knee.add(shinMesh);
 
     const ankle = new THREE.Group();
@@ -919,6 +1176,8 @@ export function createSculptedHumanRig(
     knee.add(ankle);
 
     const shoeMesh = new THREE.Mesh(getCachedShoeGeometry(), mat);
+    shoeMesh.castShadow = castBodyShadow;
+    shoeMesh.receiveShadow = true;
     ankle.add(shoeMesh);
 
     scaleGroup.add(hip);
@@ -1340,21 +1599,36 @@ export function createArticulatedPedestrianGeos(): ArticulatedPedestrianGeos {
     scale: [s, s, s],
   });
 
-  // Shoulder-pivoted sleeve (upper arm + bent forearm + cream cuff), leaving skin hands separate
+  // Shoulder-pivoted sleeve using smooth CapsuleGeometry + spherical elbow + LatheGeometry cuff
   const sleeveRaw = mergeParts([
-    transformGeo(rcyl(0.28, 0.28, 0.34, 0xf5f2eb, 12), { pos: [0, -0.06, 0] }),
-    transformGeo(rcyl(0.27, 0.22, 1.24, 0xf5f2eb, 12), { pos: [0, -0.64, 0] }),
-    transformGeo(rcyl(0.22, 0.19, 1.06, 0xf5f2eb, 12), { rot: [-0.24, 0, 0], pos: [0, -1.72, 0.13] }),
-    transformGeo(rcyl(0.2, 0.2, 0.12, 0xe8e2d5, 10), { rot: [-0.24, 0, 0], pos: [0, -2.22, 0.25] }),
+    transformGeo(smoothSphere(0.29, 0xf5f2eb, 16, 12), { pos: [0, -0.02, 0] }),
+    transformGeo(capsule(0.245, 0.84, 0xf5f2eb, 8, 16), { pos: [0, -0.62, 0] }),
+    transformGeo(smoothSphere(0.225, 0xf5f2eb, 14, 10), { pos: [0, -1.22, 0.02] }),
+    transformGeo(capsule(0.2, 0.72, 0xf5f2eb, 8, 16), { rot: [-0.24, 0, 0], pos: [0, -1.72, 0.13] }),
+    transformGeo(
+      lathe(
+        [
+          [0.185, -0.06],
+          [0.21, 0.0],
+          [0.19, 0.06],
+        ],
+        0xe8e2d5,
+        16
+      ),
+      { rot: [-0.24, 0, 0], pos: [0, -2.22, 0.25] }
+    ),
   ]);
   const armGeo = transformGeo(sleeveRaw, {
     scale: [s, s, s],
   });
 
-  // Separate skin-tinted hand sphere/palm (instanceColor sets varied skin tones)
-  const handGeo = transformGeo(rbox(0.23, 0.32, 0.28, 0.09, 0xffffff), {
-    scale: [s, s, s],
-  });
+  // Smooth organic CapsuleGeometry hand (instanceColor sets varied skin tones)
+  const handGeo = transformGeo(
+    transformGeo(capsule(0.13, 0.12, 0xffffff, 8, 16), {
+      scale: [0.92, 1.0, 1.12],
+    }),
+    { scale: [s, s, s] }
+  );
 
   // 4 distinct sculpted human head variants matching the player's face detail
   const buildHeadVariant = (

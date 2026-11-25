@@ -427,7 +427,7 @@ export function createBuildingNpcSystem(
 
     const npcRig = createSculptedHumanRig(npcDefToAppearance(def), {
       forwardIsNegZ: false,
-      castShadow: false,
+      castShadow: 'full',
     });
     npcGroup.add(npcRig.root);
 
@@ -574,7 +574,7 @@ export function createCompanionWalkerRig(): CompanionWalkerRig {
       hairStyle: 'short',
       hatStyle: 'newsboy',
     },
-    { forwardIsNegZ: true }
+    { forwardIsNegZ: true, castShadow: 'full' }
   );
   rig.root.visible = false;
 

@@ -8,7 +8,7 @@ service cloud.firestore {
     }
 
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
     function incoming() {
@@ -32,7 +32,82 @@ service cloud.firestore {
     }
 
     function isHexColor(val) {
-      return val is string && val.matches('^#[0-9a-fA-F]{3,8}$');
+      return val is string && val.size() >= 4 && val.size() <= 9 && val.matches('^#[0-9a-fA-F]{3,8}$');
+    }
+
+    function isValidTradeHubId(hubId) {
+      return hubId is string && hubId in [
+        'yagcilarici',
+        'nasuhpasa',
+        'trengari',
+        'forumaydin',
+        'ramazanpasa',
+        'tralleis'
+      ];
+    }
+
+    function isValidTradeItemId(itemId) {
+      return itemId is string && itemId in [
+        'aydin_inciri',
+        'zeytinyagi',
+        'kestane_sekeri',
+        'pamuk_balyasi',
+        'karacasu_seramik',
+        'yagcilar_baharat',
+        'ege_lavanta',
+        'plaj_hasir',
+        'deniz_tuzu',
+        'mermer_replik',
+        'antik_sikke_katalog',
+        'sultaniye_pekmez'
+      ];
+    }
+
+    function isValidTradeInventorySlot(slot) {
+      return slot is map &&
+        slot.keys().hasAll(['itemId', 'quantity', 'avgUnitCost']) &&
+        slot.keys().hasOnly(['itemId', 'quantity', 'avgUnitCost']) &&
+        isValidTradeItemId(slot.itemId) &&
+        slot.quantity is int && slot.quantity >= 1 && slot.quantity <= 999 &&
+        slot.avgUnitCost is int && slot.avgUnitCost >= 1 && slot.avgUnitCost <= 5000;
+    }
+
+    function isValidTradeProfile(tp) {
+      return tp is map &&
+        tp.keys().hasAll([
+          'version',
+          'cargoTier',
+          'reputationXp',
+          'totalTrades',
+          'totalProfit',
+          'starterGrantClaimed',
+          'inventory',
+          'completedContractKeys',
+          'recentCommandIds'
+        ]) &&
+        tp.keys().hasOnly([
+          'version',
+          'cargoTier',
+          'reputationXp',
+          'totalTrades',
+          'totalProfit',
+          'starterGrantClaimed',
+          'inventory',
+          'completedContractKeys',
+          'recentCommandIds'
+        ]) &&
+        tp.version is int && tp.version >= 1 && tp.version <= 10000000 &&
+        tp.cargoTier is int && tp.cargoTier >= 1 && tp.cargoTier <= 5 &&
+        tp.reputationXp is int && tp.reputationXp >= 0 && tp.reputationXp <= 1000000 &&
+        tp.totalTrades is int && tp.totalTrades >= 0 && tp.totalTrades <= 1000000 &&
+        tp.totalProfit is int && tp.totalProfit >= -1000000 && tp.totalProfit <= 10000000 &&
+        tp.starterGrantClaimed is bool &&
+        tp.inventory is list && tp.inventory.size() <= 24 &&
+        (tp.inventory.size() == 0 || isValidTradeInventorySlot(tp.inventory[0])) &&
+        tp.completedContractKeys is list && tp.completedContractKeys.size() <= 40 &&
+        (tp.completedContractKeys.size() == 0 || (tp.completedContractKeys[0] is string && tp.completedContractKeys[0].size() >= 1 && tp.completedContractKeys[0].size() <= 48)) &&
+        tp.recentCommandIds is list && tp.recentCommandIds.size() <= 32 &&
+        (tp.recentCommandIds.size() == 0 || (tp.recentCommandIds[0] is string && tp.recentCommandIds[0].size() >= 1 && tp.recentCommandIds[0].size() <= 48));
     }
 
     function isValidVehicleConfig(vc) {
@@ -101,9 +176,23 @@ service cloud.firestore {
     }
 
     function isValidUserProfile(data) {
-      // Field validators reject missing required fields. The match block validates
-      // the document ID, and the UID below must match the authenticated owner.
-      return data.keys().hasOnly([
+      return data.keys().hasAll([
+          'uid',
+          'displayName',
+          'avatarEmoji',
+          'coins',
+          'lokmaPower',
+          'discoveredIds',
+          'chattedNpcIds',
+          'unlockedFurnitureStyles',
+          'vehicleConfig',
+          'houseExterior',
+          'cozyRoomState',
+          'agendaNotes',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
           'uid',
           'displayName',
           'avatarEmoji',
@@ -118,6 +207,7 @@ service cloud.firestore {
           'houseExterior',
           'cozyRoomState',
           'agendaNotes',
+          'tradeProfile',
           'createdAt',
           'updatedAt'
         ]) &&
@@ -147,8 +237,136 @@ service cloud.firestore {
         isValidCozyRoomState(data.cozyRoomState) &&
         data.agendaNotes is list && data.agendaNotes.size() <= 120 &&
         (data.agendaNotes.size() == 0 || isValidAgendaNote(data.agendaNotes[0])) &&
+        (!('tradeProfile' in data) || isValidTradeProfile(data.tradeProfile)) &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
+    }
+
+    function isValidMarketListing(data, listingId) {
+      return data.keys().hasAll([
+          'id',
+          'sellerUid',
+          'sellerName',
+          'sellerEmoji',
+          'hubId',
+          'itemId',
+          'quantity',
+          'unitPrice',
+          'totalPrice',
+          'feeCoins',
+          'status',
+          'buyerUid',
+          'buyerName',
+          'claimedBySeller',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id',
+          'sellerUid',
+          'sellerName',
+          'sellerEmoji',
+          'hubId',
+          'itemId',
+          'quantity',
+          'unitPrice',
+          'totalPrice',
+          'feeCoins',
+          'status',
+          'buyerUid',
+          'buyerName',
+          'claimedBySeller',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.id == listingId &&
+        isValidId(data.sellerUid) &&
+        data.sellerName is string && data.sellerName.size() >= 1 && data.sellerName.size() <= 40 &&
+        data.sellerEmoji is string && data.sellerEmoji.size() >= 1 && data.sellerEmoji.size() <= 12 &&
+        isValidTradeHubId(data.hubId) &&
+        isValidTradeItemId(data.itemId) &&
+        data.quantity is int && data.quantity >= 1 && data.quantity <= 50 &&
+        data.unitPrice is int && data.unitPrice >= 1 && data.unitPrice <= 5000 &&
+        data.totalPrice is int && data.totalPrice == data.quantity * data.unitPrice &&
+        data.feeCoins is int && data.feeCoins >= 0 && data.feeCoins <= data.totalPrice &&
+        data.status in ['open', 'sold', 'claimed', 'cancelled'] &&
+        (
+          (data.status in ['open', 'cancelled'] && data.buyerUid == null && data.buyerName == null) ||
+          (data.status in ['sold', 'claimed'] && isValidId(data.buyerUid) && data.buyerUid != data.sellerUid && data.buyerName is string && data.buyerName.size() >= 1 && data.buyerName.size() <= 40)
+        ) &&
+        data.claimedBySeller is bool &&
+        (
+          (data.status == 'claimed' && data.claimedBySeller == true) ||
+          (data.status != 'claimed' && data.claimedBySeller == false)
+        ) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidTradeLedgerEntry(data, userId, entryId) {
+      return data.keys().hasAll([
+          'id',
+          'uid',
+          'idempotencyKey',
+          'type',
+          'hubId',
+          'itemId',
+          'quantity',
+          'unitPrice',
+          'totalCoins',
+          'feeCoins',
+          'profitDelta',
+          'balanceAfter',
+          'counterpartyName',
+          'note',
+          'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id',
+          'uid',
+          'idempotencyKey',
+          'type',
+          'hubId',
+          'itemId',
+          'quantity',
+          'unitPrice',
+          'totalCoins',
+          'feeCoins',
+          'profitDelta',
+          'balanceAfter',
+          'counterpartyName',
+          'note',
+          'createdAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.id == entryId &&
+        isValidId(data.uid) &&
+        data.uid == userId &&
+        data.uid == request.auth.uid &&
+        data.idempotencyKey is string && data.idempotencyKey.size() >= 1 && data.idempotencyKey.size() <= 64 && data.idempotencyKey.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.type in [
+          'buy_hub',
+          'sell_hub',
+          'contract_complete',
+          'listing_create',
+          'listing_cancel',
+          'listing_buy',
+          'listing_claim',
+          'tier_upgrade',
+          'starter_grant'
+        ] &&
+        (data.hubId == null || isValidTradeHubId(data.hubId)) &&
+        (data.itemId == null || isValidTradeItemId(data.itemId)) &&
+        data.quantity is int && data.quantity >= 0 && data.quantity <= 999 &&
+        data.unitPrice is int && data.unitPrice >= 0 && data.unitPrice <= 100000 &&
+        data.totalCoins is int && data.totalCoins >= -1000000 && data.totalCoins <= 1000000 &&
+        data.feeCoins is int && data.feeCoins >= 0 && data.feeCoins <= 100000 &&
+        data.profitDelta is int && data.profitDelta >= -1000000 && data.profitDelta <= 1000000 &&
+        data.balanceAfter is int && data.balanceAfter >= 0 && data.balanceAfter <= 1000000 &&
+        data.counterpartyName is string && data.counterpartyName.size() >= 1 && data.counterpartyName.size() <= 48 &&
+        data.note is string && data.note.size() >= 1 && data.note.size() <= 160 &&
+        data.createdAt is timestamp;
     }
 
     match /users/{userId} {
@@ -183,6 +401,7 @@ service cloud.firestore {
           'houseExterior',
           'cozyRoomState',
           'agendaNotes',
+          'tradeProfile',
           'updatedAt'
         ]);
 
@@ -190,6 +409,106 @@ service cloud.firestore {
         isVerified() &&
         isValidId(userId) &&
         isOwner(userId);
+
+      // Append-only immutable trade ledger subcollection
+      match /tradeLedger/{entryId} {
+        allow get: if isValidId(userId) && isValidId(entryId) && isOwner(userId);
+        allow list: if isOwner(userId) && resource.data.uid == request.auth.uid;
+
+        allow create: if isVerified() &&
+          isValidId(userId) &&
+          isValidId(entryId) &&
+          isOwner(userId) &&
+          isValidTradeLedgerEntry(incoming(), userId, entryId) &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/users/$(userId));
+
+        allow update: if false;
+        allow delete: if false;
+      }
+    }
+
+    // Online P2P Escrow Market Listings (No PII)
+    match /marketListings/{listingId} {
+      allow get: if isSignedIn() &&
+        isValidId(listingId) &&
+        (
+          existing().status == 'open' ||
+          existing().sellerUid == request.auth.uid ||
+          existing().buyerUid == request.auth.uid
+        );
+
+      allow list: if isSignedIn() &&
+        (
+          resource.data.status == 'open' ||
+          resource.data.sellerUid == request.auth.uid ||
+          resource.data.buyerUid == request.auth.uid
+        );
+
+      allow create: if isVerified() &&
+        isValidId(listingId) &&
+        isValidMarketListing(incoming(), listingId) &&
+        incoming().sellerUid == request.auth.uid &&
+        incoming().status == 'open' &&
+        incoming().buyerUid == null &&
+        incoming().buyerName == null &&
+        incoming().claimedBySeller == false &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid));
+
+      allow update: if isVerified() &&
+        isValidId(listingId) &&
+        isValidMarketListing(incoming(), listingId) &&
+        !(existing().status in ['claimed', 'cancelled']) &&
+        incoming().id == existing().id &&
+        incoming().sellerUid == existing().sellerUid &&
+        incoming().sellerName == existing().sellerName &&
+        incoming().sellerEmoji == existing().sellerEmoji &&
+        incoming().hubId == existing().hubId &&
+        incoming().itemId == existing().itemId &&
+        incoming().quantity == existing().quantity &&
+        incoming().unitPrice == existing().unitPrice &&
+        incoming().totalPrice == existing().totalPrice &&
+        incoming().feeCoins == existing().feeCoins &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          // Action 1: Seller cancels an open listing
+          (
+            isOwner(existing().sellerUid) &&
+            existing().status == 'open' &&
+            incoming().status == 'cancelled' &&
+            incoming().buyerUid == null &&
+            incoming().buyerName == null &&
+            incoming().claimedBySeller == false &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          ) ||
+          // Action 2: Another verified player fills (purchases) an open listing
+          (
+            existing().status == 'open' &&
+            request.auth.uid != existing().sellerUid &&
+            incoming().status == 'sold' &&
+            incoming().buyerUid == request.auth.uid &&
+            incoming().buyerName is string &&
+            incoming().claimedBySeller == false &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'buyerUid', 'buyerName', 'updatedAt']) &&
+            exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          ) ||
+          // Action 3: Seller claims escrow proceeds once sold
+          (
+            isOwner(existing().sellerUid) &&
+            existing().status == 'sold' &&
+            existing().claimedBySeller == false &&
+            incoming().status == 'claimed' &&
+            incoming().claimedBySeller == true &&
+            incoming().buyerUid == existing().buyerUid &&
+            incoming().buyerName == existing().buyerName &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'claimedBySeller', 'updatedAt'])
+          )
+        );
+
+      allow delete: if false;
     }
   }
 }

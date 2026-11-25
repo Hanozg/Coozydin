@@ -68,7 +68,7 @@ function createEfeDancer(idx = 0): EfeDancerRig {
       hatStyle: 'fes',
       facialHair: 'mustache',
     },
-    { forwardIsNegZ: false, castShadow: false }
+    { forwardIsNegZ: false, castShadow: 'full' }
   );
   pivot.add(rig.root);
   return { pivot, rig, baseAngle: 0 };
@@ -128,7 +128,7 @@ export function createStreetMusiciansZeybek(
         hatStyle: 'newsboy',
         facialHair: 'mustache',
       },
-      { forwardIsNegZ: false, castShadow: false }
+      { forwardIsNegZ: false, castShadow: 'full' }
     );
     m.add(rig.root);
 
@@ -367,7 +367,7 @@ export function createLibraryAndVendor(
       hatStyle: 'headscarf',
       apron: true,
     },
-    { forwardIsNegZ: false, castShadow: false }
+    { forwardIsNegZ: false, castShadow: 'full' }
   );
   vendor.add(vendorRig.root);
 
@@ -525,7 +525,7 @@ export function createBeyCamiiLokmaStand(
       facialHair: 'mustache',
       apron: true,
     },
-    { forwardIsNegZ: false, castShadow: false }
+    { forwardIsNegZ: false, castShadow: 'full' }
   );
   attendantRig.root.position.set(-0.2, getWalkableSurfaceHeightAt(lx - 0.2, lz - 1.0) - ly, -1.0);
   group.add(attendantRig.root);
@@ -782,7 +782,7 @@ export function createParkGuitarYouthGroup(
       hairStyle: 'short',
       hatStyle: 'none',
     },
-    { forwardIsNegZ: false, castShadow: false }
+    { forwardIsNegZ: false, castShadow: 'full' }
   );
   keremRig.root.position.set(-0.92, 0.18, 0.44);
   keremRig.root.rotation.y = 1.1;
@@ -807,7 +807,7 @@ export function createParkGuitarYouthGroup(
       hairStyle: 'waves',
       hatStyle: 'none',
     },
-    { forwardIsNegZ: false, castShadow: false }
+    { forwardIsNegZ: false, castShadow: 'full' }
   );
   elifRig.root.position.set(0.88, 0.02, 0.36);
   elifRig.root.rotation.y = -1.05;
@@ -831,7 +831,7 @@ export function createParkGuitarYouthGroup(
       hairStyle: 'short',
       hatStyle: 'none',
     },
-    { forwardIsNegZ: false, castShadow: false }
+    { forwardIsNegZ: false, castShadow: 'full' }
   );
   ardaRig.root.position.set(-0.02, 0.22, -0.94);
   ardaRig.root.rotation.y = 0.04;
@@ -848,7 +848,7 @@ export function createParkGuitarYouthGroup(
       hairStyle: 'bun',
       hatStyle: 'none',
     },
-    { forwardIsNegZ: false, castShadow: false }
+    { forwardIsNegZ: false, castShadow: 'full' }
   );
   defneRig.root.position.set(1.52, 0.03, -0.45);
   defneRig.root.rotation.y = -1.95;

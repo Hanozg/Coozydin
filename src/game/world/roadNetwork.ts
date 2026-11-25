@@ -334,14 +334,23 @@ function createMiteredStripGeometry(
   return geo;
 }
 
+export interface RoadNetworkHandle {
+  group: THREE.Group;
+  rebuild: () => void;
+  dispose: () => void;
+}
+
 export function buildRoadNetwork(params: {
-  staticWorldGroup: THREE.Group;
+  group: THREE.Group;
   mats: CityMaterialLibrary;
   localDisposables: { dispose: () => void }[];
-}): void {
-  const { staticWorldGroup, mats, localDisposables } = params;
+}): RoadNetworkHandle {
+  const { group, mats, localDisposables } = params;
 
-  const placedRoadEdges: PlacedRoadEdge[] = [];
+  const roadNetworkGroup = new THREE.Group();
+  roadNetworkGroup.name = 'aydin_road_network';
+  group.add(roadNetworkGroup);
+
   const dashGeo = new THREE.PlaneGeometry(0.22, 3.0);
   dashGeo.userData.isSharedGeo = true;
   const ewStripeGeo = new THREE.PlaneGeometry(0.55, 2.0);
@@ -350,116 +359,195 @@ export function buildRoadNetwork(params: {
   nsStripeGeo.userData.isSharedGeo = true;
   localDisposables.push(dashGeo, ewStripeGeo, nsStripeGeo);
 
-  AYDIN_ROAD_SEGMENTS.forEach((road) => {
-    const roadMat = road.surface === 'cobble' ? mats.cobble : mats.asphalt;
-    const halfW = road.width * 0.5;
-    const outerHalfW = halfW + SIDEWALK_WIDTH;
-
-    const basePts: [number, number][] = road.points.map(([px, pz]) => [px, pz]);
-    if (road.id === 'istasyon-blv') {
-      basePts[0] = [-156, 70];
-    } else if (road.id === 'cankaya-kemer-cd') {
-      basePts[basePts.length - 1] = [122.2, -72];
+  const clearRoadMeshes = () => {
+    for (let i = roadNetworkGroup.children.length - 1; i >= 0; i--) {
+      const child = roadNetworkGroup.children[i];
+      roadNetworkGroup.remove(child);
+      if ((child as THREE.Mesh).isMesh) {
+        const geo = (child as THREE.Mesh).geometry;
+        if (geo && !geo.userData?.isSharedGeo) {
+          geo.dispose();
+        }
+      }
     }
+  };
 
-    const roadChains = clipPolylineAgainstPlacedRoads(basePts, placedRoadEdges, false);
-    roadChains.forEach((chain) => {
-      const roadMesh = new THREE.Mesh(
-        createMiteredStripGeometry(chain, -halfW, halfW, 4, ROAD_SURFACE_OFFSET),
-        roadMat
-      );
-      roadMesh.receiveShadow = true;
-      staticWorldGroup.add(roadMesh);
+  const rebuild = () => {
+    clearRoadMeshes();
+    const placedRoadEdges: PlacedRoadEdge[] = [];
 
-      if (road.hasCenterLine) {
-        for (let i = 0; i < chain.points.length - 1; i++) {
-          const [ax, az] = chain.points[i];
-          const [bx, bz] = chain.points[i + 1];
-          const dx = bx - ax;
-          const dz = bz - az;
-          const segLen = Math.hypot(dx, dz);
-          if (segLen < 8.5) continue;
-          const ux = dx / segLen;
-          const uz = dz / segLen;
-          const yaw = Math.atan2(dx, dz);
-          for (let d = 4.2; d <= segLen - 4.2; d += 6.4) {
-            const cx = ax + ux * d;
-            const cz = az + uz * d;
-            if (Math.abs(cx) < 16 && cz > -18 && cz < 28) continue;
-            const dy = getSurfaceHeightAt(cx, cz) + ROAD_SURFACE_OFFSET + 0.028;
-            const slopes = getSurfaceSlopeAngles(cx, cz, yaw + Math.PI);
-            const dash = new THREE.Mesh(dashGeo, mats.roadStripe);
-            dash.rotation.order = 'YXZ';
-            dash.rotation.set(-Math.PI / 2 + slopes.pitch, yaw, slopes.roll);
-            dash.position.set(cx, dy, cz);
-            staticWorldGroup.add(dash);
+    const resolveRoadMaterial = (surface: string): THREE.MeshStandardMaterial => {
+      if (surface === 'cobble') return mats.cobble;
+      if (surface === 'dirt') return mats.dirtRoad;
+      if (surface === 'gravel') return mats.gravelRoad;
+      if (surface === 'brick') return mats.brickRoad;
+      return mats.asphalt;
+    };
+
+    AYDIN_ROAD_SEGMENTS.forEach((road) => {
+      if (road.renderPoints.length < 2) return;
+      const roadMat = resolveRoadMaterial(road.surface);
+      const halfW = road.width * 0.5;
+      const hasSidewalk = road.hasSidewalk !== false;
+      const outerHalfW = hasSidewalk ? halfW + SIDEWALK_WIDTH : halfW;
+
+      const basePts: [number, number][] = road.renderPoints.map(([px, pz]) => [px, pz]);
+      if (
+        road.id === 'istasyon-blv' &&
+        Math.abs(basePts[0][0] - -152) < 0.05 &&
+        Math.abs(basePts[0][1] - 70) < 0.05
+      ) {
+        basePts[0] = [-156, 70];
+      } else if (
+        road.id === 'cankaya-kemer-cd' &&
+        Math.abs(basePts[basePts.length - 1][0] - 118) < 0.05 &&
+        Math.abs(basePts[basePts.length - 1][1] - -72) < 0.05
+      ) {
+        basePts[basePts.length - 1] = [122.2, -72];
+      }
+
+      const roadChains = clipPolylineAgainstPlacedRoads(basePts, placedRoadEdges, false);
+      roadChains.forEach((chain) => {
+        if (chain.points.length < 2) return;
+        const roadMesh = new THREE.Mesh(
+          createMiteredStripGeometry(chain, -halfW, halfW, 4, ROAD_SURFACE_OFFSET),
+          roadMat
+        );
+        roadMesh.receiveShadow = true;
+        roadNetworkGroup.add(roadMesh);
+
+        if (road.hasCenterLine) {
+          // March along cumulative arc length so dashes curve cleanly around rounded corners
+          let totalChainLen = 0;
+          const segLens: number[] = [];
+          for (let i = 0; i < chain.points.length - 1; i++) {
+            const sl = Math.hypot(
+              chain.points[i + 1][0] - chain.points[i][0],
+              chain.points[i + 1][1] - chain.points[i][1]
+            );
+            segLens.push(sl);
+            totalChainLen += sl;
           }
+          if (totalChainLen >= 8.5) {
+            const dashStep = 6.4;
+            let nextDashDist = 4.2;
+            let accum = 0;
+            for (let i = 0; i < chain.points.length - 1; i++) {
+              const segLen = segLens[i];
+              if (segLen < 0.15) continue;
+              const [ax, az] = chain.points[i];
+              const [bx, bz] = chain.points[i + 1];
+              const dx = bx - ax;
+              const dz = bz - az;
+              const ux = dx / segLen;
+              const uz = dz / segLen;
+              const yaw = Math.atan2(dx, dz);
+
+              while (nextDashDist <= accum + segLen && nextDashDist <= totalChainLen - 4.2) {
+                const localD = nextDashDist - accum;
+                const cx = ax + ux * localD;
+                const cz = az + uz * localD;
+                nextDashDist += dashStep;
+                if (Math.abs(cx) < 16 && cz > -18 && cz < 28) continue;
+                const dy = getSurfaceHeightAt(cx, cz) + ROAD_SURFACE_OFFSET + 0.028;
+                const slopes = getSurfaceSlopeAngles(cx, cz, yaw + Math.PI);
+                const dash = new THREE.Mesh(dashGeo, mats.roadStripe);
+                dash.rotation.order = 'YXZ';
+                dash.rotation.set(-Math.PI / 2 + slopes.pitch, yaw, slopes.roll);
+                dash.position.set(cx, dy, cz);
+                roadNetworkGroup.add(dash);
+              }
+              accum += segLen;
+            }
+          }
+        }
+      });
+
+      if (hasSidewalk) {
+        const sidewalkChains = clipPolylineAgainstPlacedRoads(basePts, placedRoadEdges, true);
+        sidewalkChains.forEach((chain) => {
+          if (chain.points.length < 2) return;
+          const leftCurb = new THREE.Mesh(
+            createMiteredStripGeometry(chain, halfW, outerHalfW, 2, CURB_OFFSET),
+            mats.sidewalk
+          );
+          leftCurb.receiveShadow = true;
+          const rightCurb = new THREE.Mesh(
+            createMiteredStripGeometry(chain, -outerHalfW, -halfW, 2, CURB_OFFSET),
+            mats.sidewalk
+          );
+          rightCurb.receiveShadow = true;
+          roadNetworkGroup.add(leftCurb, rightCurb);
+        });
+      }
+
+      roadChains.forEach((chain) => {
+        for (let i = 0; i < chain.points.length - 1; i++) {
+          placedRoadEdges.push({
+            ax: chain.points[i][0],
+            az: chain.points[i][1],
+            bx: chain.points[i + 1][0],
+            bz: chain.points[i + 1][1],
+            halfW,
+            outerHalfW,
+          });
+        }
+      });
+    });
+
+    const crosswalkIntersections: [number, number][] = [
+      [-19, 38],
+      [19, 38],
+      [19, -30],
+      [-19, -30],
+      [-58, 30],
+      [-102, 11.5],
+      [68, 10],
+      [118, 10],
+      [-19, 70],
+      [19, 70],
+      [68, -30],
+    ];
+    crosswalkIntersections.forEach(([ix, iz]) => {
+      const armS = sampleNearestRoad(ix, iz + 5.6, 1.5);
+      if (armS.road && armS.dist < 1.2) {
+        const slopes = getSurfaceSlopeAngles(ix, iz + 5.6, 0);
+        for (let s = -2.6; s <= 2.6; s += 1.3) {
+          const stripeEW = new THREE.Mesh(ewStripeGeo, mats.roadStripe);
+          stripeEW.rotation.set(-Math.PI / 2 + slopes.pitch, 0, slopes.roll);
+          stripeEW.position.set(
+            ix + s,
+            getSurfaceHeightAt(ix + s, iz + 5.6) + ROAD_SURFACE_OFFSET + 0.028,
+            iz + 5.6
+          );
+          roadNetworkGroup.add(stripeEW);
+        }
+      }
+      const armE = sampleNearestRoad(ix + 5.6, iz, 1.5);
+      if (armE.road && armE.dist < 1.2) {
+        const slopes = getSurfaceSlopeAngles(ix + 5.6, iz, 0);
+        for (let s = -2.6; s <= 2.6; s += 1.3) {
+          const stripeNS = new THREE.Mesh(nsStripeGeo, mats.roadStripe);
+          stripeNS.rotation.set(-Math.PI / 2 + slopes.pitch, 0, slopes.roll);
+          stripeNS.position.set(
+            ix + 5.6,
+            getSurfaceHeightAt(ix + 5.6, iz + s) + ROAD_SURFACE_OFFSET + 0.028,
+            iz + s
+          );
+          roadNetworkGroup.add(stripeNS);
         }
       }
     });
+  };
 
-    const sidewalkChains = clipPolylineAgainstPlacedRoads(basePts, placedRoadEdges, true);
-    sidewalkChains.forEach((chain) => {
-      const leftCurb = new THREE.Mesh(
-        createMiteredStripGeometry(chain, halfW, outerHalfW, 2, CURB_OFFSET),
-        mats.sidewalk
-      );
-      leftCurb.receiveShadow = true;
-      const rightCurb = new THREE.Mesh(
-        createMiteredStripGeometry(chain, -outerHalfW, -halfW, 2, CURB_OFFSET),
-        mats.sidewalk
-      );
-      rightCurb.receiveShadow = true;
-      staticWorldGroup.add(leftCurb, rightCurb);
-    });
+  rebuild();
 
-    roadChains.forEach((chain) => {
-      for (let i = 0; i < chain.points.length - 1; i++) {
-        placedRoadEdges.push({
-          ax: chain.points[i][0],
-          az: chain.points[i][1],
-          bx: chain.points[i + 1][0],
-          bz: chain.points[i + 1][1],
-          halfW,
-          outerHalfW,
-        });
-      }
-    });
-  });
-
-  const crosswalkIntersections: [number, number][] = [
-    [-19, 38],
-    [19, 38],
-    [19, -30],
-    [-19, -30],
-    [-58, 30],
-    [-102, 11.5],
-    [68, 10],
-    [118, 10],
-    [-19, 70],
-    [19, 70],
-    [68, -30],
-  ];
-  crosswalkIntersections.forEach(([ix, iz]) => {
-    const armS = sampleNearestRoad(ix, iz + 5.6, 1.5);
-    if (armS.road && armS.dist < 1.2) {
-      const slopes = getSurfaceSlopeAngles(ix, iz + 5.6, 0);
-      for (let s = -2.6; s <= 2.6; s += 1.3) {
-        const stripeEW = new THREE.Mesh(ewStripeGeo, mats.roadStripe);
-        stripeEW.rotation.set(-Math.PI / 2 + slopes.pitch, 0, slopes.roll);
-        stripeEW.position.set(ix + s, getSurfaceHeightAt(ix + s, iz + 5.6) + ROAD_SURFACE_OFFSET + 0.028, iz + 5.6);
-        staticWorldGroup.add(stripeEW);
-      }
-    }
-    const armE = sampleNearestRoad(ix + 5.6, iz, 1.5);
-    if (armE.road && armE.dist < 1.2) {
-      const slopes = getSurfaceSlopeAngles(ix + 5.6, iz, 0);
-      for (let s = -2.6; s <= 2.6; s += 1.3) {
-        const stripeNS = new THREE.Mesh(nsStripeGeo, mats.roadStripe);
-        stripeNS.rotation.set(-Math.PI / 2 + slopes.pitch, 0, slopes.roll);
-        stripeNS.position.set(ix + 5.6, getSurfaceHeightAt(ix + 5.6, iz + s) + ROAD_SURFACE_OFFSET + 0.028, iz + s);
-        staticWorldGroup.add(stripeNS);
-      }
-    }
-  });
+  return {
+    group: roadNetworkGroup,
+    rebuild,
+    dispose: () => {
+      clearRoadMeshes();
+      group.remove(roadNetworkGroup);
+    },
+  };
 }

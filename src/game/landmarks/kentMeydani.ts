@@ -371,19 +371,83 @@ export function buildKentMeydani(def: LandmarkDef, mats: CityMaterialLibrary): B
 
   const bronzeMat = new THREE.MeshStandardMaterial({
     color: 0x6b533b,
-    roughness: 0.34,
-    metalness: 0.72,
+    roughness: 0.55,
+    metalness: 0.3,
+    flatShading: false,
   });
   const darkBronzeMat = new THREE.MeshStandardMaterial({
     color: 0x4c3a29,
-    roughness: 0.38,
-    metalness: 0.7,
+    roughness: 0.58,
+    metalness: 0.3,
+    flatShading: false,
   });
 
-  const statuePlinth = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.18, 2.12), darkBronzeMat);
+  const addStatueMesh = (
+    parent: THREE.Object3D,
+    geo: THREE.BufferGeometry,
+    mat: THREE.Material
+  ): THREE.Mesh => {
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    parent.add(mesh);
+    return mesh;
+  };
+
+  const statuePlinth = addStatueMesh(
+    monGroup,
+    new THREE.BoxGeometry(1.36, 0.18, 2.12),
+    darkBronzeMat
+  );
   statuePlinth.position.y = curY + 0.27;
-  statuePlinth.castShadow = true;
-  monGroup.add(statuePlinth);
+
+  // Shared high-segment sculpted geometries for flanking bronze figures
+  const figLegGeo = new THREE.CapsuleGeometry(0.056, 0.42, 8, 16);
+  const figTorsoGeo = new THREE.CapsuleGeometry(0.145, 0.28, 10, 20);
+  const figArmGeo = new THREE.CapsuleGeometry(0.044, 0.32, 8, 16);
+  const figJointGeo = new THREE.SphereGeometry(0.062, 14, 12);
+  const figHeadGeo = new THREE.SphereGeometry(0.112, 20, 16);
+  const figNeckGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.064, 0.0),
+      new THREE.Vector2(0.052, 0.05),
+      new THREE.Vector2(0.056, 0.095),
+    ],
+    18
+  );
+  figNeckGeo.computeVertexNormals();
+  const figSkirtGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.24, 0.0),
+      new THREE.Vector2(0.21, 0.18),
+      new THREE.Vector2(0.165, 0.42),
+      new THREE.Vector2(0.135, 0.62),
+    ],
+    24
+  );
+  figSkirtGeo.computeVertexNormals();
+  const figHelmetGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.138, 0.0),
+      new THREE.Vector2(0.125, 0.025),
+      new THREE.Vector2(0.115, 0.075),
+      new THREE.Vector2(0.072, 0.115),
+      new THREE.Vector2(0.0, 0.128),
+    ],
+    22
+  );
+  figHelmetGeo.computeVertexNormals();
+  const figCapGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.112, 0.0),
+      new THREE.Vector2(0.116, 0.04),
+      new THREE.Vector2(0.134, 0.072),
+      new THREE.Vector2(0.112, 0.09),
+      new THREE.Vector2(0.0, 0.094),
+    ],
+    22
+  );
+  figCapGeo.computeVertexNormals();
 
   // 3d. Flanking Bronze Soldiers & Citizens Around Pedestal Base
   const buildStandingFigure = (
@@ -396,36 +460,78 @@ export function buildKentMeydani(def: LandmarkDef, mats: CityMaterialLibrary): B
     fig.position.set(fx, 0.68, fz);
     fig.rotation.y = rotY;
 
-    const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, 0.58, 8), bronzeMat);
-    legs.position.y = 0.29;
-    legs.castShadow = true;
-    const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.14, 0.52, 8), bronzeMat);
-    torso.position.y = 0.8;
-    torso.castShadow = true;
-    const fHead = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), bronzeMat);
-    fHead.position.y = 1.18;
-    fig.add(legs, torso, fHead);
+    if (variant === 'citizen') {
+      const skirt = addStatueMesh(fig, figSkirtGeo, bronzeMat);
+      skirt.position.y = 0.02;
+    } else {
+      [-0.068, 0.068].forEach((lx) => {
+        const leg = addStatueMesh(fig, figLegGeo, bronzeMat);
+        leg.position.set(lx, 0.28, 0);
+        const hip = addStatueMesh(fig, figJointGeo, bronzeMat);
+        hip.position.set(lx, 0.54, 0);
+      });
+    }
+
+    const torso = addStatueMesh(fig, figTorsoGeo, bronzeMat);
+    torso.scale.set(1.06, 1.0, 0.82);
+    torso.position.y = 0.82;
+
+    // Softened spherical shoulder joints
+    [-0.145, 0.145].forEach((sx) => {
+      const sh = addStatueMesh(fig, figJointGeo, bronzeMat);
+      sh.position.set(sx, 0.99, 0);
+    });
+
+    const neck = addStatueMesh(fig, figNeckGeo, bronzeMat);
+    neck.position.y = 1.02;
+
+    const fHead = addStatueMesh(fig, figHeadGeo, bronzeMat);
+    fHead.scale.set(0.95, 1.06, 0.98);
+    fHead.position.y = 1.19;
 
     if (variant === 'soldier') {
-      const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.125, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.55), darkBronzeMat);
+      const helmet = addStatueMesh(fig, figHelmetGeo, darkBronzeMat);
       helmet.position.y = 1.21;
-      const rifle = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.92, 6), darkBronzeMat);
-      rifle.position.set(0.16, 0.96, -0.05);
-      rifle.rotation.z = -0.25;
-      fig.add(helmet, rifle);
+
+      const leftArm = addStatueMesh(fig, figArmGeo, bronzeMat);
+      leftArm.position.set(-0.17, 0.8, 0.03);
+      leftArm.rotation.z = 0.14;
+      const rightArm = addStatueMesh(fig, figArmGeo, bronzeMat);
+      rightArm.position.set(0.16, 0.86, 0.08);
+      rightArm.rotation.set(-0.42, 0, -0.2);
+
+      const rifleCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0.08, 0.52, -0.02),
+        new THREE.Vector3(0.15, 0.92, -0.03),
+        new THREE.Vector3(0.24, 1.42, -0.05),
+      ]);
+      addStatueMesh(fig, new THREE.TubeGeometry(rifleCurve, 14, 0.024, 12, false), darkBronzeMat);
     } else if (variant === 'salute') {
-      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.11, 0.07, 8), darkBronzeMat);
-      cap.position.y = 1.26;
-      const raisedArm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.045, 0.44, 6), bronzeMat);
-      raisedArm.position.set(-0.2, 1.14, 0.06);
-      raisedArm.rotation.z = 0.45;
-      fig.add(cap, raisedArm);
+      const cap = addStatueMesh(fig, figCapGeo, darkBronzeMat);
+      cap.position.y = 1.24;
+
+      const raisedArm = addStatueMesh(fig, figArmGeo, bronzeMat);
+      raisedArm.position.set(-0.2, 1.12, 0.07);
+      raisedArm.rotation.set(-0.25, 0, 0.52);
+
+      const otherArm = addStatueMesh(fig, figArmGeo, bronzeMat);
+      otherArm.position.set(0.17, 0.78, 0.02);
+      otherArm.rotation.z = -0.14;
     } else {
-      const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.22, 0.62, 8), bronzeMat);
-      skirt.position.y = 0.34;
-      const scarf = new THREE.Mesh(new THREE.SphereGeometry(0.125, 8, 8), darkBronzeMat);
-      scarf.position.set(0, 1.19, -0.02);
-      fig.add(skirt, scarf);
+      const scarfCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(-0.12, 1.02, 0.06),
+        new THREE.Vector3(-0.13, 1.24, 0.0),
+        new THREE.Vector3(0.0, 1.32, -0.04),
+        new THREE.Vector3(0.13, 1.24, 0.0),
+        new THREE.Vector3(0.11, 0.98, 0.08),
+      ]);
+      addStatueMesh(fig, new THREE.TubeGeometry(scarfCurve, 20, 0.042, 12, false), darkBronzeMat);
+
+      [-0.17, 0.17].forEach((ax) => {
+        const arm = addStatueMesh(fig, figArmGeo, bronzeMat);
+        arm.position.set(ax, 0.8, 0.04);
+        arm.rotation.z = ax < 0 ? 0.16 : -0.16;
+      });
     }
     monGroup.add(fig);
   };
@@ -440,6 +546,7 @@ export function buildKentMeydani(def: LandmarkDef, mats: CityMaterialLibrary): B
     const ledge = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.36, 0.74), mats.travertine);
     ledge.position.set(px, 0.68, pz);
     ledge.castShadow = true;
+    ledge.receiveShadow = true;
     monGroup.add(ledge);
   });
 
@@ -454,91 +561,247 @@ export function buildKentMeydani(def: LandmarkDef, mats: CityMaterialLibrary): B
   const eqGroup = new THREE.Group();
   eqGroup.position.set(0, eqBaseY, 0);
 
-  // Horse Body (facing local +Z -> West toward pool)
-  const horseBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.38, 1.42, 12), bronzeMat);
+  // Sculpted Horse Body (smooth capsule barrel + muscular chest & rump blends)
+  const horseBarrel = addStatueMesh(
+    eqGroup,
+    new THREE.CapsuleGeometry(0.355, 0.92, 12, 24),
+    bronzeMat
+  );
   horseBarrel.rotation.x = Math.PI / 2;
+  horseBarrel.scale.set(0.96, 1.0, 1.06);
   horseBarrel.position.set(0, 1.06, 0);
-  horseBarrel.castShadow = true;
-  const horseChest = new THREE.Mesh(new THREE.SphereGeometry(0.39, 12, 10), bronzeMat);
-  horseChest.position.set(0, 1.08, 0.64);
-  const horseRump = new THREE.Mesh(new THREE.SphereGeometry(0.38, 12, 10), bronzeMat);
-  horseRump.position.set(0, 1.06, -0.62);
-  eqGroup.add(horseBarrel, horseChest, horseRump);
 
-  // Horse Arched Neck, Head, Ears & Flowing Tail
-  const horseNeck = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 0.78, 10), bronzeMat);
-  horseNeck.position.set(0, 1.44, 0.84);
+  const horseChest = addStatueMesh(eqGroup, new THREE.SphereGeometry(0.39, 22, 18), bronzeMat);
+  horseChest.scale.set(0.95, 1.06, 1.02);
+  horseChest.position.set(0, 1.09, 0.6);
+
+  const horseRump = addStatueMesh(eqGroup, new THREE.SphereGeometry(0.38, 22, 18), bronzeMat);
+  horseRump.scale.set(0.96, 1.04, 1.05);
+  horseRump.position.set(0, 1.07, -0.58);
+
+  // Sculpted Horse Arched Neck, Organic Capsule Head, Lathe Ears, Flowing Tube Mane & Tail
+  const neckProfile = [
+    new THREE.Vector2(0.28, 0.0),
+    new THREE.Vector2(0.25, 0.22),
+    new THREE.Vector2(0.21, 0.52),
+    new THREE.Vector2(0.165, 0.78),
+  ];
+  const horseNeckGeo = new THREE.LatheGeometry(neckProfile, 22);
+  horseNeckGeo.computeVertexNormals();
+  const horseNeck = addStatueMesh(eqGroup, horseNeckGeo, bronzeMat);
+  horseNeck.position.set(0, 1.12, 0.65);
   horseNeck.rotation.x = 0.56;
-  horseNeck.castShadow = true;
-  const horseHead = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.24, 0.54), bronzeMat);
-  horseHead.position.set(0, 1.72, 1.15);
-  horseHead.rotation.x = 0.52;
-  horseHead.castShadow = true;
-  [-0.08, 0.08].forEach((ex) => {
-    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.14, 6), bronzeMat);
-    ear.position.set(ex, 1.9, 1.02);
-    eqGroup.add(ear);
-  });
-  const tailUpper = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 0.62, 8), darkBronzeMat);
-  tailUpper.position.set(0, 1.06, -0.98);
-  tailUpper.rotation.x = -0.52;
-  const tailLower = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.09, 0.58, 8), darkBronzeMat);
-  tailLower.position.set(0, 0.64, -1.14);
-  tailLower.rotation.x = -0.14;
-  eqGroup.add(horseNeck, horseHead, tailUpper, tailLower);
 
-  // 3 Grounded Horse Legs + 1 Raised Front-Right Foreleg (exact pose from drawing)
+  const horseHead = addStatueMesh(
+    eqGroup,
+    new THREE.CapsuleGeometry(0.115, 0.34, 10, 20),
+    bronzeMat
+  );
+  horseHead.position.set(0, 1.72, 1.16);
+  horseHead.rotation.x = Math.PI / 2 + 0.52;
+  horseHead.scale.set(1.0, 1.0, 1.08);
+
+  const horsePoll = addStatueMesh(eqGroup, new THREE.SphereGeometry(0.145, 18, 14), bronzeMat);
+  horsePoll.position.set(0, 1.81, 1.02);
+
+  const horseEarGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.042, 0.0),
+      new THREE.Vector2(0.032, 0.06),
+      new THREE.Vector2(0.012, 0.125),
+      new THREE.Vector2(0.0, 0.14),
+    ],
+    16
+  );
+  horseEarGeo.computeVertexNormals();
+  [-0.075, 0.075].forEach((ex) => {
+    const ear = addStatueMesh(eqGroup, horseEarGeo, bronzeMat);
+    ear.position.set(ex, 1.88, 1.02);
+    ear.rotation.z = ex < 0 ? 0.15 : -0.15;
+  });
+
+  // Sculpted flowing mane crest & S-curved horse tail via TubeGeometry
+  const maneCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, 1.38, 0.56),
+    new THREE.Vector3(0, 1.62, 0.74),
+    new THREE.Vector3(0, 1.84, 0.94),
+  ]);
+  addStatueMesh(eqGroup, new THREE.TubeGeometry(maneCurve, 16, 0.055, 12, false), darkBronzeMat);
+
+  const horseTailCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, 1.24, -0.84),
+    new THREE.Vector3(0, 1.06, -1.04),
+    new THREE.Vector3(0, 0.72, -1.16),
+    new THREE.Vector3(0, 0.38, -1.14),
+  ]);
+  addStatueMesh(
+    eqGroup,
+    new THREE.TubeGeometry(horseTailCurve, 22, 0.078, 14, false),
+    darkBronzeMat
+  );
+
+  // 3 Grounded Horse Legs + 1 Raised Front-Right Foreleg with softened joints & Lathe hooves
+  const horseUpperLegGeo = new THREE.CapsuleGeometry(0.078, 0.38, 8, 16);
+  const horseLowerLegGeo = new THREE.CapsuleGeometry(0.062, 0.38, 8, 16);
+  const horseJointGeo = new THREE.SphereGeometry(0.082, 14, 12);
+  const hoofGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.088, 0.0),
+      new THREE.Vector2(0.082, 0.04),
+      new THREE.Vector2(0.068, 0.1),
+    ],
+    18
+  );
+  hoofGeo.computeVertexNormals();
+
   [
-    { lx: -0.22, lz: -0.64, rx: 0.1 }, // Rear-left
-    { lx: 0.22, lz: -0.64, rx: -0.08 }, // Rear-right
-    { lx: -0.22, lz: 0.64, rx: -0.05 }, // Front-left grounded
+    { lx: -0.22, lz: -0.62, rx: 0.1 }, // Rear-left
+    { lx: 0.22, lz: -0.62, rx: -0.08 }, // Rear-right
+    { lx: -0.22, lz: 0.62, rx: -0.05 }, // Front-left grounded
   ].forEach(({ lx: legX, lz: legZ, rx }) => {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.065, 0.96, 8), bronzeMat);
-    leg.position.set(legX, 0.5, legZ);
-    leg.rotation.x = rx;
-    leg.castShadow = true;
-    const hoof = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.1, 8), darkBronzeMat);
-    hoof.position.set(legX, 0.05, legZ + rx * 0.45);
-    eqGroup.add(leg, hoof);
+    const hipJ = addStatueMesh(eqGroup, horseJointGeo, bronzeMat);
+    hipJ.position.set(legX, 0.94, legZ);
+
+    const upper = addStatueMesh(eqGroup, horseUpperLegGeo, bronzeMat);
+    upper.position.set(legX, 0.72, legZ + rx * 0.16);
+    upper.rotation.x = rx;
+
+    const kneeJ = addStatueMesh(eqGroup, horseJointGeo, bronzeMat);
+    kneeJ.scale.setScalar(0.86);
+    kneeJ.position.set(legX, 0.5, legZ + rx * 0.3);
+
+    const lower = addStatueMesh(eqGroup, horseLowerLegGeo, bronzeMat);
+    lower.position.set(legX, 0.28, legZ + rx * 0.4);
+    lower.rotation.x = rx * 0.6;
+
+    const hoof = addStatueMesh(eqGroup, hoofGeo, darkBronzeMat);
+    hoof.position.set(legX, 0.0, legZ + rx * 0.46);
   });
+
   // Raised Front-Right Foreleg (bent gracefully forward & up)
-  const raisedUpper = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.075, 0.48, 8), bronzeMat);
-  raisedUpper.position.set(0.22, 0.92, 0.78);
+  const raisedShoulder = addStatueMesh(eqGroup, horseJointGeo, bronzeMat);
+  raisedShoulder.position.set(0.22, 0.98, 0.64);
+  const raisedUpper = addStatueMesh(
+    eqGroup,
+    new THREE.CapsuleGeometry(0.076, 0.34, 8, 16),
+    bronzeMat
+  );
+  raisedUpper.position.set(0.22, 0.92, 0.8);
   raisedUpper.rotation.x = -0.95;
-  const raisedLower = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.42, 8), bronzeMat);
-  raisedLower.position.set(0.22, 0.8, 1.06);
+  const raisedKnee = addStatueMesh(eqGroup, horseJointGeo, bronzeMat);
+  raisedKnee.scale.setScalar(0.85);
+  raisedKnee.position.set(0.22, 0.96, 0.98);
+  const raisedLower = addStatueMesh(
+    eqGroup,
+    new THREE.CapsuleGeometry(0.06, 0.32, 8, 16),
+    bronzeMat
+  );
+  raisedLower.position.set(0.22, 0.78, 1.07);
   raisedLower.rotation.x = 0.55;
-  eqGroup.add(raisedUpper, raisedLower);
+  const raisedHoof = addStatueMesh(eqGroup, hoofGeo, darkBronzeMat);
+  raisedHoof.position.set(0.22, 0.58, 1.15);
+  raisedHoof.rotation.x = 0.65;
 
-  // Saddle & Mounted Atatürk in Peaked Military Cap & Officer Uniform
-  const saddle = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.16, 0.52), darkBronzeMat);
+  // Sculpted Saddle & Mounted Atatürk in Peaked Military Cap & Officer Uniform
+  const saddle = addStatueMesh(
+    eqGroup,
+    new THREE.CapsuleGeometry(0.24, 0.32, 10, 20),
+    darkBronzeMat
+  );
+  saddle.rotation.x = Math.PI / 2;
+  saddle.scale.set(1.24, 1.0, 0.58);
   saddle.position.set(0, 1.44, 0.05);
-  const riderTorso = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 0.72, 10), bronzeMat);
-  riderTorso.position.set(0, 1.84, 0.04);
-  riderTorso.castShadow = true;
-  const riderShoulders = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.24, 0.26), bronzeMat);
-  riderShoulders.position.set(0, 2.08, 0.04);
-  const riderHead = new THREE.Mesh(new THREE.SphereGeometry(0.145, 12, 10), bronzeMat);
-  riderHead.position.set(0, 2.34, 0.06);
-  riderHead.castShadow = true;
-  const officerCap = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.14, 0.1, 10), darkBronzeMat);
-  officerCap.position.set(0, 2.46, 0.06);
-  const capVisor = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.03, 0.12), darkBronzeMat);
-  capVisor.position.set(0, 2.42, 0.18);
-  const sword = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.012, 0.72, 6), darkBronzeMat);
-  sword.position.set(0.28, 1.38, -0.06);
-  sword.rotation.x = 0.55;
-  eqGroup.add(saddle, riderTorso, riderShoulders, riderHead, officerCap, capVisor, sword);
 
-  // Rider Boots & Arms holding the Reins
-  [-0.3, 0.3].forEach((sx) => {
-    const boot = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.065, 0.58, 8), darkBronzeMat);
+  const riderTorso = addStatueMesh(
+    eqGroup,
+    new THREE.CapsuleGeometry(0.215, 0.42, 12, 22),
+    bronzeMat
+  );
+  riderTorso.scale.set(1.08, 1.0, 0.82);
+  riderTorso.position.set(0, 1.84, 0.04);
+
+  // Softened officer shoulder yoke + deltoid spheres
+  const riderShoulders = addStatueMesh(
+    eqGroup,
+    new THREE.CapsuleGeometry(0.135, 0.34, 10, 20),
+    bronzeMat
+  );
+  riderShoulders.rotation.z = Math.PI / 2;
+  riderShoulders.position.set(0, 2.08, 0.04);
+
+  const riderNeck = addStatueMesh(
+    eqGroup,
+    new THREE.LatheGeometry(
+      [
+        new THREE.Vector2(0.095, 0.0),
+        new THREE.Vector2(0.078, 0.065),
+        new THREE.Vector2(0.082, 0.13),
+      ],
+      20
+    ),
+    bronzeMat
+  );
+  riderNeck.geometry.computeVertexNormals();
+  riderNeck.position.set(0, 2.16, 0.05);
+
+  const riderHead = addStatueMesh(eqGroup, new THREE.SphereGeometry(0.148, 22, 18), bronzeMat);
+  riderHead.scale.set(0.95, 1.06, 1.0);
+  riderHead.position.set(0, 2.36, 0.06);
+
+  // LatheGeometry Peaked Military Officer Cap + curved TubeGeometry visor rim
+  const officerCapGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.142, 0.0),
+      new THREE.Vector2(0.146, 0.045),
+      new THREE.Vector2(0.178, 0.095),
+      new THREE.Vector2(0.148, 0.122),
+      new THREE.Vector2(0.0, 0.128),
+    ],
+    24
+  );
+  officerCapGeo.computeVertexNormals();
+  const officerCap = addStatueMesh(eqGroup, officerCapGeo, darkBronzeMat);
+  officerCap.position.set(0, 2.43, 0.06);
+
+  const visorCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-0.12, 2.44, 0.14),
+    new THREE.Vector3(-0.06, 2.425, 0.23),
+    new THREE.Vector3(0.0, 2.42, 0.25),
+    new THREE.Vector3(0.06, 2.425, 0.23),
+    new THREE.Vector3(0.12, 2.44, 0.14),
+  ]);
+  addStatueMesh(eqGroup, new THREE.TubeGeometry(visorCurve, 14, 0.02, 10, false), darkBronzeMat);
+
+  // Curved Officer Cavalry Saber
+  const swordCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0.28, 1.62, 0.12),
+    new THREE.Vector3(0.3, 1.38, -0.06),
+    new THREE.Vector3(0.29, 1.12, -0.26),
+  ]);
+  addStatueMesh(eqGroup, new THREE.TubeGeometry(swordCurve, 14, 0.018, 10, false), darkBronzeMat);
+
+  // Rider Boots, Arms holding Reins, & Curved Bronze Reins
+  const riderBootGeo = new THREE.CapsuleGeometry(0.072, 0.44, 8, 16);
+  const riderArmGeo = new THREE.CapsuleGeometry(0.056, 0.4, 8, 16);
+  [-0.29, 0.29].forEach((sx) => {
+    const boot = addStatueMesh(eqGroup, riderBootGeo, darkBronzeMat);
     boot.position.set(sx, 1.24, 0.14);
     boot.rotation.z = sx > 0 ? -0.18 : 0.18;
-    const armR = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.05, 0.52, 8), bronzeMat);
-    armR.position.set(sx * 0.85, 1.86, 0.26);
-    armR.rotation.x = -0.82;
-    eqGroup.add(boot, armR);
+
+    const shoulderJ = addStatueMesh(eqGroup, horseJointGeo, bronzeMat);
+    shoulderJ.scale.setScalar(0.95);
+    shoulderJ.position.set(sx * 0.92, 2.06, 0.06);
+
+    const arm = addStatueMesh(eqGroup, riderArmGeo, bronzeMat);
+    arm.position.set(sx * 0.84, 1.86, 0.26);
+    arm.rotation.x = -0.82;
+
+    const reinCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(sx * 0.72, 1.72, 0.44),
+      new THREE.Vector3(sx * 0.32, 1.64, 0.78),
+      new THREE.Vector3(sx * 0.12, 1.65, 1.18),
+    ]);
+    addStatueMesh(eqGroup, new THREE.TubeGeometry(reinCurve, 14, 0.014, 8, false), darkBronzeMat);
   });
 
   monGroup.add(eqGroup);
