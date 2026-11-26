@@ -639,7 +639,7 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       const maxDpr = isSoftwareGl ? 1 : isTouchDevice ? 1.0 : 1.25;
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
       renderer.shadowMap.enabled = !isSoftwareGl;
-      renderer.shadowMap.type = THREE.PCFShadowMap;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       renderer.setSize(container.clientWidth, container.clientHeight);
       renderer.domElement.style.display = 'block';
       renderer.domElement.style.width = '100%';
@@ -691,10 +691,10 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       _lookCurrent.set(simRef.current.x, 1, simRef.current.z);
       camera.lookAt(_lookCurrent);
 
-      const fpCamera = new THREE.PerspectiveCamera(64, aspect, 0.12, 280);
+      const fpCamera = new THREE.PerspectiveCamera(64, aspect, 0.25, 280);
       fpCamera.position.set(simRef.current.x, simRef.current.y + 1.46, simRef.current.z);
 
-      const chaseCamera = new THREE.PerspectiveCamera(60, aspect, 0.12, 320);
+      const chaseCamera = new THREE.PerspectiveCamera(60, aspect, 0.25, 320);
       const sparrowChaseCam = new SparrowChaseCamera();
       const unbindChaseDrag = sparrowChaseCam.bindDrag(
         renderer.domElement,
@@ -727,8 +727,8 @@ export const EfelerCanvas = forwardRef<EfelerCanvasHandle, EfelerCanvasProps>(
       sunLight.shadow.camera.right = d;
       sunLight.shadow.camera.top = d;
       sunLight.shadow.camera.bottom = -d;
-      sunLight.shadow.bias = -0.0004;
-      sunLight.shadow.normalBias = 0.02;
+      sunLight.shadow.bias = -0.0005;
+      sunLight.shadow.normalBias = 0.025;
       sunLight.shadow.radius = isTouchDevice ? 1.0 : 1.2;
       const shadowTexel = (2 * d) / shadowRes;
       scene.add(sunLight);

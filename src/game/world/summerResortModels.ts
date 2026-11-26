@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { ColliderBox, SandboxCustomHouseSpec } from '../../types/game';
 import { CityMaterialLibrary } from '../materials';
 import { CustomHouseSpawnResult } from '../sandboxManager';
-import { getTerrainHeightAt } from '../terrain';
+import { getBuildingPadHeight } from '../terrain';
 
 interface ResortPalette {
   deepSea: THREE.MeshStandardMaterial;
@@ -35,6 +35,9 @@ function getResortPalette(
     color: 0x0f5d7a,
     roughness: 0.45,
     metalness: 0.06,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
   });
   const seaFoam = new THREE.MeshStandardMaterial({
     color: 0xf4fbff,
@@ -222,10 +225,10 @@ function buildSeaCove(
   mats: CityMaterialLibrary,
   pal: ResortPalette
 ): void {
-  // 1. Golden sand cove apron (rounded oval footprint, flat walkable)
+  // 1. Golden sand cove apron with downward retaining skirt so sloped hills never leave floating edges
   const baseShape = makeRoundedRectShape(16.0, 12.0, 4.2);
   const sandGeo = new THREE.ExtrudeGeometry(baseShape, {
-    depth: 0.14,
+    depth: 1.35,
     bevelEnabled: true,
     bevelThickness: 0.04,
     bevelSize: 0.14,
@@ -234,16 +237,16 @@ function buildSeaCove(
   sandGeo.rotateX(Math.PI / 2);
   addShadowMesh(group, sandGeo, mats.beachSand, 0, 0.16, 0, false, true);
 
-  // 2. Deep Aegean seabed beneath the turquoise sea bay
+  // 2. Deep Aegean seabed cleanly above the sand cove top (top = 0.20)
   const bayShape = makeRoundedRectShape(14.4, 7.6, 3.2);
   const seabedGeo = new THREE.ShapeGeometry(bayShape, 18);
   seabedGeo.rotateX(-Math.PI / 2);
-  addShadowMesh(group, seabedGeo, pal.deepSea, 0, 0.18, -1.7, false, true);
+  addShadowMesh(group, seabedGeo, pal.deepSea, 0, 0.215, -1.7, false, true);
 
   // 3. Translucent turquoise Aegean sea water surface
   const waterGeo = new THREE.ShapeGeometry(bayShape, 18);
   waterGeo.rotateX(-Math.PI / 2);
-  addShadowMesh(group, waterGeo, mats.seaWater, 0, 0.24, -1.7, false, true);
+  addShadowMesh(group, waterGeo, mats.seaWater, 0, 0.275, -1.7, false, true);
 
   // 4. Scalloped white sea-foam shoreline wave strips
   for (let i = 0; i < 4; i++) {
@@ -253,7 +256,7 @@ function buildSeaCove(
     const foamGeo = new THREE.CapsuleGeometry(0.18, fw, 4, 8);
     foamGeo.rotateZ(Math.PI / 2);
     foamGeo.scale(1, 0.18, 1);
-    addShadowMesh(group, foamGeo, pal.seaFoam, fx, 0.26, fz, false, false);
+    addShadowMesh(group, foamGeo, pal.seaFoam, fx, 0.3, fz, false, false);
   }
 
   // 5. Coastal Aegean limestone boulders framing both ends of the cove
@@ -323,10 +326,10 @@ function buildSandBeach(
   mats: CityMaterialLibrary,
   pal: ResortPalette
 ): void {
-  // 1. Sculpted golden Aegean sand pad
+  // 1. Sculpted golden Aegean sand pad with downward retaining skirt
   const padShape = makeRoundedRectShape(12.0, 10.0, 2.8);
   const sandGeo = new THREE.ExtrudeGeometry(padShape, {
-    depth: 0.14,
+    depth: 1.35,
     bevelEnabled: true,
     bevelThickness: 0.04,
     bevelSize: 0.14,
@@ -342,20 +345,20 @@ function buildSandBeach(
       new THREE.BoxGeometry(1.7, 0.06, 0.34),
       mats.woodDeck,
       0,
-      0.21,
+      0.23,
       4.5 - i * 0.44,
       true,
       true
     );
   }
 
-  // 3. Two woven beach towels spread on the sand
+  // 3. Two woven beach towels spread cleanly above the sand top (0.20)
   const towelA = addShadowMesh(
     group,
     new THREE.BoxGeometry(1.25, 0.035, 2.15),
     pal.turquoiseFabric,
     -2.9,
-    0.2,
+    0.225,
     -0.8,
     false,
     true
@@ -363,10 +366,10 @@ function buildSandBeach(
   towelA.rotation.y = 0.16;
   const stripeA = addShadowMesh(
     group,
-    new THREE.BoxGeometry(1.26, 0.04, 0.32),
+    new THREE.BoxGeometry(1.26, 0.024, 0.32),
     pal.creamFabric,
     -2.9,
-    0.205,
+    0.242,
     -0.8,
     false,
     true
@@ -378,7 +381,7 @@ function buildSandBeach(
     new THREE.BoxGeometry(1.25, 0.035, 2.15),
     pal.coralFabric,
     3.1,
-    0.2,
+    0.225,
     -1.1,
     false,
     true
@@ -386,10 +389,10 @@ function buildSandBeach(
   towelB.rotation.y = -0.22;
   const stripeB = addShadowMesh(
     group,
-    new THREE.BoxGeometry(1.26, 0.04, 0.32),
+    new THREE.BoxGeometry(1.26, 0.024, 0.32),
     pal.sunYellow,
     3.1,
-    0.205,
+    0.242,
     -1.1,
     false,
     true
@@ -453,10 +456,10 @@ function buildSunLoungers(
   rotY: number,
   gy: number
 ): ColliderBox[] {
-  // 1. Subtle sand plinth beneath lounger set
-  const padGeo = new THREE.CylinderGeometry(2.75, 2.95, 0.08, 22);
+  // 1. Subtle sand plinth beneath lounger set (deepened skirt for hillsides)
+  const padGeo = new THREE.CylinderGeometry(2.75, 2.95, 1.0, 22);
   padGeo.scale(1.06, 1, 0.82);
-  addShadowMesh(group, padGeo, mats.beachSand, 0, 0.04, 0, false, true);
+  addShadowMesh(group, padGeo, mats.beachSand, 0, -0.42, 0, false, true);
 
   // 2. Two reclining resort sun loungers
   const loungerSpecs: { x: number; mat: THREE.Material }[] = [
@@ -573,14 +576,14 @@ function buildBeachVolleyball(
   const courtW = 13.6;
   const courtD = 8.2;
 
-  // 1. Deep golden sand court bed
-  addShadowMesh(group, new THREE.BoxGeometry(courtW, 0.16, courtD), mats.beachSand, 0, 0.08, 0, false, true);
+  // 1. Deep golden sand court bed with retaining skirt
+  addShadowMesh(group, new THREE.BoxGeometry(courtW, 1.36, courtD), mats.beachSand, 0, -0.52, 0, false, true);
 
   // 2. Timber perimeter retaining beams
-  addShadowMesh(group, new THREE.BoxGeometry(courtW + 0.36, 0.22, 0.2), mats.woodDeck, 0, 0.11, -courtD * 0.5 - 0.08);
-  addShadowMesh(group, new THREE.BoxGeometry(courtW + 0.36, 0.22, 0.2), mats.woodDeck, 0, 0.11, courtD * 0.5 + 0.08);
-  addShadowMesh(group, new THREE.BoxGeometry(0.2, 0.22, courtD + 0.16), mats.woodDeck, -courtW * 0.5 - 0.08, 0.11, 0);
-  addShadowMesh(group, new THREE.BoxGeometry(0.2, 0.22, courtD + 0.16), mats.woodDeck, courtW * 0.5 + 0.08, 0.11, 0);
+  addShadowMesh(group, new THREE.BoxGeometry(courtW + 0.36, 0.42, 0.2), mats.woodDeck, 0, 0.01, -courtD * 0.5 - 0.08);
+  addShadowMesh(group, new THREE.BoxGeometry(courtW + 0.36, 0.42, 0.2), mats.woodDeck, 0, 0.01, courtD * 0.5 + 0.08);
+  addShadowMesh(group, new THREE.BoxGeometry(0.2, 0.42, courtD + 0.16), mats.woodDeck, -courtW * 0.5 - 0.08, 0.01, 0);
+  addShadowMesh(group, new THREE.BoxGeometry(0.2, 0.42, courtD + 0.16), mats.woodDeck, courtW * 0.5 + 0.08, 0.01, 0);
 
   // 3. Crisp white boundary court tape lines
   const playW = 11.4;
@@ -728,8 +731,8 @@ function buildWoodenPier(
   // 4. Two warm harbor brass lanterns at the front tip
   for (const side of [-1, 1]) {
     const lx = side * (pierW * 0.5 - 0.18);
-    addShadowMesh(group, new THREE.CylinderGeometry(0.14, 0.14, 0.24, 8), mats.lampBulb, lx, deckY + 0.72, -5.0, false, false);
-    addShadowMesh(group, new THREE.ConeGeometry(0.22, 0.14, 8), mats.brass, lx, deckY + 0.9, -5.0);
+    addShadowMesh(group, new THREE.CylinderGeometry(0.095, 0.095, 0.18, 10), mats.lampBulb, lx, deckY + 0.69, -5.0, false, false);
+    addShadowMesh(group, new THREE.ConeGeometry(0.145, 0.1, 10), mats.brass, lx, deckY + 0.83, -5.0);
   }
 
   // 5. Stainless steel swimming ladder at the front edge
@@ -771,9 +774,9 @@ function buildBeachCabana(
   rotY: number,
   gy: number
 ): ColliderBox[] {
-  // 1. Raised teak cabana deck + front step
-  addShadowMesh(group, new THREE.BoxGeometry(6.0, 0.26, 5.0), mats.woodDeck, 0, 0.13, 0);
-  addShadowMesh(group, new THREE.BoxGeometry(2.6, 0.14, 0.55), mats.woodDeck, 0, 0.07, 2.75);
+  // 1. Raised teak cabana deck + retaining foundation skirt + front step
+  addShadowMesh(group, new THREE.BoxGeometry(6.0, 1.36, 5.0), mats.woodDeck, 0, -0.42, 0);
+  addShadowMesh(group, new THREE.BoxGeometry(2.6, 0.54, 0.55), mats.woodDeck, 0, -0.13, 2.75);
 
   // 2. Four sturdy timber corner posts + top eaves frame
   for (const px of [-2.65, 2.65]) {
@@ -839,8 +842,8 @@ function buildLifeguardTower(
   rotY: number,
   gy: number
 ): ColliderBox[] {
-  // 1. Small sand mound base
-  addShadowMesh(group, new THREE.CylinderGeometry(2.15, 2.35, 0.08, 18), mats.beachSand, 0, 0.04, 0, false, true);
+  // 1. Sand mound base with downward skirt
+  addShadowMesh(group, new THREE.CylinderGeometry(2.15, 2.35, 1.0, 18), mats.beachSand, 0, -0.42, 0, false, true);
 
   // 2. Four angled timber stilts raising watch deck to y = 2.05
   const legPos: [number, number][] = [
@@ -923,10 +926,10 @@ function buildSailboatAndSurf(
   rotY: number,
   gy: number
 ): ColliderBox[] {
-  // 1. Subtle shallow shore cradle (sand + turquoise edge)
-  const cradleGeo = new THREE.CylinderGeometry(2.85, 3.05, 0.08, 22);
+  // 1. Subtle shallow shore cradle with downward skirt
+  const cradleGeo = new THREE.CylinderGeometry(2.85, 3.05, 1.0, 22);
   cradleGeo.scale(1.12, 1, 0.78);
-  addShadowMesh(group, cradleGeo, mats.beachSand, 0, 0.04, 0, false, true);
+  addShadowMesh(group, cradleGeo, mats.beachSand, 0, -0.42, 0, false, true);
 
   // 2. Sculpted Aegean day-sailer boat
   const boat = new THREE.Group();
@@ -1033,7 +1036,7 @@ export function buildSummerResortModel(
   localDisposables?: { dispose: () => void }[]
 ): CustomHouseSpawnResult {
   const pal = getResortPalette(mats, localDisposables);
-  const gy = getTerrainHeightAt(sx, sz);
+  const gy = getBuildingPadHeight(sx, sz, spec.w * 0.5, spec.d * 0.5);
   const group = new THREE.Group();
   group.position.set(sx, gy, sz);
   group.rotation.y = sRotY;

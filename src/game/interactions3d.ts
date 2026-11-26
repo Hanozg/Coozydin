@@ -166,9 +166,12 @@ export function createStreetMusiciansZeybek(
     emissive: new THREE.Color(0xe3a84f),
     emissiveIntensity: 0.35,
     side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -4,
+    polygonOffsetUnits: -4,
   });
   const stageRing = new THREE.Mesh(stageRingGeo, stageRingMat);
-  stageRing.position.y = 0.04;
+  stageRing.position.y = 0.062;
   group.add(stageRing);
 
   // 6 Efeler Dancers circling around the musicians
@@ -305,6 +308,11 @@ export function createLibraryAndVendor(
   const libZ = 26.5;
   const lib = new THREE.Group();
   lib.position.set(libX, getTerrainHeightAt(libX, libZ), libZ);
+
+  const podiumSkirt = new THREE.Mesh(new THREE.BoxGeometry(9.5, 1.6, 11.7), mats.travertine);
+  podiumSkirt.position.y = -0.78;
+  podiumSkirt.receiveShadow = true;
+  lib.add(podiumSkirt);
 
   const podium = new THREE.Mesh(new THREE.BoxGeometry(9.2, 0.4, 11.4), mats.travertine);
   podium.position.y = 0.2;
@@ -762,9 +770,9 @@ export function createParkGuitarYouthGroup(
   const postMat = mats.darkTimber;
   [-1.75, 1.75].forEach((px, i) => {
     const pz = i === 0 ? -1.1 : 1.05;
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 1.85, 6), postMat);
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 1.85, 8), postMat);
     post.position.set(px, 0.92, pz);
-    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), mats.lampBulb);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), mats.lampBulb);
     bulb.position.set(px, 1.86, pz);
     parkStaticGroup.add(post, bulb);
   });
@@ -863,10 +871,11 @@ export function createParkGuitarYouthGroup(
     emissiveIntensity: 0.4,
     side: THREE.DoubleSide,
     polygonOffset: true,
-    polygonOffsetFactor: -3,
+    polygonOffsetFactor: -4,
+    polygonOffsetUnits: -4,
   });
   const stageRing = new THREE.Mesh(ringGeo, ringMat);
-  stageRing.position.y = 0.045;
+  stageRing.position.y = 0.062;
   group.add(stageRing);
 
   const noteCount = 12;

@@ -178,10 +178,10 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
   const yardW = w + 1.35;
   const yardD = d + 2.05;
   const foundation = new THREE.Mesh(
-    new THREE.BoxGeometry(yardW, 2.3, yardD),
+    new THREE.BoxGeometry(yardW, 3.4, yardD),
     mats.limestonePlinth
   );
-  foundation.position.set(0, -1.04, 0.45);
+  foundation.position.set(0, -1.59, 0.45);
   foundation.receiveShadow = true;
   house.add(foundation);
 
@@ -368,7 +368,7 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
   }
   [1.1, 1.6].forEach((pz) => {
     const paver = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.06, 0.34), mats.limestonePlinth);
-    paver.position.set(0, 0.21, d / 2 + porchD + pz);
+    paver.position.set(0, 0.225, d / 2 + porchD + pz);
     house.add(paver);
   });
 
@@ -410,8 +410,8 @@ export function buildDioramaHouse(opts: DioramaHouseOptions): BuiltDioramaHouse 
   doorLeaf.position.set(doorX, 1.34, d / 2 + 0.05);
   const doorKnob = new THREE.Mesh(new THREE.SphereGeometry(0.055, 6, 6), mats.brass);
   doorKnob.position.set(doorX + 0.28, 1.32, d / 2 + 0.14);
-  const porchLantern = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 6), mats.lampBulb);
-  porchLantern.position.set(doorX + 0.66, 2.02, d / 2 + 0.16);
+  const porchLantern = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 8), mats.lampBulb);
+  porchLantern.position.set(doorX + 0.66, 2.02, d / 2 + 0.14);
   house.add(doorFrame, doorLeaf, doorKnob, porchLantern);
 
   if (porchW >= 3.4) {
@@ -708,10 +708,10 @@ export function buildCustomPlayerHouse(opts: CustomPlayerHouseOptions): BuiltCus
 
   // Shared Yard Foundation + Lawn
   const foundation = new THREE.Mesh(
-    new THREE.BoxGeometry(yardW, 2.3, yardD),
+    new THREE.BoxGeometry(yardW, 3.4, yardD),
     mats.limestonePlinth
   );
-  foundation.position.set(0, -1.04, 0.48);
+  foundation.position.set(0, -1.59, 0.48);
   foundation.receiveShadow = true;
   house.add(foundation);
 
@@ -1277,8 +1277,8 @@ export function buildCustomPlayerHouse(opts: CustomPlayerHouseOptions): BuiltCus
     doorFrame.position.set(-0.92, 1.4, d / 2 + 0.03);
     const doorLeaf = new THREE.Mesh(new THREE.BoxGeometry(0.88, 1.68, 0.14), mats.darkTimber);
     doorLeaf.position.set(-0.92, 1.34, d / 2 + 0.05);
-    const porchLantern = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 6), mats.lampBulb);
-    porchLantern.position.set(-0.26, 2.02, d / 2 + 0.16);
+    const porchLantern = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 8), mats.lampBulb);
+    porchLantern.position.set(-0.26, 2.02, d / 2 + 0.14);
     house.add(doorFrame, doorLeaf, porchLantern);
 
     addMullionedWindow(

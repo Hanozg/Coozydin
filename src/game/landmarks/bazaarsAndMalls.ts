@@ -12,7 +12,12 @@ export function buildForumAvm(def: LandmarkDef, mats: CityMaterialLibrary): Buil
   const [lx, , lz] = def.position;
   group.position.set(lx, 0, lz);
 
-  // Wide Travertine Lifestyle Mall Courtyard
+  // Wide Travertine Lifestyle Mall Courtyard + Retaining Skirt
+  const deckSkirt = new THREE.Mesh(new THREE.BoxGeometry(26.4, 1.6, 24.4), mats.travertine);
+  deckSkirt.position.y = -0.78;
+  deckSkirt.receiveShadow = true;
+  group.add(deckSkirt);
+
   const deck = new THREE.Mesh(new THREE.BoxGeometry(26, 0.25, 24), mats.plaza);
   deck.position.y = 0.125;
   deck.receiveShadow = true;
@@ -160,7 +165,12 @@ export function buildKipaAvm(def: LandmarkDef, mats: CityMaterialLibrary): Built
 
   const colliders: ColliderBox[] = [];
 
-  // 1. Concrete Plaza & Front Open Parking Forecourt facing North (-Z toward İstasyon Caddesi)
+  // 1. Concrete Plaza, Retaining Skirt & Front Open Parking Forecourt facing North (-Z toward İstasyon Caddesi)
+  const plinthSkirt = new THREE.Mesh(new THREE.BoxGeometry(24.6, 1.5, 16.6), mats.travertine);
+  plinthSkirt.position.y = -0.74;
+  plinthSkirt.receiveShadow = true;
+  group.add(plinthSkirt);
+
   const plinth = new THREE.Mesh(new THREE.BoxGeometry(24.2, 0.22, 16.2), mats.plaza);
   plinth.position.y = 0.11;
   plinth.receiveShadow = true;
@@ -169,10 +179,13 @@ export function buildKipaAvm(def: LandmarkDef, mats: CityMaterialLibrary): Built
   const parkingMat = new THREE.MeshStandardMaterial({
     map: createKipaParkingTexture(),
     roughness: 0.86,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+    polygonOffsetUnits: -3,
   });
   const parkingLot = new THREE.Mesh(new THREE.PlaneGeometry(22.8, 6.2), parkingMat);
   parkingLot.rotation.x = -Math.PI / 2;
-  parkingLot.position.set(0, 0.23, -4.7);
+  parkingLot.position.set(0, 0.238, -4.7);
   parkingLot.receiveShadow = true;
   group.add(parkingLot);
 
@@ -324,10 +337,10 @@ export function buildSevgiYolu(def: LandmarkDef, mats: CityMaterialLibrary): Bui
 
   const colliders: ColliderBox[] = [];
 
-  // Flanking Travertine Sidewalk Aprons (keeping center roadway z in [-3.9..+3.9] clear & drivable)
+  // Flanking Travertine Sidewalk Aprons (deepened to seal into ground and cleanly clear road sidewalks)
   [-5.15, 5.15].forEach((az) => {
-    const apron = new THREE.Mesh(new THREE.BoxGeometry(25.2, 0.22, 2.3), mats.plaza);
-    apron.position.set(0, 0.04, az);
+    const apron = new THREE.Mesh(new THREE.BoxGeometry(25.2, 0.72, 2.3), mats.plaza);
+    apron.position.set(0, -0.175, az);
     apron.receiveShadow = true;
     group.add(apron);
   });

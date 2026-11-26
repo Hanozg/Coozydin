@@ -40,6 +40,7 @@ export interface ProceduralTextureSet {
   aegeanBlueRoof: THREE.CanvasTexture;
   plazaTile: THREE.CanvasTexture;
   grassGround: THREE.CanvasTexture;
+  grassMicroGrain: THREE.CanvasTexture;
   wheatField: THREE.CanvasTexture;
   lavenderField: THREE.CanvasTexture;
   dirtPath: THREE.CanvasTexture;
@@ -293,27 +294,29 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
   }
   const plazaTile = finalizeTexture(plazaCanvas, aniso, 4, 4, true);
 
-  // 7. Sun-Drenched Olive & Meadow Turf with Warm Dappled Grass
+  // 7. White-Balanced Neutral Meadow Micro-Grain (tinted by vertex colors / material.color without double-darkening)
   const [grassCanvas, grassCtx] = makeCanvas(256, 256);
-  grassCtx.fillStyle = '#92A45D';
+  grassCtx.fillStyle = '#F2F4EE';
   grassCtx.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 64; i++) {
     const cx = (i * 47) % 256;
     const cy = (i * 89) % 256;
-    grassCtx.fillStyle = i % 2 === 0 ? 'rgba(176, 184, 96, 0.22)' : 'rgba(114, 138, 72, 0.22)';
+    grassCtx.fillStyle = i % 2 === 0 ? 'rgba(255, 255, 250, 0.24)' : 'rgba(210, 218, 200, 0.22)';
     grassCtx.beginPath();
-    grassCtx.arc(cx, cy, 14 + (i % 14), 0, Math.PI * 2);
+    grassCtx.arc(cx, cy, 14 + (i % 15), 0, Math.PI * 2);
     grassCtx.fill();
   }
   for (let i = 0; i < 2400; i++) {
     const x = (i * 97) % 256;
     const y = (i * 53) % 256;
-    const g = 152 + ((i * 29) % 28);
-    const warmShift = i % 4 === 0 ? 18 : 0;
-    grassCtx.fillStyle = `rgb(${g - 12 + warmShift}, ${g}, ${g - 58})`;
+    const v = 228 + ((i * 29) % 26);
+    const warm = i % 4 === 0 ? 4 : 0;
+    grassCtx.fillStyle = `rgb(${Math.min(255, v + warm)}, ${Math.min(255, v + 3)}, ${Math.max(204, v - 8)})`;
     grassCtx.fillRect(x, y, 2, 3);
   }
-  const grassGround = finalizeTexture(grassCanvas, aniso, 28, 28, true);
+  // Repeat 1x1 because sculpted terrain uses world-space UVs (wx / 24, wz / 24)
+  const grassGround = finalizeTexture(grassCanvas, aniso, 1, 1, true);
+  const grassMicroGrain = finalizeTexture(grassCanvas, aniso, 2.5, 2.5, true);
 
   // 7b. Golden Harvest Wheat Field Texture
   const [wheatCanvas, wheatCtx] = makeCanvas(256, 256);
@@ -530,6 +533,7 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
     aegeanBlueRoof,
     plazaTile,
     grassGround,
+    grassMicroGrain,
     wheatField,
     lavenderField,
     dirtPath,
@@ -554,6 +558,7 @@ export function createProceduralTextures(maxAnisotropy: number): ProceduralTextu
       aegeanBlueRoof.dispose();
       plazaTile.dispose();
       grassGround.dispose();
+      grassMicroGrain.dispose();
       wheatField.dispose();
       lavenderField.dispose();
       dirtPath.dispose();

@@ -170,6 +170,29 @@ export function getTerrainHeightAt(x: number, z: number): number {
 }
 
 /**
+ * Computes a slope-safe foundation elevation for a building or pad footprint so uphill terrain
+ * never pokes through yard lawns, pavers, or beach sand while downhill retaining skirts anchor cleanly.
+ */
+export function getBuildingPadHeight(
+  x: number,
+  z: number,
+  halfW: number,
+  halfD: number
+): number {
+  const center = getTerrainHeightAt(x, z);
+  const hw = Math.max(0.5, halfW * 0.85);
+  const hd = Math.max(0.5, halfD * 0.85);
+  const maxCorner = Math.max(
+    center,
+    getTerrainHeightAt(x - hw, z - hd),
+    getTerrainHeightAt(x + hw, z - hd),
+    getTerrainHeightAt(x - hw, z + hd),
+    getTerrainHeightAt(x + hw, z + hd)
+  );
+  return Math.max(center, maxCorner - 0.12);
+}
+
+/**
  * Drivable surface height: identical to terrain height except over Tabakhane Deresi road bridges
  * where roads arch gently over the flowing stream.
  */

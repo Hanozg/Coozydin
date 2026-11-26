@@ -194,18 +194,18 @@ export function buildEfelerCity(
 
   const _snowSurfaceTint = new THREE.Color(0xeef5fc);
   const _whiteTint = new THREE.Color(0xffffff);
-  const _autumnGrassTint = new THREE.Color(0xcfb573);
-  const _springGrassTint = new THREE.Color(0xf2fbe8);
+  const _autumnGrassTint = new THREE.Color(0xd2b574);
+  const _springGrassTint = new THREE.Color(0xf0fae4);
   const _terracottaSnowTint = new THREE.Color(0xeae6e1);
   const _slateSnowTint = new THREE.Color(0xcbd9e6);
   const _blueSnowTint = new THREE.Color(0xc2d8e8);
-  const _turfSummer = new THREE.Color(0x99ab62);
-  const _turfAutumn = new THREE.Color(0xb89a56);
-  const _turfSpring = new THREE.Color(0x95b864);
+  const _turfSummer = new THREE.Color(0x91a85c);
+  const _turfAutumn = new THREE.Color(0xb69c58);
+  const _turfSpring = new THREE.Color(0x93b662);
   const _turfWinter = new THREE.Color(0xdfe8ef);
-  const _yardSummer = new THREE.Color(0x8ca854);
-  const _yardAutumn = new THREE.Color(0xb2904a);
-  const _yardSpring = new THREE.Color(0x8ebd5e);
+  const _yardSummer = new THREE.Color(0x88a454);
+  const _yardAutumn = new THREE.Color(0xb09450);
+  const _yardSpring = new THREE.Color(0x8cb45c);
   const _mountainBaseTint = new THREE.Color(0xffffff);
   const _mountainAutumnTint = new THREE.Color(0xdec08a);
   const _mountainWinterTint = new THREE.Color(0xeef5fc);

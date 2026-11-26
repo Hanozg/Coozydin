@@ -247,7 +247,7 @@ export function createCityAvatarRig(
     }
     if (treat !== 'none') {
       currentTreatMesh = createTreatPropMesh(treat);
-      currentTreatMesh.scale.setScalar(1.35);
+      currentTreatMesh.scale.setScalar(0.88);
       rig.rightHandMount.add(currentTreatMesh);
     }
   };

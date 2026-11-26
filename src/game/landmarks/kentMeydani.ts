@@ -122,7 +122,7 @@ export function buildKentMeydani(def: LandmarkDef, mats: CityMaterialLibrary): B
   }
   [-7.8, 0, 7.8].forEach((gx) => {
     const strip = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.02, 12.0), mats.travertine);
-    strip.position.set(gx, 0.25, -14.6);
+    strip.position.set(gx, 0.256, -14.6);
     strip.receiveShadow = true;
     group.add(strip);
   });
@@ -268,7 +268,11 @@ export function buildKentMeydani(def: LandmarkDef, mats: CityMaterialLibrary): B
   monGroup.rotation.y = -Math.PI / 2; // Facing West directly across the turquoise pool
 
   // 3a. Outer Square Lawn Plot + Low Perimeter Stone-Post Railings
-  const monLawnMat = new THREE.MeshStandardMaterial({ color: 0x76994b, roughness: 0.92 });
+  const monLawnMat = new THREE.MeshStandardMaterial({
+    color: 0x7f9f52,
+    map: mats.grassMicroGrain,
+    roughness: 0.92,
+  });
   const monLawn = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.08, 6.6), monLawnMat);
   monLawn.position.y = 0.04;
   monLawn.receiveShadow = true;
@@ -301,14 +305,14 @@ export function buildKentMeydani(def: LandmarkDef, mats: CityMaterialLibrary): B
   crossArmA.position.y = 0.13;
   crossArmA.receiveShadow = true;
   const crossArmB = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.22, 5.6), mats.travertine);
-  crossArmB.position.y = 0.13;
+  crossArmB.position.y = 0.136;
   crossArmB.receiveShadow = true;
 
   const midArmA = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.22, 2.8), mats.creamPlaster);
   midArmA.position.y = 0.35;
   midArmA.receiveShadow = true;
   const midArmB = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.22, 4.6), mats.creamPlaster);
-  midArmB.position.y = 0.35;
+  midArmB.position.y = 0.356;
   midArmB.receiveShadow = true;
 
   const upperDeck = new THREE.Mesh(new THREE.BoxGeometry(3.65, 0.22, 3.65), mats.travertine);

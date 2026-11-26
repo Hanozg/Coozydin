@@ -46,6 +46,7 @@ export interface CityMaterialLibrary {
   signpostFace: THREE.MeshStandardMaterial;
   stripedAwning: THREE.MeshStandardMaterial;
   stripedAwningMap: THREE.CanvasTexture;
+  grassMicroGrain: THREE.CanvasTexture;
   beachSand: THREE.MeshStandardMaterial;
   seaWater: THREE.MeshStandardMaterial;
   woodDeck: THREE.MeshStandardMaterial;
@@ -60,6 +61,9 @@ export function createCityMaterials(
     map: textures.asphalt,
     roughness: 0.88,
     metalness: 0.03,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+    polygonOffsetUnits: -3,
   });
 
   const roadStripe = new THREE.MeshStandardMaterial({
@@ -67,50 +71,71 @@ export function createCityMaterials(
     roughness: 0.72,
     metalness: 0.02,
     polygonOffset: true,
-    polygonOffsetFactor: -1,
-    polygonOffsetUnits: -1,
+    polygonOffsetFactor: -5,
+    polygonOffsetUnits: -5,
   });
 
   const cobble = new THREE.MeshStandardMaterial({
     map: textures.cobblestone,
     roughness: 0.84,
     metalness: 0.04,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+    polygonOffsetUnits: -3,
   });
 
   const dirtRoad = new THREE.MeshStandardMaterial({
     map: textures.dirtRoad,
     roughness: 0.94,
     metalness: 0.0,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+    polygonOffsetUnits: -3,
   });
 
   const gravelRoad = new THREE.MeshStandardMaterial({
     map: textures.gravelRoad,
     roughness: 0.9,
     metalness: 0.02,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+    polygonOffsetUnits: -3,
   });
 
   const brickRoad = new THREE.MeshStandardMaterial({
     map: textures.brickRoad,
     roughness: 0.82,
     metalness: 0.04,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+    polygonOffsetUnits: -3,
   });
 
   const sidewalk = new THREE.MeshStandardMaterial({
     color: 0xe6dac4,
     roughness: 0.84,
     metalness: 0.02,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
   });
 
   const plaza = new THREE.MeshStandardMaterial({
     map: textures.plazaTile,
     roughness: 0.78,
     metalness: 0.04,
+    polygonOffset: true,
+    polygonOffsetFactor: -2.5,
+    polygonOffsetUnits: -2.5,
   });
 
   const dirtPath = new THREE.MeshStandardMaterial({
     map: textures.dirtPath,
     roughness: 0.92,
     metalness: 0.0,
+    polygonOffset: true,
+    polygonOffsetFactor: -1.5,
+    polygonOffsetUnits: -1.5,
   });
 
   const ground = new THREE.MeshStandardMaterial({
@@ -123,12 +148,18 @@ export function createCityMaterials(
     map: textures.wheatField,
     roughness: 0.92,
     metalness: 0.0,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
   });
 
   const lavenderField = new THREE.MeshStandardMaterial({
     map: textures.lavenderField,
     roughness: 0.92,
     metalness: 0.0,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
   });
 
   const travertine = new THREE.MeshStandardMaterial({
@@ -453,6 +484,7 @@ export function createCityMaterials(
     signpostFace,
     stripedAwning,
     stripedAwningMap: textures.stripedAwning,
+    grassMicroGrain: textures.grassMicroGrain,
     beachSand,
     seaWater,
     woodDeck,

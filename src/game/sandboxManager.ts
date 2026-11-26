@@ -24,7 +24,12 @@ import {
   SandboxTreeSummary,
 } from '../types/game';
 import { EditableTreeSlot, SeasonalFoliageSystem } from './seasonalFoliage';
-import { getSurfaceHeightAt, getTerrainHeightAt, getWalkableSurfaceHeightAt } from './terrain';
+import {
+  getBuildingPadHeight,
+  getSurfaceHeightAt,
+  getTerrainHeightAt,
+  getWalkableSurfaceHeightAt,
+} from './terrain';
 import { RoadNetworkHandle } from './world/roadNetwork';
 
 const SANDBOX_STORAGE_KEY_V1 = 'efeler_sandbox_layout_v1';
@@ -782,7 +787,13 @@ export function createSandboxManager(
     const clampedX = THREE.MathUtils.clamp(nx, -216, 190);
     const clampedZ = THREE.MathUtils.clamp(nz, -134, 106);
     const normRot = normalizeAngle(nRotY);
-    const groundY = getTerrainHeightAt(clampedX, clampedZ);
+    const usesPadHeight =
+      rec.category === 'house' ||
+      rec.category === 'custom_house' ||
+      rec.category === 'player_home';
+    const groundY = usesPadHeight
+      ? getBuildingPadHeight(clampedX, clampedZ, rec.footprintW * 0.5, rec.footprintD * 0.5)
+      : getTerrainHeightAt(clampedX, clampedZ);
 
     rec.x = clampedX;
     rec.z = clampedZ;
@@ -838,7 +849,7 @@ export function createSandboxManager(
     if (toolMode === 'buildings') {
       const sel = selectedId ? records.get(selectedId) : undefined;
       if (sel) {
-        const gy = getTerrainHeightAt(sel.x, sel.z);
+        const gy = sel.group.position.y;
         selectionGizmo.root.visible = true;
         selectionGizmo.root.position.set(sel.x, gy + 0.04, sel.z);
         selectionGizmo.root.rotation.y = sel.rotY;
@@ -854,7 +865,7 @@ export function createSandboxManager(
 
       const hov = hoveredId && hoveredId !== selectedId ? records.get(hoveredId) : undefined;
       if (hov && !isDragging) {
-        const gy = getTerrainHeightAt(hov.x, hov.z);
+        const gy = hov.group.position.y;
         hoverGizmo.root.visible = true;
         hoverGizmo.root.position.set(hov.x, gy + 0.03, hov.z);
         hoverGizmo.root.rotation.y = hov.rotY;
@@ -911,7 +922,13 @@ export function createSandboxManager(
 
   const registerBuilding = (input: RegisterMovableBuildingInput) => {
     const rotY = input.rotY ?? 0;
-    const baseGroundY = getTerrainHeightAt(input.x, input.z);
+    const usesPadHeight =
+      input.category === 'house' ||
+      input.category === 'custom_house' ||
+      input.category === 'player_home';
+    const baseGroundY = usesPadHeight
+      ? input.group.position.y
+      : getTerrainHeightAt(input.x, input.z);
 
     let maxSpanX = input.footprintW ?? 6.2;
     let maxSpanZ = input.footprintD ?? 5.4;

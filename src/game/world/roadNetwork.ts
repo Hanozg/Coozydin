@@ -87,7 +87,8 @@ function clipPolylineAgainstPlacedRoads(
       if (sHit < -0.25 || sHit > obsLen + 0.25) continue;
       if (tHit < -0.6 || tHit > segLen + 0.6) continue;
 
-      const rObs = useOuterSidewalk ? obs.outerHalfW : obs.halfW;
+      // Tuck clipped endpoints slightly underneath the intersecting host road to eliminate hairline grass seams
+      const rObs = Math.max(0.1, (useOuterSidewalk ? obs.outerHalfW : obs.halfW) - 0.12);
       const halfSpan = rObs / Math.abs(denom);
       const slope = THREE.MathUtils.clamp(-(nx * onx + nz * onz) / denom, -1.15, 1.15);
 
@@ -201,7 +202,9 @@ function createMiteredStripGeometry(
   lateralMin: number,
   lateralMax: number,
   segsAcross: number,
-  yOffset: number
+  yOffset: number,
+  skirtMinDrop = 0,
+  skirtMaxDrop = 0
 ): THREE.BufferGeometry {
   const pts = poly.points;
   const nPts = pts.length;
@@ -293,8 +296,12 @@ function createMiteredStripGeometry(
   }
 
   const cols = segsAcross + 1;
-  const positions = new Float32Array(rows.length * cols * 3);
-  const uvs = new Float32Array(rows.length * cols * 2);
+  const topVertCount = rows.length * cols;
+  const hasMinSkirt = skirtMinDrop > 0.001;
+  const hasMaxSkirt = skirtMaxDrop > 0.001;
+  const extraVerts = (hasMinSkirt ? rows.length * 2 : 0) + (hasMaxSkirt ? rows.length * 2 : 0);
+  const positions = new Float32Array((topVertCount + extraVerts) * 3);
+  const uvs = new Float32Array((topVertCount + extraVerts) * 2);
   const indices: number[] = [];
 
   for (let r = 0; r < rows.length; r++) {
@@ -323,6 +330,71 @@ function createMiteredStripGeometry(
       const cIdx = (r + 1) * cols + c;
       const d = cIdx + 1;
       indices.push(a, b, cIdx, b, d, cIdx);
+    }
+  }
+
+  // Downward vertical curb/edge skirts seal roads and sidewalks cleanly into sloped terrain
+  let vertCursor = topVertCount;
+  if (hasMinSkirt) {
+    const topBase = vertCursor;
+    const botBase = vertCursor + rows.length;
+    for (let r = 0; r < rows.length; r++) {
+      const srcIdx = r * cols;
+      const wx = positions[srcIdx * 3];
+      const wy = positions[srcIdx * 3 + 1];
+      const wz = positions[srcIdx * 3 + 2];
+      const vCoord = uvs[srcIdx * 2 + 1];
+
+      positions[(topBase + r) * 3] = wx;
+      positions[(topBase + r) * 3 + 1] = wy;
+      positions[(topBase + r) * 3 + 2] = wz;
+      uvs[(topBase + r) * 2] = 0;
+      uvs[(topBase + r) * 2 + 1] = vCoord;
+
+      positions[(botBase + r) * 3] = wx;
+      positions[(botBase + r) * 3 + 1] = wy - skirtMinDrop;
+      positions[(botBase + r) * 3 + 2] = wz;
+      uvs[(botBase + r) * 2] = 0.08;
+      uvs[(botBase + r) * 2 + 1] = vCoord;
+    }
+    for (let r = 0; r < rows.length - 1; r++) {
+      const t0 = topBase + r;
+      const t1 = topBase + r + 1;
+      const b0 = botBase + r;
+      const b1 = botBase + r + 1;
+      indices.push(t0, t1, b0, t1, b1, b0);
+    }
+    vertCursor += rows.length * 2;
+  }
+
+  if (hasMaxSkirt) {
+    const topBase = vertCursor;
+    const botBase = vertCursor + rows.length;
+    for (let r = 0; r < rows.length; r++) {
+      const srcIdx = r * cols + segsAcross;
+      const wx = positions[srcIdx * 3];
+      const wy = positions[srcIdx * 3 + 1];
+      const wz = positions[srcIdx * 3 + 2];
+      const vCoord = uvs[srcIdx * 2 + 1];
+
+      positions[(topBase + r) * 3] = wx;
+      positions[(topBase + r) * 3 + 1] = wy;
+      positions[(topBase + r) * 3 + 2] = wz;
+      uvs[(topBase + r) * 2] = 1;
+      uvs[(topBase + r) * 2 + 1] = vCoord;
+
+      positions[(botBase + r) * 3] = wx;
+      positions[(botBase + r) * 3 + 1] = wy - skirtMaxDrop;
+      positions[(botBase + r) * 3 + 2] = wz;
+      uvs[(botBase + r) * 2] = 0.92;
+      uvs[(botBase + r) * 2 + 1] = vCoord;
+    }
+    for (let r = 0; r < rows.length - 1; r++) {
+      const t0 = topBase + r;
+      const t1 = topBase + r + 1;
+      const b0 = botBase + r;
+      const b1 = botBase + r + 1;
+      indices.push(t0, b0, t1, t1, b0, b1);
     }
   }
 
@@ -384,12 +456,17 @@ export function buildRoadNetwork(params: {
       return mats.asphalt;
     };
 
-    AYDIN_ROAD_SEGMENTS.forEach((road) => {
+    AYDIN_ROAD_SEGMENTS.forEach((road, roadIdx) => {
       if (road.renderPoints.length < 2) return;
       const roadMat = resolveRoadMaterial(road.surface);
       const halfW = road.width * 0.5;
       const hasSidewalk = road.hasSidewalk !== false;
       const outerHalfW = hasSidewalk ? halfW + SIDEWALK_WIDTH : halfW;
+      // Subtle per-road Y stagger keeps primary boulevards cleanly on top of secondary intersections without Z-fighting
+      const layerDrop = Math.min(0.032, roadIdx * 0.0012);
+      const roadYOffset = ROAD_SURFACE_OFFSET - layerDrop;
+      const curbYOffset = CURB_OFFSET - layerDrop;
+      const roadEdgeSkirt = hasSidewalk ? 0.08 : 0.24;
 
       const basePts: [number, number][] = road.renderPoints.map(([px, pz]) => [px, pz]);
       if (
@@ -410,7 +487,15 @@ export function buildRoadNetwork(params: {
       roadChains.forEach((chain) => {
         if (chain.points.length < 2) return;
         const roadMesh = new THREE.Mesh(
-          createMiteredStripGeometry(chain, -halfW, halfW, 4, ROAD_SURFACE_OFFSET),
+          createMiteredStripGeometry(
+            chain,
+            -halfW,
+            halfW,
+            4,
+            roadYOffset,
+            roadEdgeSkirt,
+            roadEdgeSkirt
+          ),
           roadMat
         );
         roadMesh.receiveShadow = true;
@@ -449,7 +534,10 @@ export function buildRoadNetwork(params: {
                 const cz = az + uz * localD;
                 nextDashDist += dashStep;
                 if (Math.abs(cx) < 16 && cz > -18 && cz < 28) continue;
-                const dy = getSurfaceHeightAt(cx, cz) + ROAD_SURFACE_OFFSET + 0.028;
+                const hMid = getSurfaceHeightAt(cx, cz);
+                const hA = getSurfaceHeightAt(cx - ux * 1.4, cz - uz * 1.4);
+                const hB = getSurfaceHeightAt(cx + ux * 1.4, cz + uz * 1.4);
+                const dy = Math.max(hMid, (hA + hB) * 0.5, hA - 0.02, hB - 0.02) + roadYOffset + 0.032;
                 const slopes = getSurfaceSlopeAngles(cx, cz, yaw + Math.PI);
                 const dash = new THREE.Mesh(dashGeo, mats.roadStripe);
                 dash.rotation.order = 'YXZ';
@@ -468,12 +556,12 @@ export function buildRoadNetwork(params: {
         sidewalkChains.forEach((chain) => {
           if (chain.points.length < 2) return;
           const leftCurb = new THREE.Mesh(
-            createMiteredStripGeometry(chain, halfW, outerHalfW, 2, CURB_OFFSET),
+            createMiteredStripGeometry(chain, halfW, outerHalfW, 2, curbYOffset, 0.14, 0.28),
             mats.sidewalk
           );
           leftCurb.receiveShadow = true;
           const rightCurb = new THREE.Mesh(
-            createMiteredStripGeometry(chain, -outerHalfW, -halfW, 2, CURB_OFFSET),
+            createMiteredStripGeometry(chain, -outerHalfW, -halfW, 2, curbYOffset, 0.28, 0.14),
             mats.sidewalk
           );
           rightCurb.receiveShadow = true;
@@ -513,13 +601,16 @@ export function buildRoadNetwork(params: {
       if (armS.road && armS.dist < 1.2) {
         const slopes = getSurfaceSlopeAngles(ix, iz + 5.6, 0);
         for (let s = -2.6; s <= 2.6; s += 1.3) {
+          const sx = ix + s;
+          const sz = iz + 5.6;
+          const sy = Math.max(
+            getSurfaceHeightAt(sx, sz),
+            getSurfaceHeightAt(sx, sz - 0.95),
+            getSurfaceHeightAt(sx, sz + 0.95)
+          );
           const stripeEW = new THREE.Mesh(ewStripeGeo, mats.roadStripe);
           stripeEW.rotation.set(-Math.PI / 2 + slopes.pitch, 0, slopes.roll);
-          stripeEW.position.set(
-            ix + s,
-            getSurfaceHeightAt(ix + s, iz + 5.6) + ROAD_SURFACE_OFFSET + 0.028,
-            iz + 5.6
-          );
+          stripeEW.position.set(sx, sy + ROAD_SURFACE_OFFSET + 0.036, sz);
           roadNetworkGroup.add(stripeEW);
         }
       }
@@ -527,13 +618,16 @@ export function buildRoadNetwork(params: {
       if (armE.road && armE.dist < 1.2) {
         const slopes = getSurfaceSlopeAngles(ix + 5.6, iz, 0);
         for (let s = -2.6; s <= 2.6; s += 1.3) {
+          const sx = ix + 5.6;
+          const sz = iz + s;
+          const sy = Math.max(
+            getSurfaceHeightAt(sx, sz),
+            getSurfaceHeightAt(sx - 0.95, sz),
+            getSurfaceHeightAt(sx + 0.95, sz)
+          );
           const stripeNS = new THREE.Mesh(nsStripeGeo, mats.roadStripe);
           stripeNS.rotation.set(-Math.PI / 2 + slopes.pitch, 0, slopes.roll);
-          stripeNS.position.set(
-            ix + 5.6,
-            getSurfaceHeightAt(ix + 5.6, iz + s) + ROAD_SURFACE_OFFSET + 0.028,
-            iz + s
-          );
+          stripeNS.position.set(sx, sy + ROAD_SURFACE_OFFSET + 0.036, sz);
           roadNetworkGroup.add(stripeNS);
         }
       }

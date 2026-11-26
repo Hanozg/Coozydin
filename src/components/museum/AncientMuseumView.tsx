@@ -477,48 +477,121 @@ export function AncientMuseumView({
     scene.add(explorerRig.root);
 
     // Dual-Mode Held Light Props mounted cleanly to explorerRig.rightHandMount
-    // 1) Sculpted Ancient Torch + flickering flame + warm embers
+    // Note: rightHandMount already applies inverse humanScale (1 / 0.152), so coordinates here are in world meters (~1.08x).
+    // 1) Sculpted Ancient Torch (~44 cm tall, realistic hand-held proportions) + flickering flame + warm embers
     const torchProp = new THREE.Group();
-    const torchHandleGeo = new THREE.CylinderGeometry(0.11, 0.08, 2.1, 8);
-    const torchHandleMat = new THREE.MeshStandardMaterial({ color: 0x4d3420, roughness: 0.9 });
+    torchProp.rotation.x = 1.12; // Counteract forward-bent holding arm so torch stands upright with slight forward lean
+
+    const torchHandlePoints = [
+      new THREE.Vector2(0.0, -0.095),
+      new THREE.Vector2(0.015, -0.09),
+      new THREE.Vector2(0.014, -0.05),
+      new THREE.Vector2(0.0165, 0.04),
+      new THREE.Vector2(0.0195, 0.16),
+      new THREE.Vector2(0.023, 0.25),
+      new THREE.Vector2(0.019, 0.26),
+      new THREE.Vector2(0.0, 0.26),
+    ];
+    const torchHandleGeo = new THREE.LatheGeometry(torchHandlePoints, 14);
+    const torchHandleMat = new THREE.MeshStandardMaterial({
+      color: 0x523722,
+      roughness: 0.88,
+      metalness: 0.04,
+      flatShading: false,
+    });
     const torchHandle = new THREE.Mesh(torchHandleGeo, torchHandleMat);
-    torchHandle.position.set(0, 0.75, 0.15);
-    torchHandle.rotation.x = 0.35;
+    torchHandle.castShadow = !swGl;
+    torchHandle.receiveShadow = true;
     torchProp.add(torchHandle);
 
-    const torchCupGeo = new THREE.CylinderGeometry(0.24, 0.14, 0.36, 8);
-    const torchCupMat = new THREE.MeshStandardMaterial({ color: 0x3b3530, roughness: 0.55, metalness: 0.7 });
+    const torchGripGeo = new THREE.CylinderGeometry(0.0195, 0.018, 0.1, 14);
+    const torchGripMat = new THREE.MeshStandardMaterial({
+      color: 0x2d1c11,
+      roughness: 0.94,
+      metalness: 0.02,
+    });
+    const torchGrip = new THREE.Mesh(torchGripGeo, torchGripMat);
+    torchGrip.position.set(0, 0.01, 0);
+    torchProp.add(torchGrip);
+
+    const torchCupPoints = [
+      new THREE.Vector2(0.018, 0.24),
+      new THREE.Vector2(0.025, 0.255),
+      new THREE.Vector2(0.032, 0.285),
+      new THREE.Vector2(0.042, 0.32),
+      new THREE.Vector2(0.045, 0.33),
+      new THREE.Vector2(0.038, 0.332),
+      new THREE.Vector2(0.032, 0.3),
+      new THREE.Vector2(0.0, 0.295),
+    ];
+    const torchCupGeo = new THREE.LatheGeometry(torchCupPoints, 16);
+    const torchCupMat = new THREE.MeshStandardMaterial({
+      color: 0x3b3530,
+      roughness: 0.48,
+      metalness: 0.68,
+      flatShading: false,
+    });
     const torchCup = new THREE.Mesh(torchCupGeo, torchCupMat);
-    torchCup.position.set(0, 1.75, 0.52);
+    torchCup.castShadow = !swGl;
+    torchCup.receiveShadow = true;
     torchProp.add(torchCup);
 
-    const flameGeo = new THREE.ConeGeometry(0.22, 0.72, 8);
+    const flameGeo = new THREE.ConeGeometry(0.034, 0.125, 12);
     const flameMat = new THREE.MeshBasicMaterial({ color: 0xffa63d });
     const flameMesh = new THREE.Mesh(flameGeo, flameMat);
-    flameMesh.position.set(0, 2.15, 0.52);
+    flameMesh.position.set(0, 0.382, 0);
     torchProp.add(flameMesh);
 
-    const flameCoreGeo = new THREE.SphereGeometry(0.13, 8, 8);
+    const flameCoreGeo = new THREE.SphereGeometry(0.021, 10, 8);
     const flameCoreMat = new THREE.MeshBasicMaterial({ color: 0xfff0b3 });
     const flameCore = new THREE.Mesh(flameCoreGeo, flameCoreMat);
-    flameCore.position.set(0, 1.98, 0.52);
+    flameCore.position.set(0, 0.348, 0);
     torchProp.add(flameCore);
     torchProp.visible = false;
     explorerRig.rightHandMount.add(torchProp);
 
-    // 2) Sculpted Modern Archaeologist Flashlight
+    // 2) Sculpted Modern Archaeologist Flashlight (~20.5 cm long, realistic hand-held proportions)
     const flashProp = new THREE.Group();
-    const flashBodyGeo = new THREE.CylinderGeometry(0.13, 0.11, 1.35, 10);
+    flashProp.rotation.x = 1.02; // Point horizontally forward along explorer facing direction
+
+    const flashProfile = [
+      new THREE.Vector2(0.0, -0.06),
+      new THREE.Vector2(0.0155, -0.058),
+      new THREE.Vector2(0.0175, -0.045),
+      new THREE.Vector2(0.0175, 0.085),
+      new THREE.Vector2(0.021, 0.102),
+      new THREE.Vector2(0.0265, 0.115),
+      new THREE.Vector2(0.0265, 0.145),
+      new THREE.Vector2(0.023, 0.146),
+      new THREE.Vector2(0.0, 0.14),
+    ];
+    const flashBodyGeo = new THREE.LatheGeometry(flashProfile, 16);
     flashBodyGeo.rotateX(Math.PI * 0.5);
-    const flashBodyMat = new THREE.MeshStandardMaterial({ color: 0x2c323a, roughness: 0.35, metalness: 0.85 });
+    const flashBodyMat = new THREE.MeshStandardMaterial({
+      color: 0x2c323a,
+      roughness: 0.34,
+      metalness: 0.82,
+      flatShading: false,
+    });
     const flashBody = new THREE.Mesh(flashBodyGeo, flashBodyMat);
-    flashBody.position.set(0, 0.05, 0.45);
+    flashBody.castShadow = !swGl;
+    flashBody.receiveShadow = true;
     flashProp.add(flashBody);
 
-    const flashLensGeo = new THREE.CircleGeometry(0.14, 12);
+    const flashRingGeo = new THREE.TorusGeometry(0.0185, 0.0032, 8, 16);
+    const flashRingMat = new THREE.MeshStandardMaterial({
+      color: 0xc89a4b,
+      roughness: 0.32,
+      metalness: 0.78,
+    });
+    const flashRing = new THREE.Mesh(flashRingGeo, flashRingMat);
+    flashRing.position.set(0, 0, 0.052);
+    flashProp.add(flashRing);
+
+    const flashLensGeo = new THREE.CircleGeometry(0.0225, 16);
     const flashLensMat = new THREE.MeshBasicMaterial({ color: 0xf4faff });
     const flashLens = new THREE.Mesh(flashLensGeo, flashLensMat);
-    flashLens.position.set(0, 0.05, 1.14);
+    flashLens.position.set(0, 0, 0.147);
     flashProp.add(flashLens);
     flashProp.visible = false;
     explorerRig.rightHandMount.add(flashProp);
@@ -541,7 +614,7 @@ export function AncientMuseumView({
     const emberGeo = new THREE.BufferGeometry();
     emberGeo.setAttribute('position', new THREE.BufferAttribute(emberPositions, 3));
     const emberMat = new THREE.PointsMaterial({
-      size: 0.09,
+      size: 0.042,
       map: pbrMats.dustSpriteTexture,
       color: 0xff9a38,
       transparent: true,
@@ -857,9 +930,8 @@ export function AncientMuseumView({
       flashProp.visible = lightActive && activeMode === 'flashlight';
       emberPoints.visible = lightActive && activeMode === 'torch';
 
-      explorerRig.rightHandMount.getWorldPosition(tmpHandWorld);
-
       if (lightActive && activeMode === 'torch') {
+        flameCore.getWorldPosition(tmpHandWorld);
         // Warm living torch flicker
         const flicker =
           1 +
@@ -868,7 +940,7 @@ export function AncientMuseumView({
           Math.cos(worldElapsed * 11.2) * 0.06;
         const targetInt = (6.8 + surf.cryptFactor * 6.5) * flicker;
         torchLight.intensity = THREE.MathUtils.damp(torchLight.intensity, targetInt, 16, rawDt);
-        torchLight.position.set(tmpHandWorld.x, tmpHandWorld.y + 0.48, tmpHandWorld.z);
+        torchLight.position.set(tmpHandWorld.x, tmpHandWorld.y + 0.08, tmpHandWorld.z);
         flameMesh.scale.set(
           0.92 + Math.sin(worldElapsed * 22) * 0.14,
           0.95 + Math.cos(worldElapsed * 18) * 0.2,
@@ -876,7 +948,7 @@ export function AncientMuseumView({
         );
         flashlightSpot.intensity = THREE.MathUtils.damp(flashlightSpot.intensity, 0, 14, rawDt);
 
-        // Animate rising ember sparks around the torch flame
+        // Animate rising ember sparks directly from the torch flame tip
         const eAttr = emberGeo.attributes.position as THREE.BufferAttribute;
         for (let i = 0; i < emberCount; i++) {
           emberLife[i] += simDt * (0.85 + (i % 5) * 0.15);
@@ -885,17 +957,18 @@ export function AncientMuseumView({
           const swirl = worldElapsed * 3.5 + i * 1.9;
           eAttr.setXYZ(
             i,
-            tmpHandWorld.x + Math.cos(swirl) * (0.06 + t * 0.18),
-            tmpHandWorld.y + 0.42 + t * 0.95,
-            tmpHandWorld.z + Math.sin(swirl) * (0.06 + t * 0.18)
+            tmpHandWorld.x + Math.cos(swirl) * (0.016 + t * 0.055),
+            tmpHandWorld.y + 0.04 + t * 0.42,
+            tmpHandWorld.z + Math.sin(swirl) * (0.016 + t * 0.055)
           );
         }
         eAttr.needsUpdate = true;
       } else if (lightActive && activeMode === 'flashlight') {
+        flashLens.getWorldPosition(tmpHandWorld);
         torchLight.intensity = THREE.MathUtils.damp(torchLight.intensity, 0, 14, rawDt);
         const targetSpot = 14.0 + surf.cryptFactor * 14.0;
         flashlightSpot.intensity = THREE.MathUtils.damp(flashlightSpot.intensity, targetSpot, 14, rawDt);
-        flashlightSpot.position.set(tmpHandWorld.x, tmpHandWorld.y + 0.12, tmpHandWorld.z);
+        flashlightSpot.position.copy(tmpHandWorld);
         camera.getWorldDirection(tmpCamForward);
         flashlightSpot.target.position.copy(flashlightSpot.position).addScaledVector(tmpCamForward, 12);
       } else {
@@ -1083,6 +1156,8 @@ export function AncientMuseumView({
       sky.mat.dispose();
       torchHandleGeo.dispose();
       torchHandleMat.dispose();
+      torchGripGeo.dispose();
+      torchGripMat.dispose();
       torchCupGeo.dispose();
       torchCupMat.dispose();
       flameGeo.dispose();
@@ -1091,6 +1166,8 @@ export function AncientMuseumView({
       flameCoreMat.dispose();
       flashBodyGeo.dispose();
       flashBodyMat.dispose();
+      flashRingGeo.dispose();
+      flashRingMat.dispose();
       flashLensGeo.dispose();
       flashLensMat.dispose();
       emberGeo.dispose();

@@ -35,23 +35,43 @@ export function buildTerrainAndStream(params: {
 }): TerrainAndStreamResult {
   const { group, staticWorldGroup, mats, colliders, perches, localDisposables } = params;
 
-  // 1. Sculpted 1:100 Aydın Efeler Horizon Terrain (Büyük Menderes Ovası -> Tralleis & Aytepe Yokuşları -> Aydın Dağları Etekleri)
-  const terrainGeo = new THREE.PlaneGeometry(760, 760, 104, 104);
+  // 1. Sculpted 1:100 Aydın Efeler Horizon Terrain (non-uniform high-density grid across playable city + smooth mountain margins)
+  const mapCityAxis = (u: number, focusMin: number, focusMax: number, outerHalf: number): number => {
+    // u in [-1, 1]: reserve middle 80% of vertices for the playable city (~2.2m spacing) and outer 20% for horizon margins
+    const edgeU = 0.8;
+    if (u < -edgeU) {
+      const t = (u + 1) / (1 - edgeU);
+      return THREE.MathUtils.lerp(-outerHalf, focusMin, t * t * (3 - 2 * t));
+    }
+    if (u > edgeU) {
+      const t = (u - edgeU) / (1 - edgeU);
+      return THREE.MathUtils.lerp(focusMax, outerHalf, t * t * (3 - 2 * t));
+    }
+    const t = (u + edgeU) / (2 * edgeU);
+    return THREE.MathUtils.lerp(focusMin, focusMax, t);
+  };
+
+  const terrainSegs = 220;
+  const terrainGeo = new THREE.PlaneGeometry(760, 760, terrainSegs, terrainSegs);
   terrainGeo.rotateX(-Math.PI / 2);
   const tPos = terrainGeo.attributes.position as THREE.BufferAttribute;
+  const tUv = terrainGeo.attributes.uv as THREE.BufferAttribute;
   const tColors = new Float32Array(tPos.count * 3);
-  const cPlain = new THREE.Color(0x8ea35a);
-  const cFoothill = new THREE.Color(0xa69857);
+  const cPlain = new THREE.Color(0x8ea658);
+  const cFoothill = new THREE.Color(0xa49956);
   const cRidge = new THREE.Color(0x8a8364);
-  const cPineFoot = new THREE.Color(0x5b7646);
-  const cStreamBank = new THREE.Color(0x536d41);
+  const cPineFoot = new THREE.Color(0x5c7747);
+  const cStreamBank = new THREE.Color(0x557043);
   const cTmp = new THREE.Color();
 
   for (let i = 0; i < tPos.count; i++) {
-    const wx = tPos.getX(i);
-    const wz = tPos.getZ(i);
+    const ux = tPos.getX(i) / 380;
+    const uz = tPos.getZ(i) / 380;
+    const wx = mapCityAxis(ux, -225, 205, 380);
+    const wz = mapCityAxis(uz, -155, 130, 380);
     const wy = getTerrainHeightAt(wx, wz);
-    tPos.setY(i, wy);
+    tPos.setXYZ(i, wx, wy, wz);
+    tUv.setXY(i, wx / 24, wz / 24);
 
     const hillT = THREE.MathUtils.clamp((wy - 0.8) / 6.5, 0, 1);
     const upperT = THREE.MathUtils.clamp((wy - 7.5) / 8.5, 0, 1);
@@ -75,6 +95,7 @@ export function buildTerrainAndStream(params: {
 
   const terrainMat = mats.ground.clone();
   terrainMat.vertexColors = true;
+  terrainMat.flatShading = false;
   localDisposables.push(terrainMat);
 
   const terrain = new THREE.Mesh(terrainGeo, terrainMat);
@@ -94,8 +115,10 @@ export function buildTerrainAndStream(params: {
     [94, 128, 66, 36, mats.wheatField],
   ];
   fieldPatches.forEach(([fx, fz, fw, fd, mat]) => {
+    const segX = Math.max(10, Math.ceil(fw / 3.5));
+    const segZ = Math.max(10, Math.ceil(fd / 3.5));
     const patch = new THREE.Mesh(
-      createTerrainConformingPatch(fx, fz, fw, fd, 8, 8, 0.032, false),
+      createTerrainConformingPatch(fx, fz, fw, fd, segX, segZ, 0.055, false),
       mat
     );
     patch.position.set(fx, 0, fz);
@@ -202,8 +225,16 @@ export function buildTerrainAndStream(params: {
     return Math.max(0, (6 + wave + northSlopeBoost) * xEnv * zFade);
   }, 28);
 
-  // 3. Terrain-Conforming Urban Block Meadows
-  const blockTurfMat = new THREE.MeshStandardMaterial({ color: 0x99ab62, roughness: 0.92 });
+  // 3. Terrain-Conforming Urban Block Meadows (harmonized micro-grain + polygonOffset to eliminate terrain Z-fighting)
+  const blockTurfMat = new THREE.MeshStandardMaterial({
+    color: 0x91a85c,
+    map: mats.grassMicroGrain,
+    roughness: 0.93,
+    metalness: 0.0,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+  });
   localDisposables.push(blockTurfMat);
   const blockZones: [number, number, number, number][] = [
     [-38.5, -51, 24, 28],
@@ -219,8 +250,10 @@ export function buildTerrainAndStream(params: {
     [-38.5, 25, 24, 14],
   ];
   blockZones.forEach(([bx, bz, bw, bd]) => {
+    const segX = Math.max(8, Math.ceil(bw / 2.5));
+    const segZ = Math.max(8, Math.ceil(bd / 2.5));
     const turf = new THREE.Mesh(
-      createTerrainConformingPatch(bx, bz, bw, bd, 6, 6, 0.024, true),
+      createTerrainConformingPatch(bx, bz, bw, bd, segX, segZ, 0.042, false),
       blockTurfMat
     );
     turf.position.set(bx, 0, bz);
@@ -402,8 +435,8 @@ export function buildTerrainAndStream(params: {
         cap.position.set(bxOff, 2.44, pz);
         bridgeGroup.add(cap);
 
-        const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), mats.lampBulb);
-        lantern.position.set(bxOff, 2.66, pz);
+        const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), mats.lampBulb);
+        lantern.position.set(bxOff, 2.61, pz);
         bridgeGroup.add(lantern);
       });
     });

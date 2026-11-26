@@ -13,6 +13,7 @@ import {
   TreePlacement,
 } from '../seasonalFoliage';
 import {
+  getBuildingPadHeight,
   getSurfaceHeightAt,
   getTabakhaneCenterX,
   getTabakhaneHalfWidth,
@@ -64,7 +65,12 @@ export function buildNeighborhoodsAndProps(params: {
     mats.skyBluePlaster,
     mats.whitePlaster,
   ];
-  const yardLawnMat = new THREE.MeshStandardMaterial({ color: 0x8ca854, roughness: 0.9 });
+  const yardLawnMat = new THREE.MeshStandardMaterial({
+    color: 0x88a454,
+    map: mats.grassMicroGrain,
+    roughness: 0.91,
+    metalness: 0.0,
+  });
   const flowerBoxMat = new THREE.MeshStandardMaterial({ color: 0x5d8242, roughness: 0.85 });
   const blossomMat = new THREE.MeshStandardMaterial({ color: 0xd9614a, roughness: 0.76 });
   localDisposables.push(yardLawnMat, flowerBoxMat, blossomMat);
@@ -73,7 +79,7 @@ export function buildNeighborhoodsAndProps(params: {
   // Cozy Hillside Farmhouse above Orta Mahalle Foothills (East)
   const cottageX = 134;
   const cottageZ = -64;
-  const cottageY = getTerrainHeightAt(cottageX, cottageZ);
+  const cottageY = getBuildingPadHeight(cottageX, cottageZ, (5.8 + 1.35) * 0.5, (4.6 + 2.05) * 0.5);
   const builtCottage = buildDioramaHouse({
     w: 5.8,
     d: 4.6,
@@ -133,7 +139,7 @@ export function buildNeighborhoodsAndProps(params: {
 
   // Player's Own House ("Sıcak Yuvam") facing Sevgi Yolu (+X)
   const [hx, hz] = PLAYER_HOME_POS;
-  const homeY = getTerrainHeightAt(hx, hz);
+  const homeY = getBuildingPadHeight(hx, hz, 3.7, 3.7);
   let builtHome: BuiltCustomPlayerHouse = buildCustomPlayerHouse({
     config: initialHouseExterior,
     mats,
@@ -206,12 +212,12 @@ export function buildNeighborhoodsAndProps(params: {
   });
 
   // Stone garden walkway connecting Sıcak Yuvam front door to Adnan Menderes Blv. sidewalk
-  const homeWalkway = new THREE.Mesh(new THREE.BoxGeometry(4.8, 0.22, 3.4), mats.cobble);
-  homeWalkway.position.set(-26.6, homeY + 0.01, hz);
+  const homeWalkway = new THREE.Mesh(new THREE.BoxGeometry(4.8, 0.5, 3.4), mats.cobble);
+  homeWalkway.position.set(-26.6, homeY - 0.13, hz);
   homeWalkway.receiveShadow = true;
   staticWorldGroup.add(homeWalkway);
-  const homeWalkBorder = new THREE.Mesh(new THREE.BoxGeometry(4.9, 0.16, 3.7), mats.travertine);
-  homeWalkBorder.position.set(-26.6, homeY - 0.01, hz);
+  const homeWalkBorder = new THREE.Mesh(new THREE.BoxGeometry(4.9, 0.46, 3.7), mats.travertine);
+  homeWalkBorder.position.set(-26.6, homeY - 0.16, hz);
   staticWorldGroup.add(homeWalkBorder);
 
   // Miniature 3D Diorama Houses
@@ -226,7 +232,7 @@ export function buildNeighborhoodsAndProps(params: {
   ) => {
     if (nearRoad(x, z, w, d) || overlapsAny(x, z, w, d, colliders, 1.8)) return;
 
-    const gy = getTerrainHeightAt(x, z);
+    const gy = getBuildingPadHeight(x, z, (w + 1.35) * 0.5, (d + 2.05) * 0.5);
     const wallMat = plasterMats[variant % plasterMats.length];
     const built = buildDioramaHouse({
       w,
@@ -295,7 +301,7 @@ export function buildNeighborhoodsAndProps(params: {
     if (spec.kind && spec.kind !== 'house') {
       return buildSummerResortModel(spec, mats, sx, sz, sRotY, localDisposables);
     }
-    const gy = getTerrainHeightAt(sx, sz);
+    const gy = getBuildingPadHeight(sx, sz, (spec.w + 1.35) * 0.5, (spec.d + 2.05) * 0.5);
     const wallMat = plasterMats[spec.variant % plasterMats.length];
     const built = buildDioramaHouse({
       w: spec.w,
@@ -642,12 +648,12 @@ export function buildNeighborhoodsAndProps(params: {
       }
     }
   });
-  const poleGeo = new THREE.CylinderGeometry(0.08, 0.11, 4.0, 8);
-  poleGeo.translate(0, 2.0, 0);
+  const poleGeo = new THREE.CylinderGeometry(0.058, 0.085, 3.85, 10);
+  poleGeo.translate(0, 1.925, 0);
   const poleInst = new THREE.InstancedMesh(poleGeo, mats.wroughtIron, Math.max(1, lampCoords.length));
 
-  const bulbGeo = new THREE.SphereGeometry(0.24, 10, 8);
-  bulbGeo.translate(0, 4.1, 0);
+  const bulbGeo = new THREE.SphereGeometry(0.15, 12, 10);
+  bulbGeo.translate(0, 3.94, 0);
   const bulbInst = new THREE.InstancedMesh(bulbGeo, mats.lampBulb, Math.max(1, lampCoords.length));
 
   lampCoords.forEach(([x, z], i) => {
@@ -660,8 +666,8 @@ export function buildNeighborhoodsAndProps(params: {
     bulbInst.setMatrixAt(i, dummy.matrix);
     perches.addStaticSegment(
       `lamp_${i}`,
-      new THREE.Vector3(x - 0.32, sy + 4.32, z),
-      new THREE.Vector3(x + 0.32, sy + 4.32, z),
+      new THREE.Vector3(x - 0.28, sy + 4.1, z),
+      new THREE.Vector3(x + 0.28, sy + 4.1, z),
       0.14,
       'metal'
     );
@@ -779,7 +785,7 @@ export function buildNeighborhoodsAndProps(params: {
       const curX = liveTransform ? liveTransform.x : hx;
       const curZ = liveTransform ? liveTransform.z : hz;
       const curRotY = liveTransform ? liveTransform.rotY : Math.PI / 2;
-      const curY = getTerrainHeightAt(curX, curZ);
+      const curY = getBuildingPadHeight(curX, curZ, 3.7, 3.7);
 
       group.remove(builtHome.group);
       builtHome.dispose();

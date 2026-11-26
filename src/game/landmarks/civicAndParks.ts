@@ -490,8 +490,17 @@ export function buildTekstilPark(def: LandmarkDef, mats: CityMaterialLibrary): B
   const [lx, , lz] = def.position;
   group.position.set(lx, 0, lz);
 
-  // Lush Green Park Base & Stone Walkways
-  const lawnMat = new THREE.MeshStandardMaterial({ color: 0x6b8c4e, roughness: 0.92 });
+  // Lush Green Park Base, Retaining Skirt & Stone Walkways
+  const parkSkirt = new THREE.Mesh(new THREE.BoxGeometry(26.4, 1.6, 24.4), mats.travertine);
+  parkSkirt.position.y = -0.78;
+  parkSkirt.receiveShadow = true;
+  group.add(parkSkirt);
+
+  const lawnMat = new THREE.MeshStandardMaterial({
+    color: 0x7d9e52,
+    map: mats.grassMicroGrain,
+    roughness: 0.92,
+  });
   const lawn = new THREE.Mesh(new THREE.BoxGeometry(26, 0.18, 24), lawnMat);
   lawn.position.y = 0.09;
   lawn.receiveShadow = true;
@@ -501,7 +510,7 @@ export function buildTekstilPark(def: LandmarkDef, mats: CityMaterialLibrary): B
   path.position.set(0, 0.12, 4.5);
   path.receiveShadow = true;
   const westEntryWalk = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.22, 7.8), mats.plaza);
-  westEntryWalk.position.set(-11.4, 0.12, 2.0);
+  westEntryWalk.position.set(-11.4, 0.126, 2.0);
   westEntryWalk.receiveShadow = true;
   group.add(path, westEntryWalk);
 
@@ -566,6 +575,11 @@ export function buildTrenGari(def: LandmarkDef, mats: CityMaterialLibrary): Buil
   const [lx, , lz] = def.position;
   group.position.set(lx, 0, lz);
 
+  const platformSkirt = new THREE.Mesh(new THREE.BoxGeometry(28.4, 1.4, 14.4), mats.travertine);
+  platformSkirt.position.set(0, -0.68, 2.5);
+  platformSkirt.receiveShadow = true;
+  group.add(platformSkirt);
+
   const platform = new THREE.Mesh(new THREE.BoxGeometry(28, 0.45, 14), mats.plaza);
   platform.position.set(0, 0.225, 2.5);
   platform.receiveShadow = true;
@@ -624,9 +638,9 @@ export function buildTrenGari(def: LandmarkDef, mats: CityMaterialLibrary): Buil
 
   const railZ1 = 10.4;
   const railZ2 = 11.8;
-  // Gravel Ballast Bed under Railway Tracks
-  const ballast = new THREE.Mesh(new THREE.BoxGeometry(240, 0.16, 3.6), mats.dirtPath);
-  ballast.position.set(0, 0.08, (railZ1 + railZ2) / 2);
+  // Gravel Ballast Bed under Railway Tracks (deepened to seal into uneven ground)
+  const ballast = new THREE.Mesh(new THREE.BoxGeometry(240, 0.56, 3.6), mats.dirtPath);
+  ballast.position.set(0, -0.12, (railZ1 + railZ2) / 2);
   ballast.receiveShadow = true;
   group.add(ballast);
 
@@ -805,7 +819,11 @@ export function buildUniversite(def: LandmarkDef, mats: CityMaterialLibrary): Bu
   campusSkirt.receiveShadow = true;
   group.add(campusSkirt);
 
-  const lawnMat = new THREE.MeshStandardMaterial({ color: 0x6f964e, roughness: 0.9 });
+  const lawnMat = new THREE.MeshStandardMaterial({
+    color: 0x7f9f52,
+    map: mats.grassMicroGrain,
+    roughness: 0.9,
+  });
   const campusBase = new THREE.Mesh(new THREE.BoxGeometry(28, 0.22, 24), lawnMat);
   campusBase.position.y = 0.11;
   campusBase.receiveShadow = true;
@@ -815,7 +833,7 @@ export function buildUniversite(def: LandmarkDef, mats: CityMaterialLibrary): Bu
   quadWalkEW.position.set(-1.0, 0.14, 0);
   quadWalkEW.receiveShadow = true;
   const quadWalkNS = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.26, 21), mats.plaza);
-  quadWalkNS.position.set(-1.5, 0.14, 0);
+  quadWalkNS.position.set(-1.5, 0.146, 0);
   quadWalkNS.receiveShadow = true;
   group.add(quadWalkEW, quadWalkNS);
 
@@ -955,19 +973,19 @@ function createParkLawnTexture(): THREE.CanvasTexture {
   canvas.height = 512;
   const ctx = canvas.getContext('2d')!;
 
-  ctx.fillStyle = '#6B934C';
+  ctx.fillStyle = '#7C9C52';
   ctx.fillRect(0, 0, 512, 512);
 
-  // Subtle realistic manicured mowing stripes
+  // Subtle realistic manicured mowing stripes harmonized with meadow turf
   for (let i = 0; i < 16; i++) {
-    ctx.fillStyle = i % 2 === 0 ? 'rgba(130, 174, 86, 0.24)' : 'rgba(72, 108, 48, 0.18)';
+    ctx.fillStyle = i % 2 === 0 ? 'rgba(154, 186, 98, 0.22)' : 'rgba(94, 126, 62, 0.16)';
     ctx.fillRect(i * 32, 0, 32, 512);
   }
   // Organic clover & sunlit grass speckles
   for (let i = 0; i < 650; i++) {
     const x = (i * 73) % 512;
     const y = (i * 139) % 512;
-    ctx.fillStyle = i % 3 === 0 ? 'rgba(165, 198, 102, 0.22)' : 'rgba(62, 94, 42, 0.2)';
+    ctx.fillStyle = i % 3 === 0 ? 'rgba(176, 206, 114, 0.2)' : 'rgba(84, 116, 54, 0.18)';
     ctx.beginPath();
     ctx.arc(x, y, 2 + (i % 3), 0, Math.PI * 2);
     ctx.fill();
@@ -1019,7 +1037,12 @@ export function buildNevzatBicerPark(def: LandmarkDef, mats: CityMaterialLibrary
 
   const colliders: ColliderBox[] = [];
 
-  // Lush manicured park lawn pad (28m x 24m)
+  // Retaining travertine skirt + manicured park lawn pad (28m x 24m)
+  const parkSkirt = new THREE.Mesh(new THREE.BoxGeometry(28.0, 1.5, 24.0), mats.travertine);
+  parkSkirt.position.y = -0.74;
+  parkSkirt.receiveShadow = true;
+  group.add(parkSkirt);
+
   const lawnMat = new THREE.MeshStandardMaterial({
     map: createParkLawnTexture(),
     roughness: 0.9,
@@ -1047,15 +1070,15 @@ export function buildNevzatBicerPark(def: LandmarkDef, mats: CityMaterialLibrary
     group.add(curb);
   });
 
-  // Stone-paved main promenade paths (East-West, North-South, & circular pool plaza)
+  // Stone-paved main promenade paths (staggered Y heights to prevent crossing Z-fighting)
   const pathEW = new THREE.Mesh(new THREE.BoxGeometry(27.4, 0.19, 2.8), mats.plaza);
-  pathEW.position.set(0, 0.095, 0.4);
+  pathEW.position.set(0, 0.105, 0.4);
   pathEW.receiveShadow = true;
   const pathNS = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.19, 23.4), mats.plaza);
-  pathNS.position.set(0.6, 0.095, 0);
+  pathNS.position.set(0.6, 0.113, 0);
   pathNS.receiveShadow = true;
   const centerPlaza = new THREE.Mesh(new THREE.CylinderGeometry(5.1, 5.2, 0.2, 28), mats.plaza);
-  centerPlaza.position.set(0.6, 0.1, -2.6);
+  centerPlaza.position.set(0.6, 0.122, -2.6);
   centerPlaza.receiveShadow = true;
   group.add(pathEW, pathNS, centerPlaza);
 
@@ -1194,7 +1217,7 @@ export function buildNevzatBicerPark(def: LandmarkDef, mats: CityMaterialLibrary
     roughness: 0.84,
   });
   const courtPad = new THREE.Mesh(new THREE.BoxGeometry(7.2, 0.2, 6.8), courtMat);
-  courtPad.position.set(courtX, 0.1, courtZ);
+  courtPad.position.set(courtX, 0.12, courtZ);
   courtPad.receiveShadow = true;
   group.add(courtPad);
 
@@ -1229,7 +1252,7 @@ export function buildNevzatBicerPark(def: LandmarkDef, mats: CityMaterialLibrary
   const playZ = 6.4;
   const playPadMat = new THREE.MeshStandardMaterial({ color: 0xb97c52, roughness: 0.92 });
   const playPad = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.2, 6.2), playPadMat);
-  playPad.position.set(playX, 0.1, playZ);
+  playPad.position.set(playX, 0.12, playZ);
   playPad.receiveShadow = true;
   group.add(playPad);
 
@@ -1310,10 +1333,10 @@ export function buildNevzatBicerPark(def: LandmarkDef, mats: CityMaterialLibrary
     [2.6, 5.2],
     [-2.6, 5.2],
   ].forEach(([px, pz]) => {
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.085, 3.1, 8), mats.wroughtIron);
-    post.position.set(px, 1.65, pz);
-    const globe = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), mats.lampBulb);
-    globe.position.set(px, 3.3, pz);
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.07, 2.95, 10), mats.wroughtIron);
+    post.position.set(px, 1.56, pz);
+    const globe = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 10), mats.lampBulb);
+    globe.position.set(px, 3.12, pz);
     group.add(post, globe);
   });
 

@@ -217,10 +217,13 @@ export function buildMagnesia(def: LandmarkDef, mats: CityMaterialLibrary): Buil
   const mosaicMat = new THREE.MeshStandardMaterial({
     map: createMagnesiaMosaicTexture(),
     roughness: 0.62,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+    polygonOffsetUnits: -3,
   });
   const mosaicFloor = new THREE.Mesh(new THREE.PlaneGeometry(21.2, 21.2), mosaicMat);
   mosaicFloor.rotation.x = -Math.PI / 2;
-  mosaicFloor.position.y = 0.43;
+  mosaicFloor.position.y = 0.438;
   mosaicFloor.receiveShadow = true;
   group.add(mosaicFloor);
 
